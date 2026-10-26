@@ -3,6 +3,8 @@ package com.jungdo.attend.data
 import android.os.Build
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
@@ -231,13 +233,18 @@ object Repo {
 }
 
 /** 상대 기기의 상태 */
+/** 연결 문제 진단용: 마지막 Firestore 오류 (키오스크 빈 화면에 표시) */
+object Diag { var error by androidx.compose.runtime.mutableStateOf("") }
+
 data class DeviceStatus(val lastSeen: Long?, val running: Boolean, val model: String?)
 
 // ---------- Compose 에서 실시간으로 구독하는 도우미 ----------
 
 @Composable
 fun rememberStudents(): State<List<Student>> = produceState(emptyList<Student>()) {
-    val reg = Repo.students().addSnapshotListener { snap, _ ->
+    val reg = Repo.students().addSnapshotListener { snap, err ->
+        if (err != null) Diag.error = err.code.name + ": " + (err.message ?: "")
+        else Diag.error = ""
         if (snap != null) value = snap.documents.map(Repo::toStudent)
             .sortedWith(compareBy<Student>({ gradeRank(it.grade) }, { it.grade }, { it.order }, { it.name }))
     }
