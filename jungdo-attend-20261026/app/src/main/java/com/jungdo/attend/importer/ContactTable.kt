@@ -67,6 +67,7 @@ object ContactTable {
             t.startsWith("초등") -> t.filter { it.isDigit() }.take(1).let { if (it.isEmpty()) "" else it + "학년" }
             t.startsWith("중") -> "중학생"
             t.startsWith("고") -> "고등학생"
+            t.contains("학년") -> t.filter { it.isDigit() }.take(1).let { if (it.isEmpty()) "" else it + "학년" }  // '1학년' 그대로
             else -> ""
         }
     }

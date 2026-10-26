@@ -230,7 +230,8 @@ class ImportPlan(
                         s.phones.forEachIndexed { i, ph -> if (ph !in phones) { phones += ph; labels += s.phoneLabel(i) } }
                         val r0 = rows.first()
                         s.copy(phones = phones, phoneLabels = labels,
-                            attendNo = r0.attendNo.ifBlank { s.attendNo }, school = r0.school.ifBlank { s.school }, fee = if (r0.fee > 0) r0.fee else s.fee)
+                            attendNo = r0.attendNo.ifBlank { s.attendNo }, school = r0.school.ifBlank { s.school }, fee = if (r0.fee > 0) r0.fee else s.fee,
+                            grade = s.grade.ifBlank { r0.grade })
                     }
                 }
             } else result
