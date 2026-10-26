@@ -62,6 +62,7 @@ import com.jungdo.attend.data.AttendEvent
 import com.jungdo.attend.data.EventType
 import com.jungdo.attend.data.Prefs
 import com.jungdo.attend.data.Repo
+import com.jungdo.attend.data.Diag
 import com.jungdo.attend.data.Student
 import com.jungdo.attend.data.rememberDeviceStatus
 import com.jungdo.attend.data.rememberEventsOfDay
@@ -194,7 +195,12 @@ fun KioskScreen(onReset: () -> Unit) {
             if (shown.isEmpty()) {
                 Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Text(
-                        if (students.isEmpty()) "등록된 원생이 없습니다.\n위의 도장 이름을 길게 눌러 관리자 화면에서 등록하세요." else "해당하는 이름이 없어요",
+                        if (students.isEmpty()) "등록된 원생이 없습니다.\n위의 도장 이름을 길게 눌러 관리자 화면에서 등록하세요.\n\n" +
+                            "[연결 진단] 계정: ${com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email ?: "로그인 안 됨"}\n" +
+                            "프로젝트: ${com.google.firebase.FirebaseApp.getInstance().options.projectId}\n" +
+                            "오류: ${Diag.error.ifBlank { "없음(받은 원생 0명)" }}\n" +
+                            "앱 빌드: ${com.jungdo.attend.BuildConfig.VERSION_CODE}"
+                        else "해당하는 이름이 없어요",
                         fontSize = 20.sp, color = Muted, textAlign = TextAlign.Center,
                     )
                 }
