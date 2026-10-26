@@ -40,13 +40,16 @@ import com.jungdo.attend.data.Student
 import com.jungdo.attend.data.StudentStatus
 import com.jungdo.attend.importer.ContactRow
 import com.jungdo.attend.importer.ContactTable
+import com.jungdo.attend.importer.ImportFiles
+import com.jungdo.attend.importer.Loaded
 import com.jungdo.attend.importer.ImportPlan
 import com.jungdo.attend.importer.RosterParser
 import com.jungdo.attend.importer.RosterResult
 import com.jungdo.attend.importer.VContact
 import com.jungdo.attend.importer.VcfParser
 import com.jungdo.attend.importer.XSheet
-import com.jungdo.attend.importer.XlsxReader
+import com.jungdo.attend.report.Exporter
+import com.jungdo.attend.report.ImportTemplate
 import com.jungdo.attend.ui.BadRed
 import com.jungdo.attend.ui.InBlue
 import com.jungdo.attend.ui.Muted
@@ -80,32 +83,30 @@ fun RosterTab(students: List<Student>) {
     val roster: RosterResult? = remember(sheets, sheetIdx) {
         sheets?.let { runCatching { RosterParser.parse(it, sheetIdx) }.onFailure { e -> error = e.message ?: "읽기 실패" }.getOrNull() }
     }
-    val plan: ImportPlan? = remember(roster, contacts, students) {
+    val plan: ImportPlan? = remember(roster, contacts, table, students) {
         if (roster == null && contacts == null && table == null) null else ImportPlan.build(students, roster, contacts, table)
     }
 
-    val pickXlsx = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) scope.launch {
+    var loadedInfo by remember { mutableStateOf<List<String>>(emptyList()) }
+
+    // 파일을 몇 개든 한꺼번에 고르면, 내용을 보고 현황 / 연락처 명단 / 휴대폰 연락처(vcf) / 신규 원생 양식을 알아서 구분
+    val pickFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) scope.launch {
             error = ""; applied = ""
-            try {
-                val list = withContext(Dispatchers.IO) { ctx.contentResolver.openInputStream(uri)!!.use { XlsxReader.read(it) } }
-                sheetIdx = RosterParser.gradeSheetIndex(list); sheets = list
-            } catch (e: Exception) { error = e.message ?: "엑셀을 읽지 못했어요" }
-        }
-    }
-    // 연락처: 출결 프로그램 명단(contact_날짜.xls) 또는 휴대폰 연락처(.vcf) — 파일 내용을 보고 자동 구분
-    val pickVcf = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) scope.launch {
-            error = ""; applied = ""
-            try {
-                val bytes = withContext(Dispatchers.IO) { ctx.contentResolver.openInputStream(uri)!!.use { it.readBytes() } }
-                val head = String(bytes, 0, minOf(bytes.size, 200), Charsets.UTF_8)
-                when {
-                    head.contains("BEGIN:VCARD") -> contacts = VcfParser.parse(bytes.inputStream())
-                    ContactTable.looksLike(bytes) || head.startsWith("PK") -> table = ContactTable.parse(bytes)
-                    else -> error = "연락처 파일 형식을 모르겠어요 (.vcf 또는 출결 프로그램 연락처 .xls)"
+            val info = mutableListOf<String>(); val problems = mutableListOf<String>()
+            for (uri in uris) {
+                val name = ImportFiles.displayName(ctx, uri)
+                val bytes = withContext(Dispatchers.IO) { runCatching { ctx.contentResolver.openInputStream(uri)!!.use { it.readBytes() } }.getOrNull() }
+                if (bytes == null) { problems += "$name: 파일을 열지 못했어요"; continue }
+                when (val r = withContext(Dispatchers.Default) { ImportFiles.detect(name, bytes) }) {
+                    is Loaded.Roster -> { sheets = r.sheets; sheetIdx = RosterParser.gradeSheetIndex(r.sheets); info += "✔ $name → 수련생 현황" }
+                    is Loaded.Contacts -> { contacts = contacts.orEmpty() + r.list; info += "✔ $name → 휴대폰 연락처 ${r.list.size}개" }
+                    is Loaded.Table -> { table = table.orEmpty() + r.rows; info += "✔ $name → 연락처 명단·양식 ${r.rows.size}줄" }
+                    is Loaded.Unknown -> problems += "$name: ${r.why}"
                 }
-            } catch (e: Exception) { error = e.message ?: "연락처를 읽지 못했어요" }
+            }
+            loadedInfo = info
+            error = problems.joinToString("\n")
         }
     }
 
@@ -116,12 +117,16 @@ fun RosterTab(students: List<Student>) {
             Card(colors = CardDefaults.cardColors(containerColor = Color.White)) {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     SectionTitle("수련생 현황 불러오기")
-                    Text("① '정도 수련생현황.xlsx'를 고르면 학년별 명단·시범단(회색)·휴관·형제명단을 읽어요.\n" +
-                        "② 연락처: 출결 프로그램 명단(contact_날짜.xls)을 고르면 학부모 번호·출결번호·학교를 그대로 넣어요. 휴대폰 연락처 .vcf도 같이 고를 수 있어요(아버님 번호 등 추가). 형제는 번호를 똑같이 공유해요.\n" +
-                        "현황표에 없는 아이는 이번 달부터 퇴관 처리 (출석체크·출석부에서 빠지고, 지난 기록은 남음).", color = Muted, fontSize = 13.sp)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { pickXlsx.launch(arrayOf("*/*")) }) { Text(if (sheets == null) "① 현황 엑셀 선택" else "① 다른 엑셀") }
-                        Button(onClick = { pickVcf.launch(arrayOf("*/*")) }) { Text("② 연락처 파일 선택") }
+                    Text("파일을 한꺼번에 골라 올리면 앱이 내용을 보고 알아서 구분해요 (현황 .xlsx / 연락처 .xls·.xlsx / 휴대폰 연락처 .vcf / 신규 원생 양식). 몇 번에 나눠 올려도 돼요.\n" +
+                        "• 수련생 현황: 학년별 명단·시범단(회색)·휴관·형제명단을 읽고, 현황표에 없는 아이는 이번 달부터 퇴관 처리해요 (지난 기록은 남음).\n" +
+                        "• 연락처 명단·휴대폰 연락처: 학부모 번호·출결번호·학교를 넣고 형제는 번호를 공유해요.\n" +
+                        "• 현황 없이 연락처 명단/양식만 올리면: 기존 원생은 그대로 두고 새 이름만 추가해요.", color = Muted, fontSize = 13.sp)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { pickFiles.launch(arrayOf("*/*")) }) { Text("📂 파일 올리기 (여러 개 가능)") }
+                        OutlinedButton(onClick = { Exporter.share(ctx, ImportTemplate.build(), "정도출결_신규원생_양식.xlsx", Exporter.XLSX, "양식 보내기") }) { Text("📄 양식 받기") }
+                        if (sheets != null || contacts != null || table != null) {
+                            OutlinedButton(onClick = { sheets = null; contacts = null; table = null; loadedInfo = emptyList(); error = "" }) { Text("선택 지우기") }
+                        }
                     }
                     sheets?.let { list ->
                         Text("시트 선택", fontWeight = FontWeight.Bold)
@@ -129,8 +134,7 @@ fun RosterTab(students: List<Student>) {
                             list.forEachIndexed { i, s -> Pill(s.name, i == sheetIdx, 14.sp) { sheetIdx = i; error = "" } }
                         }
                     }
-                    table?.let { Text("✔ 출결 연락처 명단 ${it.size}명", color = OkGreen) }
-                    contacts?.let { Text("✔ 휴대폰 연락처 ${it.size}개", color = OkGreen) }
+                    loadedInfo.forEach { Text(it, color = OkGreen, fontSize = 14.sp) }
                     if (error.isNotBlank()) Text(error, color = BadRed)
                     plan?.let { p ->
                         HorizontalDivider()
@@ -139,7 +143,7 @@ fun RosterTab(students: List<Student>) {
                         Button(onClick = {
                             p.apply()
                             applied = "적용했어요 ✔"
-                            sheets = null; contacts = null; table = null
+                            sheets = null; contacts = null; table = null; loadedInfo = emptyList()
                         }) { Text("이대로 적용하기") }
                     }
                     if (applied.isNotBlank()) Text(applied, color = OkGreen, fontWeight = FontWeight.Bold)

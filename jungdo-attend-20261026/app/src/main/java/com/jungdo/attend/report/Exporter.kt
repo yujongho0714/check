@@ -17,12 +17,12 @@ object Exporter {
     }
 
     /** 카톡·메일 등으로 바로 보내기 */
-    fun share(ctx: Context, bytes: ByteArray, fileName: String, mime: String) {
+    fun share(ctx: Context, bytes: ByteArray, fileName: String, mime: String, title: String = "출석부 보내기") {
         val dir = File(ctx.cacheDir, "exports").apply { mkdirs() }
         val f = File(dir, fileName).apply { writeBytes(bytes) }
         val uri = FileProvider.getUriForFile(ctx, ctx.packageName + ".files", f)
         val send = Intent(Intent.ACTION_SEND).setType(mime).putExtra(Intent.EXTRA_STREAM, uri)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        ctx.startActivity(Intent.createChooser(send, "출석부 보내기").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        ctx.startActivity(Intent.createChooser(send, title).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 }

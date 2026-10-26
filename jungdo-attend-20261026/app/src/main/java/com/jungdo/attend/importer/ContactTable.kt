@@ -10,6 +10,7 @@ data class ContactRow(
     val attendNo: String,    // 출결번호
     val school: String,
     val fee: Int,
+    val grade: String = "", // 학년 (예: 초등학교1 → 1학년, 유치원7 → 유치부)
 )
 
 /**
@@ -35,21 +36,38 @@ object ContactTable {
         val h = rows[hi].map { it.trim() }
         fun col(vararg keys: String) = h.indexOfFirst { t -> keys.any { t.startsWith(it) } }
         val cName = col("이름"); val cPhone = col("학부모 연락처", "학부모연락처", "연락처")
-        val cLabel = col("학부모 구분", "구분"); val cNo = col("출결번호"); val cSchool = col("학교"); val cFee = col("수강료")
+        val cLabel = col("학부모 구분", "구분"); val cNo = col("출결번호"); val cSchool = col("학교"); val cFee = col("수강료"); val cGrade = col("학년")
 
         return rows.drop(hi + 1).mapNotNull { r ->
             val name = r.getOrNull(cName)?.trim().orEmpty()
             if (RosterParser.cleanName(name) == null) return@mapNotNull null
-            val phone = r.getOrNull(cPhone).orEmpty().filter { it.isDigit() }
+            val phone = fixPhone(r.getOrNull(cPhone).orEmpty().filter { it.isDigit() })
             val lb = r.getOrNull(cLabel).orEmpty()
             ContactRow(
                 name = RosterParser.cleanName(name)!!,
                 phone = phone,
                 label = when { lb.contains("아버") -> "아버님"; lb.contains("어머") -> "어머님"; lb.isBlank() -> "어머님"; else -> lb },
-                attendNo = if (cNo >= 0) r.getOrNull(cNo).orEmpty().trim().removeSuffix(".0") else "",
+                attendNo = (if (cNo >= 0) r.getOrNull(cNo).orEmpty().trim().removeSuffix(".0") else "").ifBlank { if (phone.length >= 4) phone.takeLast(4) else "" },
                 school = if (cSchool >= 0) r.getOrNull(cSchool).orEmpty().trim() else "",
+                grade = if (cGrade >= 0) gradeOf(r.getOrNull(cGrade).orEmpty()) else "",
                 fee = if (cFee >= 0) r.getOrNull(cFee).orEmpty().filter { it.isDigit() }.toIntOrNull() ?: 0 else 0,
             )
+        }
+    }
+
+    /** 엑셀에 숫자로 쳐서 앞의 0이 사라진 휴대폰 번호(1012345678) 복구 */
+    private fun fixPhone(d: String): String = if (d.length == 10 && d.startsWith("10")) "0$d" else d
+
+    /** '초등학교1' → '1학년', '유치원7' → '유치부', '중학교2' → '중학생' */
+    private fun gradeOf(raw: String): String {
+        val t = raw.trim()
+        return when {
+            t.isBlank() -> ""
+            t.startsWith("유치") -> "유치부"
+            t.startsWith("초등") -> t.filter { it.isDigit() }.take(1).let { if (it.isEmpty()) "" else it + "학년" }
+            t.startsWith("중") -> "중학생"
+            t.startsWith("고") -> "고등학생"
+            else -> ""
         }
     }
 

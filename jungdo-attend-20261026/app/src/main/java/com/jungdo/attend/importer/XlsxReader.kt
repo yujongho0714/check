@@ -11,8 +11,10 @@ data class XCell(val text: String, val fill: String?)
 
 /** 엑셀 시트 하나 (행·열은 0부터) */
 class XSheet(val name: String, private val cells: Map<Long, XCell>) {
-    val maxRow: Int = cells.keys.maxOfOrNull { (it shr 20).toInt() } ?: 0
-    val maxCol: Int = cells.keys.maxOfOrNull { (it and 0xFFFFF).toInt() } ?: 0
+    // 글자가 들어 있는 칸 기준 (서식만 있는 빈 칸이 시트 맨 끝에 있어도 100만 줄을 훑지 않게)
+    private val textKeys = cells.filter { it.value.text.isNotEmpty() }.keys
+    val maxRow: Int = textKeys.maxOfOrNull { (it shr 20).toInt() } ?: 0
+    val maxCol: Int = textKeys.maxOfOrNull { (it and 0xFFFFF).toInt() } ?: 0
     fun cell(r: Int, c: Int): XCell? = cells[key(r, c)]
     fun text(r: Int, c: Int): String = cell(r, c)?.text?.trim() ?: ""
     companion object { fun key(r: Int, c: Int): Long = (r.toLong() shl 20) or c.toLong() }

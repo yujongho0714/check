@@ -48,6 +48,9 @@ object RosterParser {
         return best
     }
 
+    /** 이 엑셀이 '수련생 현황' 모양(학년 머리글 + 아래 이름들)인지 */
+    fun hasGradeHeader(sheets: List<XSheet>): Boolean = sheets.any { findHeader(it) != null }
+
     fun gradeSheetIndex(sheets: List<XSheet>): Int = sheets.indexOfFirst { findHeader(it) != null }.coerceAtLeast(0)
 
     /** "휴관"+"사유" 같은 작은 표: 이름 → 사유 */
@@ -190,7 +193,22 @@ class ImportPlan(
                         result += s.copy(status = StudentStatus.LEFT, leftMonth = month, statusReason = roster.leftReasons[s.name] ?: "현황표에 없음")
                     } else result += s
                 }
-            } else result += existing
+            } else {
+                result += existing
+                // 현황 엑셀 없이 연락처 명단(contact_날짜.xls)만 올린 경우: 명단에 없는 이름은 새 원생으로 등록
+                if (table != null) {
+                    val have = existing.filter { it.status != StudentStatus.LEFT }.map { it.name }.toSet()
+                    val sibOf = HashMap<String, String>()
+                    table.filter { it.phone.length >= 9 }.groupBy { it.phone }.values
+                        .filter { g -> g.map { r -> r.name }.distinct().size >= 2 }
+                        .forEachIndexed { i, g -> g.forEach { r -> sibOf[r.name] = "t${i + 1}" } }
+                    table.map { it.name }.distinct().filter { it !in have }.forEachIndexed { i, n ->
+                        val r0 = table.first { it.name == n }
+                        added += n
+                        result += Student(name = n, grade = r0.grade, joinedMonth = month, order = 1000 + i, siblingKey = sibOf[n] ?: "")
+                    }
+                }
+            }
 
             // 동명이인
             val counts = result.filter { it.status != StudentStatus.LEFT }.groupingBy { it.name }.eachCount()
