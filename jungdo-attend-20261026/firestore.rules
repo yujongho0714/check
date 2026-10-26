@@ -1,0 +1,11 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 도장 계정(아래 이메일)으로 로그인한 기기만 읽기/쓰기 가능
+    // ★ dojang@example.com 을 Firebase Authentication 에 만든 본인 계정 이메일로 바꾸세요
+    match /{document=**} {
+      allow read, write: if request.auth != null
+                         && request.auth.token.email == "dojang@example.com";
+    }
+  }
+}
