@@ -41,7 +41,7 @@ jobs:
       - name: Build
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleDebug --no-daemon -PappVersionCode=${{ github.run_number }} -PgithubRepo=${{ github.repository }}
 
       - uses: actions/upload-artifact@v4
         with:
