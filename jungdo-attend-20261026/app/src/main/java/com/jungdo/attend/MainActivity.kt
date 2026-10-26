@@ -21,6 +21,7 @@ import com.jungdo.attend.server.ServerScreen
 import com.jungdo.attend.ui.LoginScreen
 import com.jungdo.attend.ui.ModeScreen
 import com.jungdo.attend.ui.Navy
+import com.jungdo.attend.update.UpdatePrompt
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -49,6 +50,8 @@ fun AppRoot() {
         mode = null
         loggedIn = FirebaseAuth.getInstance().currentUser != null
     }
+
+    UpdatePrompt() // 앱을 켜면 새 버전 확인 → "업데이트할까요?"
 
     when {
         !loggedIn -> LoginScreen(onDone = { loggedIn = true })

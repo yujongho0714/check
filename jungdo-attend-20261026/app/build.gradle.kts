@@ -13,8 +13,12 @@ android {
         applicationId = "com.jungdo.attend" // Firebase 에 앱 등록할 때 이 이름 그대로 입력
         minSdk = 26        // 안드로이드 8.0 이상
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        // 깃허브 자동 빌드가 빌드 번호를 넣어줌 (직접 빌드하면 1) → 앱 업데이트 확인에 사용
+        val vc = (findProperty("appVersionCode") as String?)?.toIntOrNull() ?: 1
+        versionCode = vc
+        versionName = "1.0.$vc"
+        // 업데이트 확인할 깃허브 저장소 (자동 빌드가 넣어줌, 비어 있으면 업데이트 확인 안 함)
+        buildConfigField("String", "GITHUB_REPO", "\"${findProperty("githubRepo") ?: ""}\"")
     }
 
     // 서명키: app/jungdo-sign.jks 가 있으면 항상 같은 키로 서명 → 새 APK 를 덮어 설치해도 설정 유지
@@ -48,6 +52,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
