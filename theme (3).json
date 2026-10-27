@@ -1,0 +1,13 @@
+{
+  "name": "새싹 농장 (Sprout Lands)",
+  "pixel": true,
+  "rankSide": "left",
+  "panel": { "image": "panel.png", "slice": 8, "border": 24, "padH": 26, "padV": 26 },
+  "slot":  { "image": "slot.png", "slice": 6, "border": 18, "width": 108, "height": 108, "imageSize": 80 },
+  "badge": { "image": "badge.png", "slice": 6, "border": 12, "padH": 14, "padV": 6 },
+  "level": { "format": "LV.{lv}", "color": "#FFF3D6", "size": 22 },
+  "levelUpBox": { "image": "levelup.png", "slice": 6, "border": 12, "padH": 12, "padV": 5 },
+  "levelUp": { "text": "★ 레벨 업!", "color": "#FFFFFF", "size": 16, "showFromTo": false, "blink": 3 },
+  "bar":   { "width": 240, "height": 20, "track": "#6B4423", "fill": "#8FD14F", "stroke": "#C08F55", "strokeWidth": 3, "radius": 2 },
+  "text":  { "exp": "#6B4423", "expSize": 17, "streak": "#3F7D2A", "streakSize": 15 }
+}

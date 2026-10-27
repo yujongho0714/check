@@ -1,0 +1,10 @@
+{
+  "name": "기본 (v16 모양)",
+  "pixel": true,
+  "rankSide": "right",
+  "slot":  { "imageSize": 96 },
+  "level": { "format": "Lv.{lv}", "color": "#FDE68A", "size": 34 },
+  "levelUp": { "text": "레벨 업!", "color": "#FDE68A", "size": 18, "showFromTo": true, "blink": 3 },
+  "bar":   { "width": 300, "height": 10, "track": "#55FFFFFF", "fill": "#FDE68A", "radius": 5 },
+  "text":  { "exp": "#FFFFFF", "expSize": 18, "streak": "#86EFAC", "streakSize": 16 }
+}
