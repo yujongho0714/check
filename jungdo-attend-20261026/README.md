@@ -1,3 +1,6 @@
+> ※ 처음 만드는 분은 **`정도출결-제작서.md`** 를 먼저 보세요 (코딩을 몰라도 따라 할 수 있게 순서대로 적은 문서).
+> 이 README는 개발용 설명이라 일부(출석 단말기 첫 화면 등)가 최신과 다를 수 있어요. 출석 단말기는 이제 이름 목록 없이 **출결번호 키패드**가 첫 화면이에요.
+
 # 정도 출결 — 폰 2대로 만드는 등원·하원 문자 시스템
 
 용인대 정도 태권도 2관 전용 (혼자 쓰는 용도, 상업용 아님)
@@ -254,6 +257,25 @@
 
 ---
 
+### 학년 자동 진급 (나이 기준) — v11
+- 원생 문서에 `age`(나이), `ageYear`(그 나이를 정한 해)를 저장. 올해 나이 = `age + (올해 - ageYear)` → **해가 바뀌면 자동으로 1살씩 올라감**.
+- 나이 → 학년: 7세 이하 유치부 / 8~13세 1~6학년 / 14~16세 중1~중3 / 17~19세 고1~고3 / 20세 이상 성인 (`data/GradeCalc.kt`).
+- 화면에 보이는 학년(`Student.grade`)은 불러올 때 나이로 계산해 넣음. 저장된 `grade` 글자는 참고용.
+- 나이가 없는 원생(유치부·중학생·고등학생 등)은 글자 그대로 두고 자동 진급 안 됨 → 원생 수정에서 나이 입력. [명단·형제] 탭에 안내 표시.
+- 옛 데이터: 정확한 학년(`2학년`)이 적힌 원생은 첫 실행 때 올해 나이로 자동 저장(`Repo.migrateAges`).
+- 월간 출석부는 그 달 기준 학년(`Student.gradeAt(month)`)으로 묶음.
+
+### 계급·경험치 — v13
+- `data/Rank.kt`: 레벨 1~866, 경험치 18,000이 최고. 등원 +10 / 하원 +10 (하루 한 번씩) + 연속 출석 보너스(연속 2일째부터 +2씩, 최대 +20). 레벨 곡선은 `MAX_EXP * ((레벨-1)/865)^1.3`.
+- 원생 문서 필드: `exp`, `streak`, `streakDay`, `inDay`, `outDay`. 경험치 칸은 `studentData`(명단 저장)에 넣지 않고 `Repo.awardExp` / `Repo.setExp` 로만 씀 → 명단 불러오기가 덮어쓰지 않음.
+- 키오스크 `attend()` 에서 `Repo.awardExp` 호출, 완료 화면에 계급 그림(`ui/RankUi.kt`, `assets/rank/001~866.png`)과 경험치 표시.
+- 다른 앱(태권도 카드·attack·index3 RPG)에서 같은 Firebase `students/{id}` 의 `exp`, `streak` 를 읽으면 계급을 이어서 쓸 수 있음. 레벨 계산식은 `Rank.levelOf` 와 같게 맞출 것.
+
+### 계급 표시·레벨 업 연출 — v14
+- 계급 그림은 키오스크의 이름 왼쪽에 항상 표시: 등원/하원 선택 팝업, "누구예요?" 버튼, 완료 화면 (`kiosk/KioskScreen.kt`).
+- `ui/RankUi.kt` 의 `AwardRow` 가 완료 화면의 한 줄(그림·이름·Lv·경험치·막대)과 레벨 업 연출을 담당: 막대 끝까지 → 새 그림 튀어나옴(spring) → "레벨 업!" 깜빡임 → 막대 재충전.
+- 완료 화면은 3.5초 후 자동으로 닫힘. `assets/rank/721.png` 는 1254px → 256px 로 줄임.
+
 ## 9. 코드 구조 (파일별 역할)
 
 ```
@@ -264,6 +286,8 @@ app/src/main/
    ├─ data/
    │  ├─ Models.kt             원생(Student), 등하원 기록(AttendEvent), 상태값
    │  ├─ Repo.kt               Firestore 읽기/쓰기, 실시간 구독
+   │  ├─ GradeCalc.kt          나이 ↔ 학년 계산, 해마다 자동 진급
+   │  ├─ Rank.kt               계급(레벨)·경험치·연속 출석 계산
    │  ├─ Messages.kt           문자 문구 + 날짜별 안내 → 실제 문자 내용 만들기
    │  └─ Prefs.kt              기기별 설정(모드, 관리자 비밀번호, 음성 안내 등)
    ├─ kiosk/
@@ -285,7 +309,7 @@ app/src/main/
 
 | 위치 | 내용 |
 |---|---|
-| `students/{id}` | name, grade(학년), phones[], phoneLabels[], attendNo(출결번호), siblingKey(형제), demo(시범단), status(재원/휴관/퇴관), joinedMonth, leftMonth |
+| `students/{id}` | name, grade(학년), age(나이), ageYear(나이 정한 해), exp·streak·streakDay·inDay·outDay(계급·경험치), phones[], phoneLabels[], attendNo(출결번호), siblingKey(형제), demo(시범단), status(재원/휴관/퇴관), joinedMonth, leftMonth |
 | `absences/{날짜_id}` | day, studentId, name, reason (부모님 연락 사유 결석) |
 | `config/holidays` | 관장님이 추가한 휴관일 / 수업하는 공휴일 |
 | `events/{id}` | studentId, name, className, phones, type(IN/OUT), status(PENDING→SENDING→SENT/FAILED/EXPIRED), clientTime, day, message(실제 보낸 문자), error |
