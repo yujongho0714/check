@@ -1,0 +1,13 @@
+{
+  "name": "귀여운 나무 (Cozy UI)",
+  "pixel": false,
+  "rankSide": "left",
+  "panel": { "bgColor": "#5A3D2A", "strokeColor": "#8A4B2A", "strokeWidth": 4, "radius": 22, "padH": 18, "padV": 16 },
+  "slot":  { "image": "slot.png", "slice": 0, "width": 112, "height": 120, "imageSize": 76 },
+  "badge": { "image": "badge.png", "slice": 0, "width": 140, "height": 56 },
+  "level": { "format": "Lv {lv}", "color": "#8A4B2A", "size": 28 },
+  "levelUpBox": { "image": "levelup.png", "slice": 0, "width": 140, "height": 46 },
+  "levelUp": { "text": "레벨 업!", "color": "#FFFFFF", "size": 17, "showFromTo": false, "blink": 3 },
+  "bar":   { "width": 250, "height": 22, "track": "#FFF7E6", "fill": "#7CC72E", "stroke": "#8A4B2A", "strokeWidth": 4, "radius": 12, "icon": "bolt.png", "iconSize": 30 },
+  "text":  { "exp": "#FFF3DE", "expSize": 18, "streak": "#FFD9A0", "streakSize": 16 }
+}

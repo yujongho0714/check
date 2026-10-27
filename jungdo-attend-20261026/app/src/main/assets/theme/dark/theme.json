@@ -1,0 +1,13 @@
+{
+  "name": "어두운 픽셀 (Tiny GUI)",
+  "pixel": true,
+  "rankSide": "left",
+  "panel": { "image": "panel.png", "slice": 16, "border": 24, "padH": 20, "padV": 20 },
+  "slot":  { "image": "slot.png", "slice": 6, "border": 18, "width": 108, "height": 108, "imageSize": 80 },
+  "badge": { "image": "badge.png", "slice": 6, "border": 12, "padH": 14, "padV": 6 },
+  "level": { "format": "LV.{lv}", "color": "#FFD34D", "size": 22 },
+  "levelUpBox": { "image": "levelup.png", "slice": 6, "border": 12, "padH": 12, "padV": 5 },
+  "levelUp": { "text": "LEVEL UP!", "color": "#FFD34D", "size": 16, "showFromTo": false, "blink": 4 },
+  "bar":   { "width": 240, "height": 18, "track": "#0F1120", "fill": "#FFD34D", "stroke": "#FFFFFF", "strokeWidth": 3, "radius": 0 },
+  "text":  { "exp": "#E8EBFF", "expSize": 17, "streak": "#7EE2A8", "streakSize": 15 }
+}
