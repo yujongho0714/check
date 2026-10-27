@@ -37,7 +37,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.Manifest
 import com.jungdo.attend.call.Phone
+import com.jungdo.attend.data.Inbox
+import com.jungdo.attend.data.Messages
+import com.jungdo.attend.data.Prefs
+import com.jungdo.attend.server.SmsSender
+import kotlinx.coroutines.launch
 import com.jungdo.attend.data.Days
 import com.jungdo.attend.data.EventType
 import com.jungdo.attend.data.Holidays
@@ -62,6 +68,11 @@ fun AbsenceForm(
     header: String,
     callNumber: String? = null,
     missedCall: Boolean = false,
+    smsBody: String? = null,
+    inboxId: String? = null,        // 받은 문자 기록 (저장하면 '처리 완료'로 표시)
+    addNumber: String? = null,      // 등록 안 된 번호 → 선택한 아이 학부모 번호로 추가
+    replyNumber: String? = null,    // 저장할 때 이 번호로 답장 문자
+    replyLabel: String = "",        // 어머님/아버님…
     initialDay: String = Repo.today(),
     onDone: () -> Unit,
 ) {
@@ -71,9 +82,17 @@ fun AbsenceForm(
     val selected = remember { mutableStateListOf<String>().apply { addAll(preselected) } }
     var from by remember { mutableStateOf(initialDay) }
     var to by remember { mutableStateOf(initialDay) }
-    var reason by remember { mutableStateOf("") }
+    var reason by remember { mutableStateOf(smsBody ?: "") }
     var query by remember { mutableStateOf("") }
     var saved by remember { mutableStateOf(false) }
+    val prefs = remember { Prefs(ctx) }
+    var replyOn by remember { mutableStateOf(prefs.replyOn) }
+    var replyText by remember { mutableStateOf("") }
+    var replyEdited by remember { mutableStateOf(false) }
+    var tpl by remember { mutableStateOf<String?>(null) }
+    var addPhoneOn by remember { mutableStateOf(true) }
+    var addLabel by remember { mutableStateOf("보호자") }
+    LaunchedEffect(Unit) { if (replyNumber != null) tpl = Messages.loadReplyTpl() }
 
     val active = all.filter { it.status != StudentStatus.LEFT }
     val pre = active.filter { it.id in preselected }
@@ -86,6 +105,11 @@ fun AbsenceForm(
     val shown = (family + active.filter { it.id in selected && it !in family } + searched).distinctBy { it.id }
     val inToday = todayEvents.filter { it.type == EventType.IN }.map { it.studentId }.toSet()
 
+    val selNames = active.filter { it.id in selected }.map { it.name }
+    LaunchedEffect(tpl, selNames, addLabel) {
+        val t = tpl
+        if (t != null && !replyEdited) replyText = Messages.buildReply(t, selNames, if (addNumber != null) addLabel else replyLabel)
+    }
     LaunchedEffect(saved) { if (saved) { kotlinx.coroutines.delay(900); onDone() } }
 
     Column(
@@ -94,6 +118,7 @@ fun AbsenceForm(
     ) {
         Text(header, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Navy)
         if (callNumber != null) Text("📞 ${Repo.prettyPhone(callNumber)}" + if (missedCall) "  · 통화 연결 안 됨" else "", color = Muted)
+        if (smsBody != null) Text("💬 받은 문자 내용이 아래 사유 칸에 들어갔어요. 고쳐서 저장하세요.", color = Muted, fontSize = 13.sp)
         if (missedCall && callNumber != null) {
             OutlinedButton(onClick = { Phone.call(ctx, callNumber, selected.toList()); onDone() }) { Text("📞 다시 걸기") }
         }
@@ -137,14 +162,45 @@ fun AbsenceForm(
             Text(dayLabel(to), fontWeight = FontWeight.Bold)
             TextButton(onClick = { to = Repo.shiftDay(to, 1) }) { Text("▶") }
         }
+        // 긴 결석(독감·여행 등): 시작일 기준으로 끝 날짜를 한 번에 정하기
+        Text("기간 빠르게 (시작일부터)", color = Muted, fontSize = 13.sp)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("3일" to 2, "1주" to 6, "2주" to 13, "3주" to 20, "한 달" to 29).forEach { (label, plus) ->
+                val target = Repo.shiftDay(from, plus)
+                Pill(label, to == target, 15.sp) { to = target }
+            }
+        }
         val days = Days.range(from, to).filter { !Holidays.isOff(it) }
-        if (from != to) Text("수업일 ${days.size}일 결석 처리 (주말·공휴일 제외)", color = Muted, fontSize = 13.sp)
+        if (from != to) Text("${dayLabel(from)} ~ ${dayLabel(to)} · 수업일 ${days.size}일 결석 처리 (주말·공휴일 제외)", color = Muted, fontSize = 13.sp)
 
         Text("사유", fontWeight = FontWeight.Bold)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             QUICK.forEach { q -> Pill(q, reason == q, 15.sp) { reason = q } }
         }
         OutlinedTextField(reason, { reason = it }, label = { Text("부모님께 들은 내용 (예: 감기로 병원 다녀옴)") }, modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp))
+
+        if (addNumber != null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = addPhoneOn, onCheckedChange = { addPhoneOn = it })
+                Text("이 번호(${Repo.prettyPhone(addNumber)})를 선택한 아이의 학부모 번호로 추가", modifier = Modifier.weight(1f))
+            }
+            if (addPhoneOn) FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("어머님", "아버님", "할머님", "보호자").forEach { l -> Pill(l, addLabel == l, 15.sp) { addLabel = l } }
+            }
+        }
+        if (replyNumber != null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = replyOn, onCheckedChange = { replyOn = it })
+                Text("학부모님께 답장 문자 보내기 (${Repo.prettyPhone(replyNumber)})", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
+            }
+            if (replyOn) {
+                OutlinedTextField(replyText, { replyText = it; replyEdited = true }, label = { Text("답장 내용 (여기서 고쳐서 보낼 수 있어요)") },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 90.dp))
+                Text("${replyText.length}자 · 문자 ${Messages.smsCount(replyText)}통", color = Muted, fontSize = 13.sp)
+                if (selNames.isNotEmpty() && selNames.none { replyText.contains(Messages.givenName(it)) })
+                    Text("⚠ 아이 이름이 문구에 없어요", color = BadRed, fontSize = 13.sp)
+            }
+        }
 
         Spacer(Modifier.height(4.dp))
         if (saved) Text("저장됐어요 ✔ 출석부에 '결'로 표시됩니다", color = OkGreen, fontWeight = FontWeight.Bold)
@@ -154,6 +210,19 @@ fun AbsenceForm(
                 onClick = {
                     val kids = active.filter { it.id in selected }
                     Repo.saveAbsences(kids, days, reason.ifBlank { "부모님 연락" })
+                    if (addNumber != null && addPhoneOn) kids.forEach { Repo.addPhone(it, addNumber, addLabel) }
+                    if (inboxId != null) Inbox.markHandled(inboxId)
+                    if (replyNumber != null) {
+                        prefs.replyOn = replyOn
+                        if (replyOn && replyText.isNotBlank()) {
+                            // 창이 닫혀도 끝까지 보내도록 앱 전체 범위에서 실행
+                            val app = ctx.applicationContext; val num = Repo.normalizePhone(replyNumber); val text = replyText.trim()
+                            Inbox.appScope.launch {
+                                val err = if (!Phone.has(app, Manifest.permission.SEND_SMS)) "문자 보내기 권한 없음" else SmsSender.send(app, num, text)
+                                if (inboxId != null) Inbox.markReplied(inboxId, text, err)
+                            }
+                        }
+                    }
                     saved = true
                 },
                 modifier = Modifier.weight(1f).height(52.dp),

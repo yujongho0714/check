@@ -4,7 +4,7 @@ package com.jungdo.attend.data
 data class Student(
     val id: String = "",
     val name: String = "",
-    val grade: String = "",                     // 유치부, 1학년 … 중학생 (수련생 현황 기준)
+    val grade: String = "",                     // 유치부, 1학년 … 6학년, 중1~중3, 고1~고3, 성인 (나이가 있으면 자동 계산)
     val phones: List<String> = emptyList(),     // 학부모 연락처 (숫자만). 첫 번째가 대표 번호
     val phoneLabels: List<String> = emptyList(),// phones 와 같은 순서: 어머님/아버님/할머님…
     val memo: String = "",
@@ -18,8 +18,31 @@ data class Student(
     val attendNo: String = "",                  // 출결번호 (보통 학부모 번호 끝 4자리, 형제는 같음)
     val school: String = "",
     val fee: Int = 0,                           // 수강료
+    val age: Int = 0,                           // 나이 (ageYear 해에 정한 나이. 0 이면 자동 진급 안 함)
+    val ageYear: Int = 0,                       // 나이를 정한 해 (예: 2026)
+    val exp: Int = 0,                           // 경험치 (등원·하원 때마다 오름)
+    val streak: Int = 0,                        // 연속 출석 일수
+    val streakDay: String = "",                 // 연속 출석을 마지막으로 센 날 (yyyy-MM-dd)
+    val inDay: String = "",                     // 등원 경험치를 마지막으로 받은 날
+    val outDay: String = "",                    // 하원 경험치를 마지막으로 받은 날
+    val gems: List<String> = emptyList(),       // 모은 보석 번호 ("001" … "396")
+    val plates: List<String> = emptyList(),     // 모은 네임플레이트 번호 ("01" … "47")
+    val plate: String = "",                     // 지금 쓰고 있는 네임플레이트 (비어 있으면 안 씀)
 ) {
+    /** 계급 레벨 (1 ~ 866) */
+    val level: Int get() = Rank.levelOf(exp)
     val isActive get() = status == StudentStatus.ACTIVE
+    /** 올해 나이 (해가 바뀔 때마다 1살씩 올라감). 나이를 모르면 0 */
+    val curAge: Int get() = if (age > 0 && ageYear > 0) age + (GradeCalc.thisYear() - ageYear) else 0
+    /** 나이를 정해서 학년까지 같이 바꾼 원생 (올해 기준) */
+    fun withAge(a: Int, year: Int = GradeCalc.thisYear()): Student =
+        if (a > 0) copy(age = a, ageYear = year, grade = GradeCalc.labelOf(a)) else copy(age = 0, ageYear = 0)
+    /** 그 달(yyyy-MM)에 몇 학년이었는지 — 지난 출석부는 그때 학년으로 보여주려고 */
+    fun gradeAt(month: String): String {
+        if (age <= 0 || ageYear <= 0) return grade
+        val y = month.take(4).toIntOrNull() ?: return grade
+        return GradeCalc.labelOf(age + (y - ageYear))
+    }
     /** 해당 월 출석부에 나와야 하는지 (퇴관한 달부터는 안 나오고, 예전 달에는 그대로 나옴) */
     fun inMonth(month: String) =
         (joinedMonth.isBlank() || joinedMonth <= month) && (leftMonth.isBlank() || month < leftMonth)
@@ -81,5 +104,5 @@ object Status {
 }
 
 /** 학년 정렬 순서 (현황표 순) */
-val GRADE_ORDER = listOf("유치부", "6~7세", "1학년", "2학년", "3학년", "4학년", "5학년", "6학년", "4/5/6/중고등", "중학생", "중고등", "고등학생", "성인")
+val GRADE_ORDER = listOf("유치부", "6~7세", "1학년", "2학년", "3학년", "4학년", "5학년", "6학년", "4/5/6/중고등", "중학생", "중1", "중2", "중3", "중고등", "고등학생", "고1", "고2", "고3", "성인")
 fun gradeRank(g: String): Int = GRADE_ORDER.indexOf(g).let { if (it < 0) 99 else it }

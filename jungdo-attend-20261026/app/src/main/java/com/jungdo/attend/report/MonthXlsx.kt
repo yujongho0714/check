@@ -7,7 +7,7 @@ import com.jungdo.attend.report.XlsxWriter.Style
 
 /** 월간 출석부 → 엑셀(.xlsx). 시트: 출석부 / 결석사유 / 퇴관위험 */
 object MonthXlsx {
-    fun build(sheet: MonthSheet, risks: List<Risk>, dojang: String = "용인대 정도 태권도 2관"): ByteArray {
+    fun build(sheet: MonthSheet, risks: List<Risk>, dojang: String = com.jungdo.attend.data.DojangInfo.NAME): ByteArray {
         val se = Season.of(sheet.month)
         val off = Season.OFF_FILL
         val w = XlsxWriter()

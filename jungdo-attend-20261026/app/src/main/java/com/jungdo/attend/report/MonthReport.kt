@@ -60,7 +60,8 @@ object MonthReport {
             if (!Holidays.isOff(day)) null else d to (Holidays.name(day) ?: Holidays.weekdayKo(day))
         }.toMap()
 
-        val inMonth = students.filter { it.inMonth(month) }
+        // 지난달 출석부는 그때 학년으로 (나이가 있는 원생은 그 해 기준으로 다시 계산)
+        val inMonth = students.filter { it.inMonth(month) }.map { it.copy(grade = it.gradeAt(month)) }
         val bySib = inMonth.filter { it.siblingKey.isNotBlank() }.groupBy { it.siblingKey }
         val evBy = events.filter { it.day.startsWith(month) }.groupBy { it.studentId }
         val abBy = absences.filter { it.day.startsWith(month) }.groupBy { it.studentId }

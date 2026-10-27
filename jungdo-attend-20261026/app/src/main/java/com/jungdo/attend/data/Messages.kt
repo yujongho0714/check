@@ -20,8 +20,10 @@ data class DayNotice(val common: String = "", val byClass: Map<String, String> =
         byClass[part]?.takeIf { it.isNotBlank() } ?: common
 }
 
-const val DEFAULT_IN = "[용인대 정도태권도 2관] {이름} 수련생이 {시각}에 도장에 도착했습니다.\n{안내}"
-const val DEFAULT_OUT = "[용인대 정도태권도 2관] {이름} 수련생이 {시각}에 수업을 마치고 하원합니다.\n{안내}"
+const val DEFAULT_IN = "[${DojangInfo.SHORT}] {이름} 수련생이 {시각}에 도장에 도착했습니다.\n{안내}"
+const val DEFAULT_OUT = "[${DojangInfo.SHORT}] {이름} 수련생이 {시각}에 수업을 마치고 하원합니다.\n{안내}"
+
+const val DEFAULT_REPLY = "{호칭} 안녕하세요 에고 ㅠㅠ 넵 알겠습니다 {이름} 푹 쉬고 내일 만나도록 하겠습니다 연락주셔서 감사합니다~!"
 
 object Messages {
     private fun cfgDoc() = Repo.db.collection("config").document("messages")
@@ -39,7 +41,7 @@ object Messages {
     )
 
     fun saveConfig(c: MessageConfig) {
-        cfgDoc().set(mapOf("tplIn" to c.tplIn, "tplOut" to c.tplOut))
+        cfgDoc().set(mapOf("tplIn" to c.tplIn, "tplOut" to c.tplOut), com.google.firebase.firestore.SetOptions.merge())
     }
 
     fun saveNotice(day: String, n: DayNotice) {
@@ -53,6 +55,28 @@ object Messages {
         }
 
     suspend fun loadConfig() = toConfig(getMap(cfgDoc()))
+
+    // ── 결석 연락 답장 문구 ({이름} 필수) ──
+    fun saveReplyTpl(t: String) { cfgDoc().set(mapOf("tplReply" to t), com.google.firebase.firestore.SetOptions.merge()) }
+    suspend fun loadReplyTpl(): String = (getMap(cfgDoc())?.get("tplReply") as? String)?.takeIf { it.isNotBlank() } ?: DEFAULT_REPLY
+
+    /** 한글 3글자 이름은 성을 빼고 부름 (김윤우 → 윤우). 그 외는 그대로 */
+    fun givenName(full: String): String {
+        val n = full.trim()
+        return if (n.length == 3 && n.all { it in '가'..'힣' }) n.substring(1) else n
+    }
+
+    /** {이름}=성 뺀 이름(형제면 "윤우, 서연") {성명}=전체 이름 {호칭}=어머님/아버님 {날짜} */
+    fun buildReply(tpl: String, fullNames: List<String>, label: String, day: String = Repo.today()): String {
+        val dateText = "${day.substring(5, 7).toInt()}월 ${day.substring(8, 10).toInt()}일"
+        return tpl
+            .replace("{이름}", fullNames.joinToString(", ") { givenName(it) })
+            .replace("{성명}", fullNames.joinToString(", "))
+            .replace("{호칭}", label.ifBlank { "보호자님" }.let { if (it == "보호자") "보호자님" else it })
+            .replace("{날짜}", dateText)
+            .trim()
+    }
+    fun replyHasName(tpl: String) = tpl.contains("{이름}") || tpl.contains("{성명}")
     suspend fun loadNotice(day: String) = toNotice(getMap(noticeDoc(day)))
 
     /** 실제 문자 내용 만들기 */

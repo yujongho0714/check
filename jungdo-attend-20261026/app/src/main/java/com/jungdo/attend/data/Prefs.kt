@@ -37,6 +37,30 @@ class Prefs(ctx: Context) {
         set(v) = sp.edit().putBoolean("smsAll", v).apply()
 
     /** 일반 전화(앱 밖에서 걸거나 받은 전화)도 학부모 번호면 통화 후 사유 입력 창 띄우기 */
+    /** 학부모에게서 문자가 오면 그 아이 사유 입력 창 띄우기 (문자 내용 자동 입력) */
+    var smsPopup: Boolean
+        get() = sp.getBoolean("smsPopup", true)
+        set(v) = sp.edit().putBoolean("smsPopup", v).apply()
+
+    /** 결석 관련 키워드 (쉼표로 구분) — 문자에 하나라도 있으면 사유 입력 창 */
+    var absentWords: String
+        get() = sp.getString("absentWords", "결석,쉬,쉴,쉽니다,빠지,빠질,빠져,빠집,여행") ?: ""
+        set(v) = sp.edit().putString("absentWords", v).apply()
+
+    /** 시간·차량 스케줄 키워드 — 있으면 '카톡으로 보내기' 알림 */
+    var scheduleWords: String
+        get() = sp.getString("scheduleWords", "차량,스케줄,시간표,시간 변경,시간변경,픽업,셔틀,데리러,태워") ?: ""
+        set(v) = sp.edit().putString("scheduleWords", v).apply()
+
+    var scheduleToKakao: Boolean
+        get() = sp.getBoolean("scheduleToKakao", true)
+        set(v) = sp.edit().putBoolean("scheduleToKakao", v).apply()
+
+    /** 사유 저장할 때 학부모께 답장 문자 보내기 (사유 창 체크박스의 기본값) */
+    var replyOn: Boolean
+        get() = sp.getBoolean("replyOn", true)
+        set(v) = sp.edit().putBoolean("replyOn", v).apply()
+
     var callPopupAny: Boolean
         get() = sp.getBoolean("callPopupAny", true)
         set(v) = sp.edit().putBoolean("callPopupAny", v).apply()

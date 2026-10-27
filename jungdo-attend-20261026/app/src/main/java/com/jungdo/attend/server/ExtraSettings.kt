@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -81,6 +82,26 @@ fun ExtraSettings() {
             }
             Switch(popAny, { popAny = it; prefs.callPopupAny = it })
         }
+        var popSms by remember { mutableStateOf(prefs.smsPopup) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("학부모 문자를 받으면 사유 입력 창 띄우기", fontWeight = FontWeight.Bold)
+                Text("등록된 학부모 번호에서 문자가 오면 그 아이(형제) 창이 뜨고, 문자 내용이 사유 칸에 자동으로 들어가요", color = Muted, fontSize = 13.sp)
+            }
+            Switch(popSms, { popSms = it; prefs.smsPopup = it })
+        }
+        var absW by remember { mutableStateOf(prefs.absentWords) }
+        OutlinedTextField(absW, { absW = it; prefs.absentWords = it }, label = { Text("결석 키워드 (쉼표로 구분) — 이 글자가 있는 문자만 사유 창이 떠요") }, modifier = Modifier.fillMaxWidth())
+        var kakao by remember { mutableStateOf(prefs.scheduleToKakao) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("시간·차량 문자는 카톡으로 보내기", fontWeight = FontWeight.Bold)
+                Text("스케줄 키워드가 있는 문자가 오면 알림이 떠요. 누르면 카톡 창이 열리고 내용이 들어가 있어요 (받을 사람 고르고 전송)", color = Muted, fontSize = 13.sp)
+            }
+            Switch(kakao, { kakao = it; prefs.scheduleToKakao = it })
+        }
+        var schW by remember { mutableStateOf(prefs.scheduleWords) }
+        OutlinedTextField(schW, { schW = it; prefs.scheduleWords = it }, label = { Text("스케줄 키워드 (쉼표로 구분)") }, modifier = Modifier.fillMaxWidth())
 
         HorizontalDivider()
         // ── 휴일 ──

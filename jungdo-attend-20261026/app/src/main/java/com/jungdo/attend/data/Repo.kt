@@ -3,8 +3,6 @@ package com.jungdo.attend.data
 import android.os.Build
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
@@ -53,28 +51,64 @@ object Repo {
     // ---------- 변환 ----------
     private fun strList(v: Any?): List<String> = (v as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
 
-    fun toStudent(d: DocumentSnapshot) = Student(
-        id = d.id,
-        name = d.getString("name") ?: "",
-        grade = d.getString("grade") ?: d.getString("className") ?: "",
-        phones = strList(d.get("phones")),
-        phoneLabels = strList(d.get("phoneLabels")),
-        memo = d.getString("memo") ?: "",
-        siblingKey = d.getString("siblingKey") ?: "",
-        demo = d.getBoolean("demo") ?: false,
-        status = d.getString("status") ?: StudentStatus.ACTIVE,
-        statusReason = d.getString("statusReason") ?: "",
-        joinedMonth = d.getString("joinedMonth") ?: "",
-        leftMonth = d.getString("leftMonth") ?: "",
-        order = (d.getLong("order") ?: 0L).toInt(),
-        attendNo = d.getString("attendNo") ?: "",
-        school = d.getString("school") ?: "",
-        fee = (d.getLong("fee") ?: 0L).toInt(),
-    )
+    fun toStudent(d: DocumentSnapshot): Student {
+        val stored = d.getString("grade") ?: d.getString("className") ?: ""
+        val base = Student(
+            id = d.id,
+            name = d.getString("name") ?: "",
+            grade = stored,
+            phones = strList(d.get("phones")),
+            phoneLabels = strList(d.get("phoneLabels")),
+            memo = d.getString("memo") ?: "",
+            siblingKey = d.getString("siblingKey") ?: "",
+            demo = d.getBoolean("demo") ?: false,
+            status = d.getString("status") ?: StudentStatus.ACTIVE,
+            statusReason = d.getString("statusReason") ?: "",
+            joinedMonth = d.getString("joinedMonth") ?: "",
+            leftMonth = d.getString("leftMonth") ?: "",
+            order = (d.getLong("order") ?: 0L).toInt(),
+            attendNo = d.getString("attendNo") ?: "",
+            school = d.getString("school") ?: "",
+            fee = (d.getLong("fee") ?: 0L).toInt(),
+            age = (d.getLong("age") ?: 0L).toInt(),
+            ageYear = (d.getLong("ageYear") ?: 0L).toInt(),
+            exp = (d.getLong("exp") ?: 0L).toInt(),
+            streak = (d.getLong("streak") ?: 0L).toInt(),
+            streakDay = d.getString("streakDay") ?: "",
+            inDay = d.getString("inDay") ?: "",
+            outDay = d.getString("outDay") ?: "",
+            gems = strList(d.get("gems")),
+            plates = strList(d.get("plates")),
+            plate = d.getString("plate") ?: "",
+        )
+        // 나이가 있으면 올해 학년을 계산해서 보여줌 (저장된 grade 글자는 옛 값일 수 있음)
+        if (base.age > 0 && base.ageYear > 0) return base.copy(grade = GradeCalc.labelOf(base.curAge))
+        // 나이가 없는 옛 데이터: 정확한 학년(2학년 등)이면 올해 그 나이로 보고 시작 (migrateAges 가 저장해 줌)
+        val a = GradeCalc.ageOf(stored)
+        return if (a > 0) base.withAge(a) else base
+    }
+
+    private var agesMigrated = false
+    /** 업데이트 후 처음 한 번: 나이가 없는 원생 중 정확한 학년이 적힌 원생에게 나이(올해 기준)를 저장 → 내년부터 자동 진급 */
+    fun migrateAges(docs: List<DocumentSnapshot>) {
+        if (agesMigrated || docs.isEmpty()) return
+        agesMigrated = true
+        val year = GradeCalc.thisYear()
+        val todo = docs.filter { (it.getLong("age") ?: 0L) <= 0L && GradeCalc.ageOf(it.getString("grade") ?: "") > 0 }
+        todo.chunked(400).forEach { chunk ->
+            val batch = db.batch()
+            chunk.forEach { d ->
+                batch.update(students().document(d.id), mapOf("age" to GradeCalc.ageOf(d.getString("grade") ?: ""), "ageYear" to year))
+            }
+            batch.commit()
+        }
+    }
 
     fun studentData(s: Student): Map<String, Any?> = mapOf(
         "name" to s.name.trim(),
         "grade" to s.grade.trim(),
+        "age" to s.age,
+        "ageYear" to s.ageYear,
         "phones" to s.phones,
         "phoneLabels" to s.phoneLabels,
         "memo" to s.memo,
@@ -122,6 +156,37 @@ object Repo {
         if (s.id.isBlank()) students().add(data) else students().document(s.id).set(data, SetOptions.merge())
     }
 
+    /**
+     * 등원/하원을 눌렀을 때 경험치 + 보석 주기. 같은 날 같은 버튼은 한 번만.
+     * 보석은 매번 하나(이미 가진 건 제외), 네임플레이트는 30%. 처음 얻은 네임플레이트는 자동으로 씀.
+     * (경험치·보석 칸은 studentData 에 넣지 않아서 명단 저장이 덮어쓰지 않음)
+     */
+    fun awardExp(s: Student, type: String): AwardResult {
+        val p = Rank.plan(s, type, today())
+        val base = p.result.copy(equipped = s.plate)
+        if (p.fields.isEmpty() || s.id.isBlank()) return base
+        val gem = Loot.rollGem(s.gems)
+        val plate = Loot.rollPlate(s.plates)
+        val f = HashMap<String, Any>(p.fields)
+        if (gem != null) f["gems"] = FieldValue.arrayUnion(gem)
+        if (plate != null) {
+            f["plates"] = FieldValue.arrayUnion(plate)
+            if (s.plate.isBlank()) f["plate"] = plate
+        }
+        students().document(s.id).update(f)
+        return base.copy(gemId = gem, plateId = plate, equipped = if (s.plate.isBlank() && plate != null) plate else s.plate)
+    }
+
+    /** 키오스크에서 본인이 네임플레이트 바꾸기 ("" 이면 안 씀) */
+    fun setPlate(id: String, plateId: String) {
+        students().document(id).update(mapOf("plate" to plateId))
+    }
+
+    /** 관장님이 경험치를 직접 고칠 때 */
+    fun setExp(id: String, exp: Int) {
+        students().document(id).update(mapOf("exp" to exp.coerceIn(0, Rank.MAX_EXP)))
+    }
+
     /** 재원 상태 바꾸기. 퇴관은 이번 달부터 출석부·출석체크에서 빠짐 (예전 달 기록은 그대로) */
     fun setStatus(s: Student, status: String, reason: String = "") {
         students().document(s.id).update(mapOf(
@@ -131,6 +196,14 @@ object Repo {
         ))
     }
 
+    /** 학부모 번호 추가 (이미 있으면 무시) */
+    fun addPhone(s: Student, number: String, label: String) {
+        val n = normalizePhone(number)
+        if (n.length < 9 || s.phones.any { normalizePhone(it) == n }) return
+        val (p, l) = sortByLabel(s.phones + n, (s.phones.indices.map { s.phoneLabel(it) }) + label)
+        students().document(s.id).update(mapOf("phones" to p, "phoneLabels" to l))
+    }
+
     fun deleteStudent(id: String) {
         students().document(id).delete()
     }
@@ -138,12 +211,14 @@ object Repo {
     /** 일괄 등록(키오스크 관리자 화면): 같은 이름+학년이 있으면 덮어쓰기 */
     fun bulkUpsert(list: List<Student>, existing: List<Student>): Int {
         val byKey = existing.associateBy { "${it.name}|${it.grade}" }
+        val byName = existing.groupBy { it.name }
         list.chunked(400).forEach { chunk ->
             val batch = db.batch()
             chunk.forEach { s ->
-                val old = byKey["${s.name}|${s.grade}"]
+                val old = byKey["${s.name}|${s.grade}"] ?: byName[s.name]?.singleOrNull()
                 val ref = old?.let { students().document(it.id) } ?: students().document()
-                val merged = (old ?: Student(joinedMonth = Days.thisMonth())).copy(name = s.name, grade = s.grade, phones = s.phones, phoneLabels = s.phoneLabels)
+                val merged = GradeCalc.applyLabel(old ?: Student(joinedMonth = Days.thisMonth()), s.grade)
+                    .copy(name = s.name, phones = s.phones, phoneLabels = s.phoneLabels)
                 batch.set(ref, studentData(merged), SetOptions.merge())
             }
             batch.commit()
@@ -233,20 +308,18 @@ object Repo {
 }
 
 /** 상대 기기의 상태 */
-/** 연결 문제 진단용: 마지막 Firestore 오류 (키오스크 빈 화면에 표시) */
-object Diag { var error by androidx.compose.runtime.mutableStateOf("") }
-
 data class DeviceStatus(val lastSeen: Long?, val running: Boolean, val model: String?)
 
 // ---------- Compose 에서 실시간으로 구독하는 도우미 ----------
 
 @Composable
 fun rememberStudents(): State<List<Student>> = produceState(emptyList<Student>()) {
-    val reg = Repo.students().addSnapshotListener { snap, err ->
-        if (err != null) Diag.error = err.code.name + ": " + (err.message ?: "")
-        else Diag.error = ""
-        if (snap != null) value = snap.documents.map(Repo::toStudent)
-            .sortedWith(compareBy<Student>({ gradeRank(it.grade) }, { it.grade }, { it.order }, { it.name }))
+    val reg = Repo.students().addSnapshotListener { snap, _ ->
+        if (snap != null) {
+            Repo.migrateAges(snap.documents)
+            value = snap.documents.map(Repo::toStudent)
+                .sortedWith(compareBy<Student>({ gradeRank(it.grade) }, { it.grade }, { it.order }, { it.name }))
+        }
     }
     awaitDispose { reg.remove() }
 }

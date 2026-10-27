@@ -10,7 +10,8 @@ data class ContactRow(
     val attendNo: String,    // 출결번호
     val school: String,
     val fee: Int,
-    val grade: String = "", // 학년 (예: 초등학교1 → 1학년, 유치원7 → 유치부)
+    val grade: String = "", // 학년 (예: 초등학교1 → 1학년, 중학교2 → 중2, 유치원7 → 유치부)
+    val age: Int = 0,       // 학년·유치원 반에서 알아낸 나이 (모르면 0). 초등1=8세, 중1=14세, 고1=17세, 유치원7=7세
 )
 
 /**
@@ -50,6 +51,7 @@ object ContactTable {
                 attendNo = (if (cNo >= 0) r.getOrNull(cNo).orEmpty().trim().removeSuffix(".0") else "").ifBlank { if (phone.length >= 4) phone.takeLast(4) else "" },
                 school = if (cSchool >= 0) r.getOrNull(cSchool).orEmpty().trim() else "",
                 grade = if (cGrade >= 0) gradeOf(r.getOrNull(cGrade).orEmpty()) else "",
+                age = if (cGrade >= 0) ageOfRaw(r.getOrNull(cGrade).orEmpty()) else 0,
                 fee = if (cFee >= 0) r.getOrNull(cFee).orEmpty().filter { it.isDigit() }.toIntOrNull() ?: 0 else 0,
             )
         }
@@ -58,17 +60,31 @@ object ContactTable {
     /** 엑셀에 숫자로 쳐서 앞의 0이 사라진 휴대폰 번호(1012345678) 복구 */
     private fun fixPhone(d: String): String = if (d.length == 10 && d.startsWith("10")) "0$d" else d
 
-    /** '초등학교1' → '1학년', '유치원7' → '유치부', '중학교2' → '중학생' */
+    /** '초등학교1' → '1학년', '유치원7' → '유치부', '중학교2' → '중2', '고등학교1' → '고1' (몇 학년인지 없으면 '중학생'/'고등학생') */
     private fun gradeOf(raw: String): String {
         val t = raw.trim()
+        val a = ageOfRaw(t)
+        if (a > 0) return com.jungdo.attend.data.GradeCalc.labelOf(a)
         return when {
             t.isBlank() -> ""
             t.startsWith("유치") -> "유치부"
-            t.startsWith("초등") -> t.filter { it.isDigit() }.take(1).let { if (it.isEmpty()) "" else it + "학년" }
             t.startsWith("중") -> "중학생"
             t.startsWith("고") -> "고등학생"
-            t.contains("학년") -> t.filter { it.isDigit() }.take(1).let { if (it.isEmpty()) "" else it + "학년" }  // '1학년' 그대로
             else -> ""
+        }
+    }
+
+    /** '초등학교1' → 8, '중학교2' → 15, '고등학교1' → 17, '유치원7' → 7 (알 수 없으면 0) */
+    private fun ageOfRaw(raw: String): Int {
+        val t = raw.trim()
+        val n = t.filter { it.isDigit() }.take(1).toIntOrNull() ?: return 0
+        val g = com.jungdo.attend.data.GradeCalc
+        return when {
+            t.startsWith("유치") -> if (n in 3..7) n else 0
+            t.startsWith("초등") -> if (n in 1..6) g.KINDER_MAX + n else 0
+            t.startsWith("중") -> if (n in 1..3) (g.MIDDLE_START - 1) + n else 0
+            t.startsWith("고") -> if (n in 1..3) (g.HIGH_START - 1) + n else 0
+            else -> 0
         }
     }
 

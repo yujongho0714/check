@@ -99,7 +99,9 @@ fun ServerScreen(onReset: () -> Unit) {
     var tab by remember { mutableIntStateOf(0) }
     val students by rememberStudents()
     rememberCustomHolidays() // 관장님이 추가한 휴일을 앱 전체에 반영
-    val tabs = listOf("오늘 출결", "월간 출석부", "퇴관 위험", "명단·형제", "문자·안내", "상태·기록", "설정")
+    val recent by com.jungdo.attend.data.rememberInboxRange(Repo.shiftDay(Repo.today(), -30), Repo.today())
+    val openMsgs = recent.count { !it.handled }
+    val tabs = listOf("오늘 출결", "월간 출석부", if (openMsgs > 0) "받은 문자 ($openMsgs)" else "받은 문자", "단체 문자", "퇴관 위험", "결석 통계", "명단·형제", "문자·안내", "상태·기록", "설정")
     Column(Modifier.fillMaxSize().background(PageBg)) {
         Row(Modifier.fillMaxWidth().background(Navy).padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("정도 출결 · 관장님 폰", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
@@ -113,10 +115,13 @@ fun ServerScreen(onReset: () -> Unit) {
         when (tab) {
             0 -> TodayTab(students)
             1 -> MonthTab(students)
-            2 -> RiskTab(students)
-            3 -> RosterTab(students)
-            4 -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) { MessageSettings() }
-            5 -> StatusAndLog()
+            2 -> InboxTab()
+            3 -> BulkTab(students)
+            4 -> RiskTab(students)
+            5 -> StatsTab()
+            6 -> RosterTab(students)
+            7 -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) { MessageSettings() }
+            8 -> StatusAndLog()
             else -> ServerSettings(onReset)
         }
     }
@@ -138,9 +143,11 @@ private fun StatusAndLog() {
     var notiOk by remember { mutableStateOf(Build.VERSION.SDK_INT < 33 || granted(ctx, Manifest.permission.POST_NOTIFICATIONS)) }
     var batteryOk by remember { mutableStateOf(batteryExempt(ctx)) }
     var callOk by remember { mutableStateOf(callPermsOk(ctx)) }
+    var recvOk by remember { mutableStateOf(granted(ctx, Manifest.permission.RECEIVE_SMS)) }
     var overlayOk by remember { mutableStateOf(Settings.canDrawOverlays(ctx)) }
     val refresh = {
         callOk = callPermsOk(ctx)
+        recvOk = granted(ctx, Manifest.permission.RECEIVE_SMS)
         overlayOk = Settings.canDrawOverlays(ctx)
         smsOk = granted(ctx, Manifest.permission.SEND_SMS)
         notiOk = Build.VERSION.SDK_INT < 33 || granted(ctx, Manifest.permission.POST_NOTIFICATIONS)
@@ -177,6 +184,9 @@ private fun StatusAndLog() {
                         val list = mutableListOf(Manifest.permission.SEND_SMS)
                         if (Build.VERSION.SDK_INT >= 33) list += Manifest.permission.POST_NOTIFICATIONS
                         permLauncher.launch(list.toTypedArray())
+                    }
+                    CheckRow("문자 받기 권한 (학부모 문자 오면 사유 입력 창)", recvOk) {
+                        permLauncher.launch(arrayOf(Manifest.permission.RECEIVE_SMS))
                     }
                     CheckRow("알림 표시 권한", notiOk) {
                         if (Build.VERSION.SDK_INT >= 33) permLauncher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))

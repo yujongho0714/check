@@ -57,6 +57,7 @@ import com.jungdo.attend.ui.OkGreen
 import com.jungdo.attend.ui.Pill
 import com.jungdo.attend.ui.SectionTitle
 import com.jungdo.attend.ui.StudentEditDialog
+import com.jungdo.attend.data.GradeCalc
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -160,13 +161,20 @@ fun RosterTab(students: List<Student>) {
                 Text("재원 ${students.count { it.isActive }} · 휴관 ${students.count { it.status == StudentStatus.LEAVE }} · 퇴관 ${students.count { it.status == StudentStatus.LEFT }}", color = Muted, modifier = Modifier.weight(1f))
                 Pill(if (showLeft) "퇴관자 숨기기" else "퇴관자 보기", showLeft, 13.sp) { showLeft = !showLeft }
             }
+            val needAge = students.filter { it.isActive && GradeCalc.needsAge(it) }
+            if (needAge.isNotEmpty()) Text(
+                "⚠ 나이가 없어서 학년이 자동으로 안 올라가는 원생 ${needAge.size}명 (${needAge.take(6).joinToString(", ") { it.name }}${if (needAge.size > 6) " …" else ""}). 이름을 눌러 나이를 넣어 주세요.",
+                color = BadRed, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp),
+            )
         }
         items(shownStudents, key = { it.id }) { s ->
             val sibs = students.filter { s.siblingKey.isNotBlank() && it.siblingKey == s.siblingKey && it.id != s.id }
             Column(Modifier.fillMaxWidth().clickable { editing = s }.padding(vertical = 6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(s.name, fontWeight = FontWeight.Bold, fontSize = 17.sp, color = if (s.isActive) Color.Unspecified else Muted)
-                    Text("  ${s.grade}", color = Muted)
+                    Text("  ${s.grade}${if (s.curAge > 0) " (${s.curAge}세)" else ""}", color = Muted)
+                    Text("  Lv.${s.level}", color = InBlue, fontSize = 13.sp)
+                    if (s.isActive && GradeCalc.needsAge(s)) Text(" 나이?", color = BadRed, fontSize = 12.sp)
                     if (s.demo) Text("  ★시범단", color = InBlue, fontSize = 13.sp)
                     if (!s.isActive) Text("  ${StudentStatus.label(s.status)}${if (s.statusReason.isNotBlank()) "(${s.statusReason})" else ""}", color = BadRed, fontSize = 13.sp)
                     Spacer(Modifier.weight(1f))

@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -59,10 +61,19 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.jungdo.attend.data.AttendEvent
+import com.jungdo.attend.data.AwardResult
+import com.jungdo.attend.data.Rank
+import com.jungdo.attend.data.rememberCustomHolidays
+import com.jungdo.attend.ui.AwardRow
+import com.jungdo.attend.ui.CollectionDialog
+import com.jungdo.attend.ui.LootRow
+import com.jungdo.attend.ui.NamePlate
+import com.jungdo.attend.ui.RankHeader
+import com.jungdo.attend.ui.RankImage
+import com.jungdo.attend.data.DojangInfo
 import com.jungdo.attend.data.EventType
 import com.jungdo.attend.data.Prefs
 import com.jungdo.attend.data.Repo
-import com.jungdo.attend.data.Diag
 import com.jungdo.attend.data.Student
 import com.jungdo.attend.data.rememberDeviceStatus
 import com.jungdo.attend.data.rememberEventsOfDay
@@ -103,20 +114,20 @@ fun KioskScreen(onReset: () -> Unit) {
     val now by rememberNow(10_000)
     val day = Repo.dayOf(now)                    // 자정이 지나면 자동으로 다음 날로
     val allStudents by rememberStudents()
+    val holidaysNow by rememberCustomHolidays()   // 수업 없는 날 계산(연속 출석)에 쓰는 휴관일 목록
     // 재원생만 (휴관·퇴관은 출석체크 화면에 안 나옴)
     val students = remember(allStudents) { allStudents.filter { it.isActive } }
     val events by rememberEventsOfDay(day)
     val server by rememberDeviceStatus("server")
     val latest = remember(events) { events.sortedBy { it.clientTime }.associateBy { it.studentId } }
 
-    var classFilter by remember { mutableStateOf("전체") }
-    var choFilter by remember { mutableStateOf<Char?>(null) }
     var selected by remember { mutableStateOf<Student?>(null) }
     var dup by remember { mutableStateOf<Pair<Student, String>?>(null) }
     var done by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var doneAwards by remember { mutableStateOf<List<AwardResult>>(emptyList()) }
+    var collectionId by remember { mutableStateOf<String?>(null) }   // 보관함을 열어 본 원생
     var showPin by remember { mutableStateOf(false) }
     var showAdmin by remember { mutableStateOf(false) }
-    var showPad by remember { mutableStateOf(false) }
     var padChoices by remember { mutableStateOf<List<Student>?>(null) }
     val tts by rememberTts(ctx)
 
@@ -130,7 +141,7 @@ fun KioskScreen(onReset: () -> Unit) {
             delay(60_000)
         }
     }
-    LaunchedEffect(done) { if (done != null) { delay(2_200); done = null } }
+    LaunchedEffect(done) { if (done != null) { delay(if (doneAwards.any { it.gemId != null || it.plateId != null }) 6_000 else 3_500); done = null } }
 
     if (showAdmin) {
         AdminScreen(students = allStudents, todayEvents = events, onClose = { showAdmin = false }, onReset = onReset)
@@ -147,17 +158,25 @@ fun KioskScreen(onReset: () -> Unit) {
         }
         // 같이 온 형제도 함께 체크
         val sibs = students.filter { it.id in withSibs && it.id != s.id }
-        (listOf(s) + sibs).forEach { Repo.addEvent(it, type) }
-        val names = (listOf(s) + sibs).joinToString(", ") { it.name }
+        val group = listOf(s) + sibs
+        group.forEach { Repo.addEvent(it, type) }
+        // 경험치: 등원 +10, 하원 +10 (하루 한 번씩) + 연속 출석 보너스
+        val awards = group.map { runCatching { Repo.awardExp(it, type) }.getOrNull() }.filterNotNull()
+        val names = group.joinToString(", ") { it.name }
         selected = null; dup = null; withSibs = emptySet()
+        doneAwards = awards
         done = names to type
         if (prefs.ttsOn) tts?.speak("$names ${EventType.label(type)}", TextToSpeech.QUEUE_FLUSH, null, "att")
     }
 
-    val classes = remember(students) { listOf("전체") + students.map { it.grade }.filter { it.isNotBlank() }.distinct() }
-    val shown = students.filter {
-        (classFilter == "전체" || it.grade == classFilter) &&
-            (choFilter == null || it.name.firstOrNull()?.let(::choOf) == choFilter)
+    // 출결번호 확인: 한 명이면 바로 등원/하원 창, 형제(같은 번호)면 "누구예요?"에서 자기 이름 고르기
+    fun submitNo(no: String): Boolean {
+        val found = students.filter { it.attendNo == no }
+        return when {
+            found.isEmpty() -> false
+            found.size == 1 -> { withSibs = emptySet(); selected = found.first(); true }
+            else -> { padChoices = found; true }
+        }
     }
 
     Box(Modifier.fillMaxSize().background(PageBg)) {
@@ -168,7 +187,7 @@ fun KioskScreen(onReset: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    "용인대 정도 태권도 2관",
+                    DojangInfo.NAME,
                     color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold,
                     modifier = Modifier.pointerInput(Unit) { detectTapGestures(onLongPress = { showPin = true }) },
                 )
@@ -178,75 +197,46 @@ fun KioskScreen(onReset: () -> Unit) {
                 Spacer(Modifier.width(20.dp))
                 Text(Repo.timeText(now), color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
             }
-            // ── 부 선택 ──
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) { items(classes) { c -> Pill(c, classFilter == c) { classFilter = c } } }
-            // ── 초성 선택 ──
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                item { Pill("전체", choFilter == null, 16.sp) { choFilter = null } }
-                items(CHO_FILTERS) { ch -> Pill(ch.toString(), choFilter == ch, 16.sp) { choFilter = ch } }
-            }
-            // ── 이름 카드 ──
-            if (shown.isEmpty()) {
-                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Text(
-                        if (students.isEmpty()) "등록된 원생이 없습니다.\n위의 도장 이름을 길게 눌러 관리자 화면에서 등록하세요.\n\n" +
-                            "[연결 진단] 계정: ${com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email ?: "로그인 안 됨"}\n" +
-                            "프로젝트: ${com.google.firebase.FirebaseApp.getInstance().options.projectId}\n" +
-                            "오류: ${Diag.error.ifBlank { "없음(받은 원생 0명)" }}\n" +
-                            "앱 빌드: ${com.jungdo.attend.BuildConfig.VERSION_CODE}"
-                        else "해당하는 이름이 없어요",
-                        fontSize = 20.sp, color = Muted, textAlign = TextAlign.Center,
-                    )
-                }
-            } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(150.dp),
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    contentPadding = PaddingValues(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    items(shown, key = { it.id }) { s -> StudentCard(s, latest[s.id]) { selected = s } }
-                }
-            }
+            // ── 출결번호 입력 (이름 목록은 보여주지 않음 → 다른 아이 이름을 눌러 장난치는 것 방지) ──
+            PadPanel(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                emptyNotice = students.isEmpty(),
+                onSubmit = { submitNo(it) },
+            )
         }
 
-        // ── 출결번호로 출석 버튼 ──
-        Button(
-            onClick = { showPad = true },
-            colors = ButtonDefaults.buttonColors(containerColor = Navy),
-            shape = RoundedCornerShape(40.dp),
-            modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp).height(72.dp),
-        ) { Text("🔢 출결번호로 출석", fontSize = 24.sp, fontWeight = FontWeight.Bold) }
-
-        // ── 완료 화면 (2초) ──
+        // ── 완료 화면 (3.5초) ──
         done?.let { (name, type) ->
-            Box(Modifier.fillMaxSize().background(Color(0xDD000000)), contentAlignment = Alignment.Center) {
+            Box(Modifier.fillMaxSize().background(Color(0xDD000000)).clickable { done = null }, contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("✅", fontSize = 80.sp)
-                    Text(name, fontSize = 56.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text("✅", fontSize = 48.sp)
                     Text(
-                        "${EventType.label(type)} 완료!", fontSize = 40.sp, fontWeight = FontWeight.Bold,
+                        "${EventType.label(type)} 완료!", fontSize = 34.sp, fontWeight = FontWeight.Bold,
                         color = if (type == EventType.IN) Color(0xFF93C5FD) else Color(0xFFFDBA74),
                     )
+                    if (doneAwards.isEmpty()) Text(name, fontSize = 48.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    // 계급 · 이름 (계급 그림은 항상 이름 왼쪽) · 경험치
+                    doneAwards.forEach { a ->
+                        Box(Modifier.padding(top = 16.dp)) { AwardRow(a) }
+                        Box(Modifier.padding(top = 10.dp)) { LootRow(a) }
+                    }
                 }
             }
         }
     }
 
     // ── 등원/하원 선택 팝업 ──
-    selected?.let { s ->
-        LaunchedEffect(s, withSibs) { delay(15_000); selected = null; withSibs = emptySet() } // 15초 동안 안 누르면 자동 닫힘
+    selected?.let { s0 ->
+        val s = allStudents.firstOrNull { it.id == s0.id } ?: s0   // 보관함에서 바꾼 네임플레이트가 바로 보이게
+        LaunchedEffect(s0, withSibs, collectionId) { if (collectionId == null) { delay(15_000); selected = null; withSibs = emptySet() } } // 15초 동안 안 누르면 자동 닫힘
         Dialog(onDismissRequest = { selected = null; withSibs = emptySet() }) {
             Card(shape = RoundedCornerShape(28.dp)) {
                 Column(Modifier.widthIn(min = 340.dp).padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(s.name, fontSize = 44.sp, fontWeight = FontWeight.Bold)
+                    // 네임플레이트(없으면 이름) → Lv + 계급 그림 (완료 화면과 같은 배치)
+                    if (s.plate.isNotBlank()) NamePlate(s.plate, s.name, 300.dp, 32.sp)
+                    else Text(s.name, fontSize = 44.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(6.dp))
+                    RankHeader(s.level)
                     if (s.grade.isNotBlank()) Text(s.grade, fontSize = 18.sp, color = Muted)
                     latest[s.id]?.let { Text("오늘 마지막: ${EventType.label(it.type)} ${Repo.timeText(it.clientTime)}", color = Muted) }
                     // 형제가 있으면 "같이 왔어요" 선택
@@ -265,29 +255,27 @@ fun KioskScreen(onReset: () -> Unit) {
                         }
                     }
                     Spacer(Modifier.height(24.dp))
+                    // 오늘 마지막 기록으로 맞는 버튼을 또렷하게 (흐린 버튼도 누를 수 있음) → 등원/하원 잘못 누름 방지
+                    val lastType = latest[s.id]?.type
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        BigButton("등원", InBlue, Modifier.weight(1f)) { attend(s, EventType.IN) }
-                        BigButton("하원", OutOrange, Modifier.weight(1f)) { attend(s, EventType.OUT) }
+                        BigButton("등원", if (lastType == EventType.IN) InBlue.copy(alpha = 0.4f) else InBlue, Modifier.weight(1f)) { attend(s, EventType.IN) }
+                        BigButton("하원", if (lastType == EventType.IN) OutOrange else OutOrange.copy(alpha = 0.4f), Modifier.weight(1f)) { attend(s, EventType.OUT) }
                     }
                     Spacer(Modifier.height(8.dp))
+                    TextButton(onClick = { collectionId = s.id }) { Text("🎒 내 보석·네임플레이트 (${s.gems.size})", fontSize = 18.sp) }
                     TextButton(onClick = { selected = null; withSibs = emptySet() }) { Text("취소", fontSize = 20.sp) }
                 }
             }
         }
     }
 
-    // ── 출결번호 입력 ──
-    if (showPad) NumberPad(
-        onDismiss = { showPad = false },
-        onSubmit = { no ->
-            val found = students.filter { it.attendNo == no }
-            when {
-                found.isEmpty() -> false
-                found.size == 1 -> { showPad = false; withSibs = emptySet(); selected = found.first(); true }
-                else -> { showPad = false; padChoices = found; true }
-            }
-        },
-    )
+    // 내 보관함 (보석 구경 + 네임플레이트 고르기)
+    collectionId?.let { id ->
+        val st = allStudents.firstOrNull { it.id == id }
+        if (st == null) collectionId = null
+        else CollectionDialog(st) { collectionId = null }
+    }
+
     // 같은 번호를 쓰는 형제 → 누구인지 고르기
     padChoices?.let { list ->
         LaunchedEffect(list) { delay(15_000); padChoices = null }
@@ -301,7 +289,11 @@ fun KioskScreen(onReset: () -> Unit) {
                             onClick = { padChoices = null; withSibs = emptySet(); selected = st },
                             shape = RoundedCornerShape(18.dp),
                             modifier = Modifier.widthIn(min = 260.dp).height(80.dp).padding(vertical = 4.dp),
-                        ) { Text(st.name, fontSize = 32.sp, fontWeight = FontWeight.Bold) }
+                        ) {
+                            RankImage(st.level, 52.dp)
+                            Spacer(Modifier.width(12.dp))
+                            Text(st.name, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                     TextButton(onClick = { padChoices = null }) { Text("취소", fontSize = 20.sp) }
                 }
@@ -408,45 +400,70 @@ private fun KeepScreenOnFullScreen(activity: Activity?) {
 }
 
 
-/** 출결번호 4자리 입력 키패드 */
+/** 메인 화면의 출결번호 키패드 — 4자리를 누르면 자동 확인, 연속 5번 틀리면 30초 잠금 */
 @Composable
-private fun NumberPad(onDismiss: () -> Unit, onSubmit: (String) -> Boolean) {
+private fun PadPanel(modifier: Modifier, emptyNotice: Boolean, onSubmit: (String) -> Boolean) {
     var input by remember { mutableStateOf("") }
     var wrong by remember { mutableStateOf(false) }
-    LaunchedEffect(input) { delay(20_000); onDismiss() } // 20초 동안 입력 없으면 닫힘
+    var fails by remember { mutableStateOf(0) }
+    var locked by remember { mutableStateOf(false) }
+    LaunchedEffect(input) { if (input.isNotEmpty()) { delay(15_000); input = "" } } // 15초 동안 입력 없으면 지워짐
+    LaunchedEffect(locked) { if (locked) { delay(30_000); locked = false; wrong = false; fails = 0 } }
+
+    fun check() {
+        val ok = onSubmit(input)
+        input = ""
+        if (ok) { wrong = false; fails = 0 } else {
+            wrong = true; fails += 1
+            if (fails >= 5) locked = true
+        }
+    }
     fun press(k: String) {
+        if (locked) return
         wrong = false
         when (k) {
             "지움" -> input = input.dropLast(1)
-            "확인" -> if (input.isNotEmpty() && !onSubmit(input)) { wrong = true; input = "" }
+            "확인" -> if (input.isNotEmpty()) check()
             else -> if (input.length < 6) {
                 input += k
-                if (input.length == 4 && onSubmit(input).not()) { wrong = true; input = "" }
+                if (input.length == 4) check()
             }
         }
     }
-    Dialog(onDismissRequest = onDismiss) {
-        Card(shape = RoundedCornerShape(28.dp)) {
-            Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("출결번호 입력", fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                Text(if (wrong) "없는 번호예요. 다시 눌러 주세요" else "학부모님 번호 끝 4자리", color = if (wrong) BadRed else Muted, fontSize = 16.sp)
-                Spacer(Modifier.height(8.dp))
-                Text(input.padEnd(4, '_').chunked(1).joinToString(" "), fontSize = 44.sp, fontWeight = FontWeight.Bold, color = Navy)
-                Spacer(Modifier.height(12.dp))
-                listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9"), listOf("지움", "0", "확인")).forEach { row ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(vertical = 5.dp)) {
-                        row.forEach { k ->
-                            Button(
-                                onClick = { press(k) },
-                                shape = RoundedCornerShape(18.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = if (k.length > 1) Muted else InBlue),
-                                modifier = Modifier.width(96.dp).height(80.dp),
-                            ) { Text(k, fontSize = if (k.length > 1) 20.sp else 34.sp, fontWeight = FontWeight.Bold) }
-                        }
-                    }
+
+    Column(
+        modifier.verticalScroll(rememberScrollState()).padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text("출결번호를 눌러 주세요", fontSize = 34.sp, fontWeight = FontWeight.Bold, color = Navy)
+        Text(
+            when {
+                locked -> "여러 번 틀렸어요. 30초 뒤에 다시 눌러 주세요"
+                wrong -> "없는 번호예요. 다시 눌러 주세요"
+                else -> "학부모님 휴대폰 번호 끝 4자리"
+            },
+            color = if (locked || wrong) BadRed else Muted, fontSize = 20.sp,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(input.padEnd(4, '_').chunked(1).joinToString(" "), fontSize = 52.sp, fontWeight = FontWeight.Bold, color = Navy)
+        Spacer(Modifier.height(8.dp))
+        listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9"), listOf("지움", "0", "확인")).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(vertical = 5.dp)) {
+                row.forEach { k ->
+                    Button(
+                        onClick = { press(k) },
+                        enabled = !locked,
+                        shape = RoundedCornerShape(18.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = if (k.length > 1) Muted else InBlue),
+                        modifier = Modifier.width(110.dp).height(76.dp),
+                    ) { Text(k, fontSize = if (k.length > 1) 22.sp else 36.sp, fontWeight = FontWeight.Bold) }
                 }
-                TextButton(onClick = onDismiss) { Text("닫기", fontSize = 20.sp) }
             }
+        }
+        if (emptyNotice) {
+            Spacer(Modifier.height(12.dp))
+            Text("등록된 원생이 없습니다.\n위의 도장 이름을 길게 눌러 관리자 화면에서 등록하세요.", fontSize = 16.sp, color = Muted, textAlign = TextAlign.Center)
         }
     }
 }

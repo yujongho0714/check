@@ -27,6 +27,13 @@ class ReasonActivity : ComponentActivity() {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
     }
 
+    /** 창이 이미 떠 있는데 새 문자·전화가 오면 새 내용으로 다시 그림 */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        recreate()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setFinishOnTouchOutside(false)
@@ -35,6 +42,11 @@ class ReasonActivity : ComponentActivity() {
         val number = intent.getStringExtra("num") ?: ""
         val header = intent.getStringExtra("header") ?: "통화가 끝났어요"
         val missed = intent.getBooleanExtra("missed", false)
+        val smsBody = intent.getStringExtra("smsBody")
+        val inboxId = intent.getStringExtra("inboxId")
+        val addNumber = intent.getStringExtra("addNumber")
+        val replyNumber = intent.getStringExtra("replyNumber")
+        val replyLabel = intent.getStringExtra("replyLabel") ?: ""
         setContent {
             MaterialTheme(colorScheme = lightColorScheme(primary = Navy)) {
                 AbsenceForm(
@@ -42,6 +54,11 @@ class ReasonActivity : ComponentActivity() {
                     header = header,
                     callNumber = number.ifBlank { null },
                     missedCall = missed,
+                    smsBody = smsBody,
+                    inboxId = inboxId,
+                    addNumber = addNumber,
+                    replyNumber = replyNumber,
+                    replyLabel = replyLabel,
                     onDone = { finish() },
                 )
             }

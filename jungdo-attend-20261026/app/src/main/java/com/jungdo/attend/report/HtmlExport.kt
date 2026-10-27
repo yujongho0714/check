@@ -7,7 +7,7 @@ import com.jungdo.attend.data.Season
 object HtmlExport {
     private fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
 
-    fun build(sheet: MonthSheet, risks: List<Risk>, dojang: String = "용인대 정도 태권도 2관"): String {
+    fun build(sheet: MonthSheet, risks: List<Risk>, dojang: String = com.jungdo.attend.data.DojangInfo.NAME): String {
         val se = Season.of(sheet.month)
         val off = "#" + Season.OFF_FILL
         val title = "${Days.monthLabel(sheet.month)} 출석부"

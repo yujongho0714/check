@@ -13,6 +13,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
+import androidx.compose.ui.platform.LocalContext
+import com.jungdo.attend.data.Prefs
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -55,6 +58,15 @@ fun MessageSettings() {
         tplIn = c.tplIn; tplOut = c.tplOut; cfgLoaded = true
     }
     LaunchedEffect(cfgSaved) { if (cfgSaved) { delay(2000); cfgSaved = false } }
+
+    // ───────── 4) 결석 연락 답장 ─────────
+    val prefs = remember { Prefs(LocalContext.current) }
+    var tplReply by remember { mutableStateOf("") }
+    var replyLoaded by remember { mutableStateOf(false) }
+    var replyMsg by remember { mutableStateOf<String?>(null) }
+    var replyDefaultOn by remember { mutableStateOf(prefs.replyOn) }
+    LaunchedEffect(Unit) { tplReply = Messages.loadReplyTpl(); replyLoaded = true }
+    LaunchedEffect(replyMsg) { if (replyMsg != null) { delay(2500); replyMsg = null } }
 
     // ───────── 2) 날짜별 안내 ─────────
     var day by remember { mutableStateOf(Repo.today()) }
@@ -139,6 +151,40 @@ fun MessageSettings() {
             }
         }
         Text("한글 70자가 넘으면 문자가 여러 통으로 나뉘어 가요(폰 기종에 따라 장문 1통). 문자 무제한 요금제인지 확인하세요.", color = Muted, fontSize = 13.sp)
+
+        // ───────── 4) 결석 연락 답장 ─────────
+        Spacer(Modifier.height(12.dp))
+        SectionTitle("④ 결석 연락 답장 문구")
+        Text(
+            "학부모 문자를 보고 사유를 저장할 때, 학부모님께 이 문구로 답장을 보내요. (사유 창에서 체크를 끄거나 문구를 고칠 수도 있어요)\n" +
+                "{이름}=아이 이름(성 뺀 이름, 형제면 '윤우, 서연')  {성명}=성까지 전체 이름  {호칭}=어머님/아버님  {날짜}\n" +
+                "※ {이름}이나 {성명}은 꼭 들어가야 저장돼요.",
+            color = Muted, fontSize = 14.sp,
+        )
+        OutlinedTextField(tplReply, { tplReply = it }, label = { Text("답장 문구") }, enabled = replyLoaded,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Button(enabled = replyLoaded, onClick = {
+                if (!Messages.replyHasName(tplReply)) replyMsg = "⚠ {이름}이 빠졌어요. 아이 이름이 들어가야 해요"
+                else { Messages.saveReplyTpl(tplReply.trim()); replyMsg = "저장됐어요 ✔" }
+            }) { Text("답장 문구 저장") }
+            Spacer(Modifier.padding(6.dp))
+            replyMsg?.let { Text(it, color = if (it.startsWith("⚠")) BadRed else OkGreen) }
+        }
+        run {
+            val sample = Messages.buildReply(tplReply.ifBlank { " " }, listOf("김윤우"), "어머님")
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFFFEF9C3)).padding(12.dp)) {
+                Text("예시 (김윤우 · 어머님) · ${sample.length}자 · 문자 ${Messages.smsCount(sample)}통", color = Muted, fontSize = 13.sp)
+                Text(sample, fontSize = 16.sp)
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("사유 저장할 때 답장 문자 기본으로 켜기", fontWeight = FontWeight.Bold)
+                Text("사유 창의 체크박스 처음 상태예요. 마지막에 고른 상태가 기억돼요.", color = Muted, fontSize = 13.sp)
+            }
+            Switch(replyDefaultOn, { replyDefaultOn = it; prefs.replyOn = it })
+        }
     }
 }
 

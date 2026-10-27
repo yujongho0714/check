@@ -1,6 +1,7 @@
 package com.jungdo.attend.importer
 
 import com.jungdo.attend.data.Days
+import com.jungdo.attend.data.GradeCalc
 import com.jungdo.attend.data.Repo
 import com.jungdo.attend.data.Student
 import com.jungdo.attend.data.StudentStatus
@@ -25,7 +26,7 @@ data class RosterResult(
  */
 object RosterParser {
     private val NAME = Regex("^([가-힣]{2,4})(\\(\\d+\\))?$")
-    private val GRADE = Regex("^(유치부|\\d학년|중학생|고등학생|중고등|성인|\\d~\\d세|[\\d/]+/중고등)$")
+    private val GRADE = Regex("^(유치부|\\d학년|중학생|고등학생|중[1-3]|고[1-3]|중고등|성인|\\d~\\d세|[\\d/]+/중고등)$")
     private val STOP = Regex("형제|퇴관|휴관|총|합계|사유|인원")
 
     fun cleanName(t: String): String? = NAME.find(t.trim())?.groupValues?.get(1)
@@ -179,8 +180,8 @@ class ImportPlan(
                     if (old == null) added += e.name
                     else if (old.status == StudentStatus.LEFT) reactivated += e.name
                     val base = old ?: Student(joinedMonth = month)
-                    result += base.copy(
-                        name = e.name, grade = e.grade, demo = e.demo, order = e.order,
+                    result += GradeCalc.applyLabel(base, e.grade).copy(
+                        name = e.name, demo = e.demo, order = e.order,
                         status = if (e.leave) StudentStatus.LEAVE else StudentStatus.ACTIVE,
                         statusReason = if (e.leave) e.leaveReason else "",
                         leftMonth = "",
@@ -205,7 +206,8 @@ class ImportPlan(
                     table.map { it.name }.distinct().filter { it !in have }.forEachIndexed { i, n ->
                         val r0 = table.first { it.name == n }
                         added += n
-                        result += Student(name = n, grade = r0.grade, joinedMonth = month, order = 1000 + i, siblingKey = sibOf[n] ?: "")
+                        val fresh = Student(name = n, joinedMonth = month, order = 1000 + i, siblingKey = sibOf[n] ?: "")
+                        result += if (r0.age > 0) fresh.withAge(r0.age) else GradeCalc.applyLabel(fresh, r0.grade)
                     }
                 }
             }
@@ -230,8 +232,7 @@ class ImportPlan(
                         s.phones.forEachIndexed { i, ph -> if (ph !in phones) { phones += ph; labels += s.phoneLabel(i) } }
                         val r0 = rows.first()
                         s.copy(phones = phones, phoneLabels = labels,
-                            attendNo = r0.attendNo.ifBlank { s.attendNo }, school = r0.school.ifBlank { s.school }, fee = if (r0.fee > 0) r0.fee else s.fee,
-                            grade = s.grade.ifBlank { r0.grade })
+                            attendNo = r0.attendNo.ifBlank { s.attendNo }, school = r0.school.ifBlank { s.school }, fee = if (r0.fee > 0) r0.fee else s.fee)
                     }
                 }
             } else result
