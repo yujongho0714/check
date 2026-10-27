@@ -1,8 +1,0 @@
-.gradle/
-build/
-local.properties
-.idea/
-*.iml
-# 공개 저장소에 올리면 안 되는 파일 (깃허브 Secrets 로 넣기)
-app/google-services.json
-*.jks
