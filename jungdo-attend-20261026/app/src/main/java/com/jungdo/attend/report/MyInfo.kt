@@ -97,7 +97,7 @@ ul{margin:0;padding:0;list-style:none}li{display:flex;justify-content:space-betw
 <div class="box"><b>${i.monthDays}일</b><span>${esc(monthLabel(i.month))}</span></div>
 <div class="box"><b>${s.streak}일</b><span>연속 출석</span></div>
 <div class="box"><b>${s.gems.size}/$GEM_TOTAL</b><span>보석</span></div></div>
-<p class="mut" style="margin:8px 0 0">네임플레이트 ${s.plates.size}/$PLATE_TOTAL개 모음</p></div>
+<p class="mut" style="margin:8px 0 0">네임플레이트 ${s.plates.size}/${PLATE_TOTAL}개 모음</p></div>
 <div class="sec"><h2>🎁 받은 상품 (${i.payouts.size})</h2>$pays</div>
 <div class="sec mut" style="text-align:center">${esc(i.madeDay)} 기준</div>
 </div></body></html>"""
