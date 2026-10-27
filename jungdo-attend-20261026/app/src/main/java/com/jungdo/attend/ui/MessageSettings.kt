@@ -60,7 +60,8 @@ fun MessageSettings() {
     LaunchedEffect(cfgSaved) { if (cfgSaved) { delay(2000); cfgSaved = false } }
 
     // ───────── 4) 결석 연락 답장 ─────────
-    val prefs = remember { Prefs(LocalContext.current) }
+    val ctx = LocalContext.current
+    val prefs = remember { Prefs(ctx) }
     var tplReply by remember { mutableStateOf("") }
     var replyLoaded by remember { mutableStateOf(false) }
     var replyMsg by remember { mutableStateOf<String?>(null) }
