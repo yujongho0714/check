@@ -14,6 +14,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -180,7 +181,11 @@ private fun StatusAndLog() {
                     Text(info, color = Muted)
                     Spacer(Modifier.height(8.dp))
                     if (running) OutlinedButton(onClick = { SmsService.stop(ctx) }) { Text("서버 끄기") }
-                    else Button(enabled = smsOk, onClick = { SmsService.start(ctx) }) { Text("서버 켜기", fontSize = 18.sp) }
+                    else Button(enabled = smsOk, onClick = {
+                        SmsService.start(ctx)
+                        if (!batteryExempt(ctx)) runCatching { ctx.startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${ctx.packageName}"))) }
+                    }) { Text("서버 켜기", fontSize = 18.sp) }
+                    if (running && !batteryOk) Text("⚠ 배터리 최적화 제외가 꺼져 있어요. 홈버튼만 눌러 두면 폰이 앱을 재워서 문자가 안 나갈 수 있어요. 아래 [준비 상태]에서 허용하세요.", color = BadRed, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     if (!smsOk) Text("먼저 아래에서 문자 권한을 허용하세요", color = BadRed)
                 }
             }
@@ -230,7 +235,7 @@ private fun StatusAndLog() {
             }
             Text(
                 "등원 ${events.count { it.type == EventType.IN }} · 하원 ${events.count { it.type == EventType.OUT }} · " +
-                    "성공 ${events.count { it.status == Status.SENT }} · 실패 ${events.count { it.status == Status.FAILED }} · " +
+                    "도착확인 ${events.count { it.status == Status.SENT && it.dlvNeed > 0 && it.dlvOk >= it.dlvNeed }} · 확인중/미확인 ${events.count { it.status == Status.SENT && !(it.dlvNeed > 0 && it.dlvOk >= it.dlvNeed) }} · 실패 ${events.count { it.status == Status.FAILED }} · " +
                     "대기 ${events.count { it.status == Status.PENDING || it.status == Status.SENDING }}",
                 color = Muted,
             )
@@ -239,7 +244,7 @@ private fun StatusAndLog() {
         } }
         // ── 발송 기록 ──
         if (events.isEmpty()) item { Text("기록이 없습니다.", color = Muted) }
-        items(events, key = { it.id }) { e -> LogRow(e) }
+        items(events, key = { it.id }) { e -> LogRow(e, now) }
     }
 }
 
@@ -254,7 +259,7 @@ private fun CheckRow(label: String, ok: Boolean, onFix: () -> Unit) {
 }
 
 @Composable
-private fun LogRow(e: AttendEvent) {
+private fun LogRow(e: AttendEvent, now: Long) {
     var open by remember { mutableStateOf(false) }
     Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(12.dp),
         modifier = Modifier.clickable { open = !open }) {
@@ -263,9 +268,23 @@ private fun LogRow(e: AttendEvent) {
                 Text(Repo.timeText(e.clientTime), modifier = Modifier.width(80.dp), color = Muted)
                 Text(e.name, fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.width(80.dp))
                 Text(EventType.label(e.type), modifier = Modifier.width(44.dp))
-                StatusChip(e.status)
+                val confirmed = e.dlvNeed > 0 && e.dlvOk >= e.dlvNeed
+                if (e.status == Status.SENT) {
+                    // 초록 '발송완료'는 상대 폰 도착이 확인된 뒤에만. 그 전엔 '접수·확인중', 3분 넘게 확인 안 되면 '도착 미확인'
+                    val waited = if (e.sentMs > 0) now - e.sentMs else 0L
+                    val (label, bg) = when {
+                        e.dlvFail > 0 -> "도착 실패" to BadRed
+                        confirmed -> "발송완료" to OkGreen
+                        waited > 3 * 60_000L -> "도착 미확인" to Color(0xFFEA580C)
+                        else -> "확인중" to Color(0xFFCA8A04)
+                    }
+                    Box(Modifier.background(bg, RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 5.dp)) {
+                        Text(label, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
+                } else StatusChip(e.status)
                 Spacer(Modifier.weight(1f))
-                if (e.status == Status.FAILED || e.status == Status.EXPIRED || e.dlvFail > 0)
+                if (e.status == Status.FAILED || e.status == Status.EXPIRED || e.dlvFail > 0 ||
+                    (e.status == Status.SENT && !confirmed && e.sentMs > 0 && now - e.sentMs > 3 * 60_000L))
                     TextButton(onClick = { Repo.retry(e.id) }) { Text("재발송") }
             }
             e.error?.let { Text(it, color = BadRed, fontSize = 13.sp) }
@@ -274,7 +293,8 @@ private fun LogRow(e: AttendEvent) {
                 val (t, c) = when {
                     e.dlvFail > 0 -> "⚠ 상대 폰에 도착 실패 ($failNote)" to BadRed
                     e.dlvNeed > 0 && e.dlvOk >= e.dlvNeed -> "✔ 상대 폰 도착 확인됨" to OkGreen
-                    else -> "통신사에 접수됨 · 도착 확인은 아직 (안 오는 통신사도 있어요)" to Muted
+                    e.sentMs > 0 && now - e.sentMs > 3 * 60_000L -> "⚠ 3분이 지나도 도착 확인이 없어요 — 상대 폰 문자함을 확인하고, 없으면 [재발송]" to Color(0xFFEA580C)
+                    else -> "통신사에 접수됨 · 도착 확인 중…" to Muted
                 }
                 Text(t, color = c, fontSize = 13.sp)
             }

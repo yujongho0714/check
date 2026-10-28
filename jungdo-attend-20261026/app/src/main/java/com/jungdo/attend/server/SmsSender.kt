@@ -35,7 +35,7 @@ object SmsSender {
     suspend fun send(ctx: Context, phone: String, text: String, eventId: String? = null): String? {
         if (text.isBlank()) return "문자 내용이 비어 있음"
         // 성공은 "" , 실패는 이유 문자열, 시간초과는 null
-        val r: String = withTimeoutOrNull(60_000L) {
+        val r: String = withTimeoutOrNull(30_000L) {
         suspendCancellableCoroutine<String> { cont ->
             val app = ctx.applicationContext
             val sms = smsManager(app)
@@ -86,7 +86,7 @@ object SmsSender {
                 if (cont.isActive) cont.resume("발송 오류: ${e.message}")
             }
         }
-        } ?: return "60초 안에 발송 결과가 오지 않음"
+        } ?: return "30초 안에 발송 결과가 오지 않음 (문자함에 갔는지 확인 후 재발송)"
         return r.ifEmpty { null }
     }
 

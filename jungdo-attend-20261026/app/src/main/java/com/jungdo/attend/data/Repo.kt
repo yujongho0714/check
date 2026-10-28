@@ -149,6 +149,8 @@ object Repo {
         dlvFail = (m["dlvFail"] as? Number)?.toInt() ?: 0,
         dlvNeed = (m["dlvNeed"] as? Number)?.toInt() ?: 0,
         dlvError = m["dlvError"] as? String,
+        matchedPhone = m["matchedPhone"] as? String,
+        sentMs = (m["sentMs"] as? Number)?.toLong() ?: 0L,
     )
 
     fun toEvent(d: DocumentSnapshot) = toEvent(d.id, d.data ?: emptyMap())
@@ -284,8 +286,16 @@ object Repo {
     }
 
     // ---------- 등원/하원 신호 (기기 A → Firestore → 기기 B) ----------
-    fun addEvent(s: Student, type: String) {
+    /**
+     * @param typedNo 아이가 키오스크에 입력한 번호(보통 뒷 4자리). 등록된 번호 중 뒷자리가 같은 번호가 있으면
+     *                그 번호로만 문자를 보냄 (어머님 번호로 눌렀는데 아버님께도 가는 일 방지). 출결번호로 눌렀으면 기존 설정대로.
+     */
+    fun addEvent(s: Student, type: String, typedNo: String? = null) {
         val now = System.currentTimeMillis()
+        val n = typedNo?.trim().orEmpty()
+        val matched: String? = if (n.length == 4 && n != s.attendNo) {
+            s.phones.map(::normalizePhone).filter { it.length >= 9 && it.takeLast(4) == n }.distinct().singleOrNull()
+        } else null
         // await 하지 않음: 와이파이가 잠깐 끊겨도 Firestore 가 보관했다가 연결되면 자동 전송
         events().add(mapOf(
             "studentId" to s.id,
@@ -298,6 +308,7 @@ object Repo {
             "day" to dayOf(now),
             "createdAt" to FieldValue.serverTimestamp(),
             "kioskModel" to Build.MODEL,
+            "matchedPhone" to matched,
         ))
     }
 

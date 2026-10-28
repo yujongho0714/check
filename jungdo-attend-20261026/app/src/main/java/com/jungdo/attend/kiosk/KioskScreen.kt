@@ -139,6 +139,7 @@ fun KioskScreen(onReset: () -> Unit) {
     var showPin by remember { mutableStateOf(false) }
     var showAdmin by remember { mutableStateOf(false) }
     var padChoices by remember { mutableStateOf<List<Student>?>(null) }
+    var typedNo by remember { mutableStateOf("") }   // 마지막으로 입력한 번호 (어느 학부모 번호로 눌렀는지 알아내려고)
     val tts by rememberTts(ctx)
     val theme = LocalGameTheme.current
 
@@ -170,7 +171,7 @@ fun KioskScreen(onReset: () -> Unit) {
         // 같이 온 형제도 함께 체크
         val sibs = students.filter { it.id in withSibs && it.id != s.id }
         val group = listOf(s) + sibs
-        group.forEach { Repo.addEvent(it, type) }
+        group.forEach { Repo.addEvent(it, type, typedNo) }
         // 경험치: 등원 +10, 하원 +10 (하루 한 번씩) + 연속 출석 보너스
         val awards = group.map { runCatching { Repo.awardExp(it, type) }.getOrNull() }.filterNotNull()
         val names = group.joinToString(", ") { it.name }
@@ -183,6 +184,7 @@ fun KioskScreen(onReset: () -> Unit) {
     // 출결번호 확인: 한 명이면 바로 등원/하원 창, 형제(같은 번호)면 "누구예요?"에서 자기 이름 고르기
     fun submitNo(no: String): Boolean {
         val found = students.filter { it.matchesNo(no) }
+        typedNo = no.trim()
         if (found.isNotEmpty()) {
             // 확률·상품 설정을 서버에서 바로 다시 받아 둠 (등원/하원 누르기 전에 최신 값으로)
             Repo.refreshLootNow()

@@ -110,6 +110,7 @@ class SmsService : Service() {
     private val inFlight = HashSet<String>()
     private var listener: ListenerRegistration? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
     private var started = false
     private lateinit var prefs: Prefs
     private lateinit var classTimes: ClassTimes
@@ -211,6 +212,12 @@ class SmsService : Service() {
         }
         wakeLock = getSystemService(PowerManager::class.java)
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "jungdo:sms").apply { setReferenceCounted(false); acquire() }
+        // 화면이 꺼져도 와이파이가 졸지 않게 (홈버튼만 누르고 둬도 신호를 바로 받도록)
+        runCatching {
+            wifiLock = (applicationContext.getSystemService(Context.WIFI_SERVICE) as android.net.wifi.WifiManager)
+                .createWifiLock(if (Build.VERSION.SDK_INT >= 29) android.net.wifi.WifiManager.WIFI_MODE_FULL_LOW_LATENCY else android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF, "jungdo:wifi")
+                .apply { setReferenceCounted(false); acquire() }
+        }
         running.value = true
 
         // 원생 명단 (최신 번호 · 통화 상대 찾기용)
@@ -377,7 +384,9 @@ class SmsService : Service() {
         // 번호는 최신 명단 기준 (명단이 바뀌었을 수 있으니), 없으면 신호에 담긴 번호
         val latest = students.firstOrNull { it.id == ev.studentId }?.phones?.ifEmpty { null } ?: ev.phones
         val all = latest.map(Repo::normalizePhone).filter { it.length >= 9 }.distinct()
-        val phones = if (prefs.smsAllPhones) all else all.take(1)
+        // 아이가 입력한 번호(어머님/아버님 중 하나)가 있으면 그 번호로만, 출결번호로 눌렀으면 설정(전체/대표)대로
+        val matched = ev.matchedPhone?.let(Repo::normalizePhone)?.takeIf { it.length >= 9 }
+        val phones = if (matched != null) listOf(matched) else if (prefs.smsAllPhones) all else all.take(1)
         if (phones.isEmpty()) {
             ref.update(mapOf("status" to Status.FAILED, "error" to "학부모 연락처 없음", "message" to text))
             notifyFail("${ev.name} ${EventType.label(ev.type)}", "학부모 연락처 없음")
@@ -397,6 +406,8 @@ class SmsService : Service() {
             "message" to text,
             "part" to part,
             "sentAt" to FieldValue.serverTimestamp(),
+            "sentMs" to System.currentTimeMillis(),
+            "phones" to phones,
         ))
         if (errors.isNotEmpty()) notifyFail("${ev.name} ${EventType.label(ev.type)}", errors.first())
         info(if (errors.isEmpty()) "${ev.name} ${EventType.label(ev.type)} 발송 완료 (${Repo.timeText(System.currentTimeMillis())})" else "${ev.name} 발송 실패: ${errors.first()}")
@@ -545,6 +556,7 @@ class SmsService : Service() {
         scope.cancel()
         runCatching { Repo.heartbeat("server", mapOf("running" to false)) }
         runCatching { wakeLock?.release() }
+        runCatching { wifiLock?.release() }
         super.onDestroy()
     }
 }

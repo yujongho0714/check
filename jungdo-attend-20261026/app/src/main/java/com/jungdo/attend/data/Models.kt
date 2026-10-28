@@ -95,6 +95,8 @@ data class AttendEvent(
     val dlvFail: Int = 0,        // '도착 실패' 로 알려준 건수
     val dlvNeed: Int = 0,        // 도착 확인을 기다리는 전체 건수
     val dlvError: String? = null,
+    val matchedPhone: String? = null, // 아이가 입력한 번호 뒷자리와 맞은 학부모 번호 (있으면 그 번호로만 문자 발송)
+    val sentMs: Long = 0L,            // 문자를 실제로 내보낸 시각(ms) — 도착 확인 대기 시간 계산용
 )
 
 /** 부모님께 받은 연락 → 사유 결석 (Firestore: absences/{날짜_원생id}) */
