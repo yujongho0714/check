@@ -182,7 +182,7 @@ object Repo {
         if (p.fields.isEmpty() || s.id.isBlank()) return base
         val gem = Loot.rollGem(s.gems)
         val plate = Loot.rollPlate(s.plates)
-        val prize = Prizes.roll()
+        val prize = Prizes.roll(s.id)
         val f = HashMap<String, Any>(p.fields)
         if (gem != null) f["gems"] = FieldValue.arrayUnion(gem)
         if (plate != null) {
@@ -190,7 +190,7 @@ object Repo {
             if (s.plate.isBlank()) f["plate"] = plate
         }
         students().document(s.id).update(f)
-        if (prize != null) { Prizes.consume(prize.id); runCatching { recordWin(s, prize) } }
+        if (prize != null) { Prizes.consume(prize.id); Prizes.markWon(s.id); runCatching { recordWin(s, prize) } }
         return base.copy(
             gemId = gem, plateId = plate,
             prize = prize?.let { PrizeWin(it.id, it.name, it.message, it.photo) },
@@ -387,9 +387,17 @@ object Repo {
     )
 
     /** 서버의 상품 목록을 지켜보다가 Prizes 에 반영 (로그인하면 시작, 모든 기기 공통) */
-    fun startPrizeSync(): ListenerRegistration = prizes().addSnapshotListener { snap, _ ->
-        if (snap == null) return@addSnapshotListener
-        Prizes.list = snap.documents.map(::toPrize).sortedBy { it.name }
+    fun startPrizeSync(): ListenerRegistration {
+        val r1 = prizes().addSnapshotListener { snap, _ ->
+            if (snap == null) return@addSnapshotListener
+            Prizes.list = snap.documents.map(::toPrize).sortedBy { it.name }
+        }
+        // 이미 당첨된 적 있는 원생 (지급 여부와 관계없이 wins 에 기록이 있으면 제외)
+        val r2 = wins().addSnapshotListener { snap, _ ->
+            if (snap == null) return@addSnapshotListener
+            Prizes.winnerIds = Prizes.winnerIds + snap.documents.mapNotNull { it.getString("studentId") }.toSet()
+        }
+        return ListenerRegistration { r1.remove(); r2.remove() }
     }
 
     /** 새 상품이면 id 가 비어 있음. stock 이 null 이면 무제한 */

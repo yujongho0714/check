@@ -15,7 +15,7 @@ import java.io.ByteArrayOutputStream
 
 /**
  * 상품 한 가지 (Firestore: prizes/{id})
- *  - chance : 당첨 확률 (%) — 등원/하원 한 번 누를 때마다 이 확률로 당첨. 모든 상품의 합이 100% 를 넘으면 안 됨
+ *  - chance : 당첨 확률 (%) — 등원/하원 한 번 누를 때마다 이 확률로 당첨. 상품마다 따로 굴리므로 합이 100% 를 넘어도 됨
  *  - stock  : 남은 재고. null 이면 무제한. 0 이 되면 더 이상 당첨 안 됨
  *  - photo  : 작게 줄인 사진 (JPEG 을 글자로 바꾼 base64)
  */
@@ -38,22 +38,27 @@ object Prizes {
     /** 다른 상품(except) 을 뺀 확률 합계 (%) */
     fun totalChance(except: String? = null): Double = list.filter { it.id != except }.sumOf { it.chance }
 
+    /** 이미 상품에 당첨된 적 있는 원생 id 모음 (wins 기록 + 방금 당첨된 것). Repo.startPrizeSync 가 서버 값으로 계속 갱신 */
+    var winnerIds: Set<String> = emptySet()
+
+    /** true 면 한 번 당첨된 원생은 다시 상품 추첨에서 제외 (등원에 당첨 → 하원에 또 당첨 방지) */
+    const val ONE_WIN_PER_STUDENT = true
+
+    fun hasWon(studentId: String): Boolean = studentId.isNotBlank() && studentId in winnerIds
+
+    fun markWon(studentId: String) { if (studentId.isNotBlank()) winnerIds = winnerIds + studentId }
+
     /**
-     * 상품 추첨. 확률 칸을 차례로 이어 붙여서 한 번만 뽑음 (한 번에 상품은 최대 1개).
-     * 재고가 0 인 상품 칸에 걸리면 꽝. 아무 칸에도 안 걸려도 꽝 → null
+     * 상품 추첨 — 상품마다 자기 확률(chance %)로 따로 굴림. 다른 상품의 확률·순서에 영향받지 않음.
+     * 재고 0 인 상품은 후보에서 빠지고, 여러 상품이 동시에 맞으면 그중 하나를 무작위로 (한 번에 최대 1개).
+     * 이미 당첨된 적 있는 원생(studentId)은 아예 추첨 안 함.
      */
-    fun roll(): Prize? {
-        val r = Math.random() * 100.0
-        var acc = 0.0
-        for (p in list) {
-            if (p.chance <= 0.0) continue
-            acc += p.chance
-            if (r < acc) {
-                val st = p.stock
-                return if (st == null || st > 0) p else null
-            }
+    fun roll(studentId: String = ""): Prize? {
+        if (ONE_WIN_PER_STUDENT && hasWon(studentId)) return null
+        val hits = list.filter { p ->
+            p.chance > 0.0 && (p.stock == null || p.stock > 0) && Math.random() * 100.0 < p.chance
         }
-        return null
+        return hits.randomOrNull()
     }
 
     /** 당첨 직후 화면에서 바로 재고를 하나 줄임 (같이 온 형제가 연달아 뽑을 때 재고 넘침 방지) */
