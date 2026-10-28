@@ -1,6 +1,7 @@
 package com.jungdo.attend.server
 
 import android.Manifest
+import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -83,7 +84,24 @@ class SmsService : Service() {
 
         fun stop(ctx: Context) {
             Prefs(ctx).serverEnabled = false
+            cancelWatchdog(ctx)
             ctx.stopService(Intent(ctx, SmsService::class.java))
+        }
+
+        /** 5분마다 '살아 있나?' 확인하는 알람 (폰이 절전으로 서버를 꺼 버렸을 때 다시 켜 줌). BootReceiver 가 받아요 */
+        const val ACTION_WATCHDOG = "com.jungdo.attend.WATCHDOG"
+        private fun watchdogIntent(ctx: Context) = PendingIntent.getBroadcast(
+            ctx, 77, Intent(ctx, BootReceiver::class.java).setAction(ACTION_WATCHDOG),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        fun scheduleWatchdog(ctx: Context) {
+            runCatching {
+                ctx.getSystemService(AlarmManager::class.java)
+                    .setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + 5 * 60_000L, watchdogIntent(ctx))
+            }
+        }
+        fun cancelWatchdog(ctx: Context) {
+            runCatching { ctx.getSystemService(AlarmManager::class.java).cancel(watchdogIntent(ctx)) }
         }
     }
 
@@ -182,6 +200,7 @@ class SmsService : Service() {
         if (Build.VERSION.SDK_INT >= 34) startForeground(NOTI_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         else startForeground(NOTI_ID, n)
         if (!started) { started = true; begin() }
+        scheduleWatchdog(this)
         return START_STICKY // 시스템이 죽여도 다시 살림
     }
 
