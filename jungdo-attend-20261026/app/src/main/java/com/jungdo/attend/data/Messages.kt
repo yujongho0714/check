@@ -25,6 +25,17 @@ const val DEFAULT_OUT = "[${DojangInfo.SHORT}] {이름} 수련생이 {시각}에
 
 const val DEFAULT_REPLY = "{호칭} 안녕하세요 에고 ㅠㅠ 넵 알겠습니다 {이름} 푹 쉬고 내일 만나도록 하겠습니다 연락주셔서 감사합니다~!"
 
+/** 결석 연락 답장 문구 한 가지 (이름은 관장님이 마음대로: 병결, 여행, 개인일정, 일반 …) */
+data class ReplyTpl(val name: String, val text: String)
+
+/** 저장된 문구가 하나도 없을 때 처음 보여주는 예시 (고쳐서 저장하면 그게 내 문구가 됨) */
+val DEFAULT_REPLY_TPLS = listOf(
+    ReplyTpl("일반", DEFAULT_REPLY),
+    ReplyTpl("병결", "{호칭} 안녕하세요 에고 ㅠㅠ 많이 아픈가 봐요 넵 알겠습니다 {이름} 푹 쉬고 얼른 나아서 건강하게 만나요 연락주셔서 감사합니다~!"),
+    ReplyTpl("여행", "{호칭} 안녕하세요 넵 알겠습니다 {이름} 즐겁고 안전한 여행 다녀오세요~! 다녀와서 또 만나요 연락주셔서 감사합니다^^"),
+    ReplyTpl("개인일정", "{호칭} 안녕하세요 넵 알겠습니다 {이름} 일정 잘 마무리하고 다음 수업에 만나도록 하겠습니다 연락주셔서 감사합니다~!"),
+)
+
 object Messages {
     private fun cfgDoc() = Repo.db.collection("config").document("messages")
     fun noticeDoc(day: String) = Repo.db.collection("notices").document(day)
@@ -59,6 +70,43 @@ object Messages {
     // ── 결석 연락 답장 문구 ({이름} 필수) ──
     fun saveReplyTpl(t: String) { cfgDoc().set(mapOf("tplReply" to t), com.google.firebase.firestore.SetOptions.merge()) }
     suspend fun loadReplyTpl(): String = (getMap(cfgDoc())?.get("tplReply") as? String)?.takeIf { it.isNotBlank() } ?: DEFAULT_REPLY
+
+    /**
+     * 결석 답장 문구 여러 개 (config/messages.replyTpls = [{name, text}, …]).
+     * 저장된 게 없으면: 예전에 저장한 한 가지 문구(tplReply)를 '일반'으로 쓰고 나머지 예시(병결·여행·개인일정)를 같이 보여줘요.
+     */
+    suspend fun loadReplyTpls(): List<ReplyTpl> {
+        val m = getMap(cfgDoc())
+        val saved = (m?.get("replyTpls") as? List<*>)?.mapNotNull { x ->
+            (x as? Map<*, *>)?.let {
+                val n = (it["name"] as? String)?.trim().orEmpty(); val t = (it["text"] as? String)?.trim().orEmpty()
+                if (n.isNotBlank() && t.isNotBlank()) ReplyTpl(n, t) else null
+            }
+        }.orEmpty()
+        if (saved.isNotEmpty()) return saved
+        val old = (m?.get("tplReply") as? String)?.takeIf { it.isNotBlank() }
+        return if (old == null) DEFAULT_REPLY_TPLS else listOf(ReplyTpl("일반", old)) + DEFAULT_REPLY_TPLS.filter { it.name != "일반" }
+    }
+
+    /** 문구 목록 통째로 저장. '일반'(없으면 첫 번째)은 예전 방식(tplReply)에도 같이 저장해서 다른 화면과 맞춰 둠 */
+    fun saveReplyTpls(list: List<ReplyTpl>) {
+        val main = list.firstOrNull { it.name == "일반" } ?: list.firstOrNull()
+        val data = HashMap<String, Any>()
+        data["replyTpls"] = list.map { mapOf("name" to it.name, "text" to it.text) }
+        if (main != null) data["tplReply"] = main.text
+        cfgDoc().set(data, com.google.firebase.firestore.SetOptions.merge())
+    }
+
+    /** 사유(빠른 선택 등)에 어울리는 문구 이름 찾기: 아파서/병원 → '병…', 여행 → '여행…', 그 외 개인 사정 → '개인…' */
+    fun suggestTplIndex(reason: String, list: List<ReplyTpl>): Int {
+        val key = when {
+            reason.contains("아파") || reason.contains("병") || reason.contains("감기") || reason.contains("독감") -> "병"
+            reason.contains("여행") -> "여행"
+            reason.contains("개인") || reason.contains("가족") || reason.contains("학교") || reason.contains("학원") || reason.contains("휴식") -> "개인"
+            else -> return -1
+        }
+        return list.indexOfFirst { it.name.contains(key) }
+    }
 
     /** 한글 3글자 이름은 성을 빼고 부름 (김윤우 → 윤우). 그 외는 그대로 */
     fun givenName(full: String): String {

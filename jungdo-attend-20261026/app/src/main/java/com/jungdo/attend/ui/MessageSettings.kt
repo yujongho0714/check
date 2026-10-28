@@ -3,6 +3,8 @@ package com.jungdo.attend.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,6 +40,7 @@ import com.jungdo.attend.data.DayNotice
 import com.jungdo.attend.data.EventType
 import com.jungdo.attend.data.MessageConfig
 import com.jungdo.attend.data.Messages
+import com.jungdo.attend.data.ReplyTpl
 import com.jungdo.attend.data.Repo
 import com.jungdo.attend.data.Status
 import kotlinx.coroutines.delay
@@ -45,6 +49,7 @@ import kotlinx.coroutines.delay
  * 문자 문구 + 날짜별 안내 설정 화면 (관장님 폰, 키오스크 관리자 화면 둘 다에서 사용)
  * 부별 안내: 등원 시각으로 판정한 1부~7부 기준
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MessageSettings() {
     val classes = ClassTimes.PARTS
@@ -62,11 +67,18 @@ fun MessageSettings() {
     // ───────── 4) 결석 연락 답장 ─────────
     val ctx = LocalContext.current
     val prefs = remember { Prefs(ctx) }
+    val replyList = remember { mutableStateListOf<ReplyTpl>() }   // 저장된 답장 문구들
+    var replySel by remember { mutableStateOf(0) }                 // 지금 고쳐 보는 문구 번호
+    var tplName by remember { mutableStateOf("") }
     var tplReply by remember { mutableStateOf("") }
     var replyLoaded by remember { mutableStateOf(false) }
     var replyMsg by remember { mutableStateOf<String?>(null) }
     var replyDefaultOn by remember { mutableStateOf(prefs.replyOn) }
-    LaunchedEffect(Unit) { tplReply = Messages.loadReplyTpl(); replyLoaded = true }
+    LaunchedEffect(Unit) {
+        replyList.clear(); replyList.addAll(Messages.loadReplyTpls())
+        replyList.getOrNull(0)?.let { tplName = it.name; tplReply = it.text }
+        replyLoaded = true
+    }
     LaunchedEffect(replyMsg) { if (replyMsg != null) { delay(2500); replyMsg = null } }
 
     // ───────── 2) 날짜별 안내 ─────────
@@ -162,16 +174,43 @@ fun MessageSettings() {
                 "※ {이름}이나 {성명}은 꼭 들어가야 저장돼요.",
             color = Muted, fontSize = 14.sp,
         )
-        OutlinedTextField(tplReply, { tplReply = it }, label = { Text("답장 문구") }, enabled = replyLoaded,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Button(enabled = replyLoaded, onClick = {
-                if (!Messages.replyHasName(tplReply)) replyMsg = "⚠ {이름}이 빠졌어요. 아이 이름이 들어가야 해요"
-                else { Messages.saveReplyTpl(tplReply.trim()); replyMsg = "저장됐어요 ✔" }
-            }) { Text("답장 문구 저장") }
-            Spacer(Modifier.padding(6.dp))
-            replyMsg?.let { Text(it, color = if (it.startsWith("⚠")) BadRed else OkGreen) }
+        Text("저장해 둔 문구 (눌러서 고치기 · 결석 사유를 저장할 때 여기서 골라 보내요)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            replyList.forEachIndexed { i, t ->
+                Pill(t.name, i == replySel, 15.sp) { replySel = i; tplName = t.name; tplReply = t.text; replyMsg = null }
+            }
+            Pill("+ 새 문구", false, 15.sp) { replySel = -1; tplName = ""; tplReply = ""; replyMsg = null }
         }
+        OutlinedTextField(tplName, { tplName = it; replyMsg = null }, label = { Text("문구 이름 (예: 병결, 여행, 개인일정, 일반)") }, enabled = replyLoaded, singleLine = true,
+            modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(tplReply, { tplReply = it; replyMsg = null }, label = { Text("답장 문구") }, enabled = replyLoaded,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(enabled = replyLoaded, onClick = {
+                val n = tplName.trim(); val t = tplReply.trim()
+                when {
+                    n.isBlank() -> replyMsg = "⚠ 문구 이름을 적어 주세요 (예: 병결)"
+                    !Messages.replyHasName(t) -> replyMsg = "⚠ {이름}이 빠졌어요. 아이 이름이 들어가야 해요"
+                    else -> {
+                        // 같은 이름이 있으면 덮어쓰기, 없으면 새로 추가
+                        val idx = replyList.indexOfFirst { it.name == n }.let { if (it >= 0) it else replySel }
+                        if (idx in replyList.indices) replyList[idx] = ReplyTpl(n, t) else replyList.add(ReplyTpl(n, t))
+                        replySel = replyList.indexOfFirst { it.name == n }
+                        Messages.saveReplyTpls(replyList.toList())
+                        replyMsg = "저장됐어요 ✔ (${replyList.size}개)"
+                    }
+                }
+            }) { Text("이 문구 저장") }
+            if (replySel in replyList.indices && replyList.size > 1) {
+                OutlinedButton(onClick = {
+                    replyList.removeAt(replySel)
+                    Messages.saveReplyTpls(replyList.toList())
+                    replySel = 0; replyList.getOrNull(0)?.let { tplName = it.name; tplReply = it.text }
+                    replyMsg = "지웠어요"
+                }) { Text("삭제", color = BadRed) }
+            }
+        }
+        replyMsg?.let { Text(it, color = if (it.startsWith("⚠")) BadRed else OkGreen) }
         run {
             val sample = Messages.buildReply(tplReply.ifBlank { " " }, listOf("김윤우"), "어머님")
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFFFEF9C3)).padding(12.dp)) {

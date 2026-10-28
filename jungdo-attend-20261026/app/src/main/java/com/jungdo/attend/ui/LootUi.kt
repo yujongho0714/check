@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -228,7 +229,10 @@ fun LootSettings() {
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SectionTitle("보석 · 네임플레이트 얻을 확률")
-        Text("등원·하원을 누를 때마다 이 확률로 뽑아요 (0 ~ 100%, 소수점 가능). 하루에 등원 한 번·하원 한 번만 뽑아요.", color = Muted, fontSize = 13.sp)
+        Text("등원·하원을 누를 때마다 이 확률로 뽑아요 (0 ~ 100%, 소수점 가능). 하루에 등원 한 번·하원 한 번만 뽑아요.\n" +
+            "※ 같은 아이로 같은 날 다시 눌러 보면 이미 뽑았기 때문에 아무것도 안 나와요. 확인할 땐 다른 아이로 눌러 보세요. 이미 가진 보석·네임플레이트는 다시 안 나와요.", color = Muted, fontSize = 13.sp)
+        Text("지금 이 기기에 적용된 값: 보석 ${pctText(Loot.gemChance)}% · 네임플레이트 ${pctText(Loot.plateChance)}%", fontWeight = FontWeight.Bold, color = Navy, fontSize = 14.sp)
+        Text(Loot.syncNote, color = if (Loot.syncNote.startsWith("⚠")) BadRed else Muted, fontSize = 12.sp)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(gem, { gem = it.filter { c -> c.isDigit() || c == '.' }; msg = "" }, label = { Text("보석 확률 %") }, singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f))
@@ -247,6 +251,7 @@ fun LootSettings() {
                 gem = pctText(g); plate = pctText(p)
                 msg = "저장됐어요 ✔ (지금 적용: 보석 ${pctText(g)}%, 네임플레이트 ${pctText(p)}%)"
             }) { Text("확률 저장") }
+            OutlinedButton(onClick = { Repo.refreshLootNow(); msg = "서버에서 다시 받는 중…" }) { Text("서버에서 다시 받기") }
             if (msg.isNotBlank()) Text(msg, color = OkGreen, fontSize = 13.sp)
         }
     }

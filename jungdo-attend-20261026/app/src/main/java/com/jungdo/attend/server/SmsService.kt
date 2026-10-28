@@ -11,6 +11,7 @@ import android.content.Context
 import android.content.IntentFilter
 import android.provider.Settings
 import android.provider.Telephony
+import android.telephony.SmsMessage
 import android.telephony.TelephonyManager
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -149,6 +150,21 @@ class SmsService : Service() {
         }
     }
 
+    /** 통신사의 '수신 확인' 신호: 상대 폰에 도착하면 기록에 ✔, 실패하면 ⚠ 로 표시 */
+    private val deliveryReceiver = object : BroadcastReceiver() {
+        override fun onReceive(c: Context, i: Intent) {
+            val id = i.getStringExtra("eventId") ?: return
+            val pdu = i.getByteArrayExtra("pdu") ?: return
+            val st = runCatching { SmsMessage.createFromPdu(pdu, i.getStringExtra("format")).status }.getOrNull() ?: return
+            val ref = Repo.events().document(id)
+            when {
+                st < 0x20 -> ref.update("dlvOk", FieldValue.increment(1))
+                st >= 0x40 -> ref.update(mapOf("dlvFail" to FieldValue.increment(1), "dlvError" to "통신사 보고 코드 $st"))
+                else -> {} // 아직 전달 중 (임시 상태)
+            }
+        }
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -182,6 +198,8 @@ class SmsService : Service() {
         studentsReg = Repo.students().addSnapshotListener { snap, _ -> if (snap != null) { Repo.migrateAges(snap.documents); students = snap.documents.map(Repo::toStudent) } }
         // 통화 끝 감지 (전화 상태 권한이 있을 때 동작, 나중에 허용해도 됨)
         ContextCompat.registerReceiver(this, phoneReceiver, IntentFilter(TelephonyManager.ACTION_PHONE_STATE_CHANGED), ContextCompat.RECEIVER_EXPORTED)
+
+        ContextCompat.registerReceiver(this, deliveryReceiver, IntentFilter(SmsSender.ACTION_DELIVERED), ContextCompat.RECEIVER_NOT_EXPORTED)
 
         // 학부모 문자 수신 감지 (문자 받기 권한이 있을 때 동작)
         if (checkSelfPermission(Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED) {
@@ -315,7 +333,8 @@ class SmsService : Service() {
                 val s = tx.get(ref)
                 if (s.getString("status") != Status.PENDING) null
                 else {
-                    tx.update(ref, mapOf("status" to Status.SENDING, "claimedAt" to FieldValue.serverTimestamp(), "serverModel" to Build.MODEL))
+                    tx.update(ref, mapOf("status" to Status.SENDING, "claimedAt" to FieldValue.serverTimestamp(), "serverModel" to Build.MODEL,
+                        "dlvOk" to 0, "dlvFail" to 0, "dlvNeed" to 0, "dlvError" to null))
                     s.data
                 }
             }.await()
@@ -350,7 +369,7 @@ class SmsService : Service() {
         info("${ev.name} ${EventType.label(ev.type)} 문자 보내는 중…")
         val errors = mutableListOf<String>()
         for (p in phones) {
-            SmsSender.send(this, p, text)?.let { errors += "${Repo.prettyPhone(p)}: $it" }
+            SmsSender.send(this, p, text, id)?.let { errors += "${Repo.prettyPhone(p)}: $it" }
             if (phones.size > 1) delay(800)
         }
         ref.update(mapOf(
@@ -501,6 +520,7 @@ class SmsService : Service() {
         bulkListener?.remove()
         winListener?.remove()
         studentsReg?.remove()
+        runCatching { unregisterReceiver(deliveryReceiver) }
         runCatching { unregisterReceiver(phoneReceiver) }
         runCatching { unregisterReceiver(smsReceiver) }
         scope.cancel()

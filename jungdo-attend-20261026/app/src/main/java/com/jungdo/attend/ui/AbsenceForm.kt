@@ -42,6 +42,7 @@ import com.jungdo.attend.call.Phone
 import com.jungdo.attend.data.Inbox
 import com.jungdo.attend.data.Messages
 import com.jungdo.attend.data.Prefs
+import com.jungdo.attend.data.ReplyTpl
 import com.jungdo.attend.server.SmsSender
 import kotlinx.coroutines.launch
 import com.jungdo.attend.data.Days
@@ -89,10 +90,11 @@ fun AbsenceForm(
     var replyOn by remember { mutableStateOf(prefs.replyOn) }
     var replyText by remember { mutableStateOf("") }
     var replyEdited by remember { mutableStateOf(false) }
-    var tpl by remember { mutableStateOf<String?>(null) }
+    var tpls by remember { mutableStateOf<List<ReplyTpl>>(emptyList()) }   // 저장해 둔 답장 문구들
+    var tplIdx by remember { mutableStateOf(0) }
     var addPhoneOn by remember { mutableStateOf(true) }
     var addLabel by remember { mutableStateOf("보호자") }
-    LaunchedEffect(Unit) { if (replyNumber != null) tpl = Messages.loadReplyTpl() }
+    LaunchedEffect(Unit) { if (replyNumber != null) tpls = Messages.loadReplyTpls() }
 
     val active = all.filter { it.status != StudentStatus.LEFT }
     val pre = active.filter { it.id in preselected }
@@ -106,8 +108,8 @@ fun AbsenceForm(
     val inToday = todayEvents.filter { it.type == EventType.IN }.map { it.studentId }.toSet()
 
     val selNames = active.filter { it.id in selected }.map { it.name }
-    LaunchedEffect(tpl, selNames, addLabel) {
-        val t = tpl
+    LaunchedEffect(tpls, tplIdx, selNames, addLabel) {
+        val t = tpls.getOrNull(tplIdx)?.text
         if (t != null && !replyEdited) replyText = Messages.buildReply(t, selNames, if (addNumber != null) addLabel else replyLabel)
     }
     LaunchedEffect(saved) { if (saved) { kotlinx.coroutines.delay(900); onDone() } }
@@ -175,7 +177,13 @@ fun AbsenceForm(
 
         Text("사유", fontWeight = FontWeight.Bold)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            QUICK.forEach { q -> Pill(q, reason == q, 15.sp) { reason = q } }
+            QUICK.forEach { q ->
+                Pill(q, reason == q, 15.sp) {
+                    reason = q
+                    // 사유에 어울리는 답장 문구를 자동으로 골라 줌 (직접 고친 문구가 있으면 그대로 둠)
+                    if (!replyEdited) Messages.suggestTplIndex(q, tpls).let { if (it >= 0) tplIdx = it }
+                }
+            }
         }
         OutlinedTextField(reason, { reason = it }, label = { Text("부모님께 들은 내용 (예: 감기로 병원 다녀옴)") }, modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp))
 
@@ -194,6 +202,12 @@ fun AbsenceForm(
                 Text("학부모님께 답장 문자 보내기 (${Repo.prettyPhone(replyNumber)})", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
             }
             if (replyOn) {
+                if (tpls.size > 1) {
+                    Text("답장 문구 고르기", color = Muted, fontSize = 13.sp)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        tpls.forEachIndexed { i, t -> Pill(t.name, i == tplIdx, 15.sp) { tplIdx = i; replyEdited = false } }
+                    }
+                }
                 OutlinedTextField(replyText, { replyText = it; replyEdited = true }, label = { Text("답장 내용 (여기서 고쳐서 보낼 수 있어요)") },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 90.dp))
                 Text("${replyText.length}자 · 문자 ${Messages.smsCount(replyText)}통", color = Muted, fontSize = 13.sp)

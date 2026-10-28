@@ -9,6 +9,8 @@ import android.content.IntentFilter
 import android.os.Build
 import android.telephony.SmsManager
 import androidx.core.content.ContextCompat
+import com.google.firebase.firestore.FieldValue
+import com.jungdo.attend.data.Repo
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.atomic.AtomicInteger
@@ -22,13 +24,15 @@ import kotlin.coroutines.resume
  */
 object SmsSender {
     private const val ACTION_SENT = "com.jungdo.attend.SMS_SENT"
+    /** 통신사가 '상대 폰에 도착했어요' 라고 알려줄 때 오는 신호 (SmsService 가 받아서 기록) */
+    const val ACTION_DELIVERED = "com.jungdo.attend.SMS_DELIVERED"
     private val requestCode = AtomicInteger(1000)
 
     private fun smsManager(ctx: Context): SmsManager =
         if (Build.VERSION.SDK_INT >= 31) ctx.getSystemService(SmsManager::class.java)
         else @Suppress("DEPRECATION") SmsManager.getDefault()
 
-    suspend fun send(ctx: Context, phone: String, text: String): String? {
+    suspend fun send(ctx: Context, phone: String, text: String, eventId: String? = null): String? {
         if (text.isBlank()) return "문자 내용이 비어 있음"
         // 성공은 "" , 실패는 이유 문자열, 시간초과는 null
         val r: String = withTimeoutOrNull(60_000L) {
@@ -62,9 +66,21 @@ object SmsSender {
                     PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
                 )
             }
+            // 출석 문자면 '수신 확인'도 요청 (도착하면 해당 기록에 표시)
+            val deliveryIntents: ArrayList<PendingIntent>? = if (eventId == null) null else ArrayList()
+            if (eventId != null && deliveryIntents != null) {
+                for (k in parts.indices) {
+                    val di = Intent(ACTION_DELIVERED).setPackage(app.packageName).putExtra("eventId", eventId)
+                    deliveryIntents.add(PendingIntent.getBroadcast(
+                        app, requestCode.incrementAndGet(), di,
+                        PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+                    ))
+                }
+                runCatching { Repo.events().document(eventId).update("dlvNeed", FieldValue.increment(parts.size.toLong())) }
+            }
             try {
-                if (parts.size <= 1) sms.sendTextMessage(phone, null, text, sentIntents[0], null)
-                else sms.sendMultipartTextMessage(phone, null, parts, sentIntents, null)
+                if (parts.size <= 1) sms.sendTextMessage(phone, null, text, sentIntents[0], deliveryIntents?.get(0))
+                else sms.sendMultipartTextMessage(phone, null, parts, sentIntents, deliveryIntents)
             } catch (e: Exception) {
                 runCatching { app.unregisterReceiver(receiver) }
                 if (cont.isActive) cont.resume("발송 오류: ${e.message}")

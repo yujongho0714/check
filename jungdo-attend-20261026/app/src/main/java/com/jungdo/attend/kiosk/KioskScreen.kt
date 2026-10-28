@@ -182,7 +182,11 @@ fun KioskScreen(onReset: () -> Unit) {
 
     // 출결번호 확인: 한 명이면 바로 등원/하원 창, 형제(같은 번호)면 "누구예요?"에서 자기 이름 고르기
     fun submitNo(no: String): Boolean {
-        val found = students.filter { it.attendNo == no }
+        val found = students.filter { it.matchesNo(no) }
+        if (found.isNotEmpty()) {
+            // 확률·상품 설정을 서버에서 바로 다시 받아 둠 (등원/하원 누르기 전에 최신 값으로)
+            Repo.refreshLootNow()
+        }
         return when {
             found.isEmpty() -> false
             found.size == 1 -> { withSibs = emptySet(); selected = found.first(); true }
@@ -254,7 +258,7 @@ fun KioskScreen(onReset: () -> Unit) {
                     latest[s.id]?.let { Text("오늘 마지막: ${EventType.label(it.type)} ${Repo.timeText(it.clientTime)}", color = gameMuted()) }
                     // 형제가 있으면 "같이 왔어요" 선택
                     val sibs = students.filter {
-                        it.id != s.id && ((s.siblingKey.isNotBlank() && it.siblingKey == s.siblingKey) || (s.attendNo.isNotBlank() && it.attendNo == s.attendNo))
+                        it.id != s.id && ((s.siblingKey.isNotBlank() && it.siblingKey == s.siblingKey) || (s.attendNo.isNotBlank() && it.attendNo == s.attendNo) || s.sharesPhone(it))
                     }
                     if (sibs.isNotEmpty()) {
                         Spacer(Modifier.height(12.dp))

@@ -234,6 +234,8 @@ private fun StatusAndLog() {
                     "대기 ${events.count { it.status == Status.PENDING || it.status == Status.SENDING }}",
                 color = Muted,
             )
+            val expired = events.count { it.status == Status.EXPIRED }
+            if (expired > 0) Text("⚠ 시간초과 ${expired}건은 문자가 나가지 않았어요. 아래에서 [재발송]을 눌러 주세요.", color = BadRed, fontSize = 14.sp, fontWeight = FontWeight.Bold)
         } }
         // ── 발송 기록 ──
         if (events.isEmpty()) item { Text("기록이 없습니다.", color = Muted) }
@@ -263,10 +265,19 @@ private fun LogRow(e: AttendEvent) {
                 Text(EventType.label(e.type), modifier = Modifier.width(44.dp))
                 StatusChip(e.status)
                 Spacer(Modifier.weight(1f))
-                if (e.status == Status.FAILED || e.status == Status.EXPIRED)
+                if (e.status == Status.FAILED || e.status == Status.EXPIRED || e.dlvFail > 0)
                     TextButton(onClick = { Repo.retry(e.id) }) { Text("재발송") }
             }
             e.error?.let { Text(it, color = BadRed, fontSize = 13.sp) }
+            if (e.status == Status.SENT) {
+                val failNote = e.dlvError ?: "통신사 보고"
+                val (t, c) = when {
+                    e.dlvFail > 0 -> "⚠ 상대 폰에 도착 실패 ($failNote)" to BadRed
+                    e.dlvNeed > 0 && e.dlvOk >= e.dlvNeed -> "✔ 상대 폰 도착 확인됨" to OkGreen
+                    else -> "통신사에 접수됨 · 도착 확인은 아직 (안 오는 통신사도 있어요)" to Muted
+                }
+                Text(t, color = c, fontSize = 13.sp)
+            }
             if (open) {
                 HorizontalDivider(Modifier.padding(vertical = 6.dp))
                 Text("받는 번호: " + e.phones.joinToString(", ") { Repo.prettyPhone(it) }, fontSize = 13.sp, color = Muted)

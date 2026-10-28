@@ -60,7 +60,7 @@ fun MyInfoTab(students: List<Student>) {
     var err by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
 
-    val found = if (no.isBlank()) emptyList() else students.filter { it.attendNo == no.trim() }
+    val found = if (no.isBlank()) emptyList() else students.filter { it.matchesNo(no.trim()) }
     // 번호가 바뀌면 이전 결과는 지움. 한 명뿐이면 자동 선택 (형제는 같은 번호 → 고르기)
     LaunchedEffect(no, students) { info = null; err = ""; picked = found.singleOrNull() }
 

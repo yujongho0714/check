@@ -77,7 +77,11 @@ fun BulkTab(students: List<Student>) {
 
     var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
     var groupId by remember { mutableStateOf<String?>(null) }
-    var pick by remember { mutableStateOf(false) }
+    var gradeSel by remember { mutableStateOf<Set<String>>(emptySet()) }   // 학년 필터 (비어 있으면 전체 학년)
+    var choSel by remember { mutableStateOf<Set<String>>(emptySet()) }     // 초성 필터 (비어 있으면 전체)
+    var byGiven by remember { mutableStateOf(false) }                      // 초성 기준: false=성(이름 첫 글자), true=성 뺀 이름
+    var saveDlg by remember { mutableStateOf(false) }
+    var dlgName by remember { mutableStateOf("") }
     var query by remember { mutableStateOf("") }
     var groupName by remember { mutableStateOf("") }
     var text by remember { mutableStateOf("") }
@@ -89,7 +93,12 @@ fun BulkTab(students: List<Student>) {
     val kids = active.filter { it.id in selected }
     val (items, noPhone) = remember(text, selected, allPhones, active) { Bulk.buildItems(text.ifBlank { " " }, kids, allPhones) }
     val grades = remember(active) { active.map { it.grade }.filter { it.isNotBlank() }.distinct().sortedBy { gradeRank(it) } }
-    val shownPick = active.filter { query.isBlank() || it.name.contains(query.trim()) || it.grade.contains(query.trim()) }
+    // 학년 · 초성 · 검색을 겹쳐서 걸러 보기 (아무것도 안 누르면 전체). 고른 사람은 필터를 바꿔도 계속 남아요
+    val shownPick = active.filter { s ->
+        (gradeSel.isEmpty() || s.grade in gradeSel) &&
+            (choSel.isEmpty() || choOf((if (byGiven) Messages.givenName(s.name) else s.name.trim()).firstOrNull())?.let { it in choSel } == true) &&
+            (query.isBlank() || s.name.contains(query.trim()) || s.grade.contains(query.trim()))
+    }.sortedWith(compareBy<Student>({ gradeRank(it.grade) }, { it.name }))
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SectionTitle("① 받는 사람")
@@ -108,46 +117,55 @@ fun BulkTab(students: List<Student>) {
         Text("빠르게 선택", fontWeight = FontWeight.Bold)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Pill("전체 원생", false, 15.sp) { selected = active.map { it.id }.toSet(); groupId = null }
-            grades.forEach { g -> Pill("+$g", false, 15.sp) { selected = selected + active.filter { it.grade == g }.map { it.id } } }
             Pill("선택 해제", false, 15.sp) { selected = emptySet(); groupId = null }
         }
         Text("선택됨: ${kids.size}명" + if (kids.isNotEmpty() && kids.size <= 8) " (${kids.joinToString(", ") { it.name }})" else "", fontWeight = FontWeight.Bold, color = Navy)
 
-        OutlinedButton(onClick = { pick = !pick }) { Text(if (pick) "직접 고르기 접기 ▲" else "직접 고르기 ▼") }
-        if (pick) {
-            OutlinedTextField(query, { query = it }, label = { Text("이름·학년 검색") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { selected = selected + shownPick.map { it.id } }) { Text("보이는 사람 모두 선택") }
-                OutlinedButton(onClick = { selected = selected - shownPick.map { it.id }.toSet() }) { Text("모두 해제") }
-            }
-            shownPick.forEach { s ->
-                Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
-                        .background(if (s.id in selected) Color(0xFFE0E7FF) else Color(0xFFF3F4F6))
-                        .clickable { selected = if (s.id in selected) selected - s.id else selected + s.id }
-                        .padding(horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Checkbox(checked = s.id in selected, onCheckedChange = { selected = if (it) selected + s.id else selected - s.id })
-                    Text(s.name, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.width(8.dp))
-                    Text(s.grade, color = Muted)
-                }
+        // 학년 → 초성으로 찾기 (학년만, 초성만, 둘 다 가능 / 여러 개 눌러도 돼요)
+        HorizontalDivider()
+        Text("학년 · 초성으로 찾기", fontWeight = FontWeight.Bold)
+        Text("학년만, 초성만, 둘 다 눌러도 돼요. 아래 목록에서 사람을 고르면 선택에 더해지고, 조건을 바꿔도 이미 고른 사람은 그대로 남아요.", color = Muted, fontSize = 12.sp)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            grades.forEach { g -> Pill(g, g in gradeSel, 15.sp) { gradeSel = if (g in gradeSel) gradeSel - g else gradeSel + g } }
+            if (gradeSel.isNotEmpty()) Pill("학년 해제", false, 15.sp) { gradeSel = emptySet() }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("초성 기준", color = Muted, fontSize = 13.sp)
+            Pill("성(첫 글자)", !byGiven, 14.sp) { byGiven = false }
+            Pill("이름(성 뺀)", byGiven, 14.sp) { byGiven = true }
+        }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            CHO_LIST.forEach { c -> Pill(c, c in choSel, 15.sp) { choSel = if (c in choSel) choSel - c else choSel + c } }
+            if (choSel.isNotEmpty()) Pill("초성 해제", false, 15.sp) { choSel = emptySet() }
+        }
+        OutlinedTextField(query, { query = it }, label = { Text("이름 검색 (선택)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Text("찾은 사람 ${shownPick.size}명", color = Muted, fontSize = 13.sp)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(enabled = shownPick.isNotEmpty(), onClick = { selected = selected + shownPick.map { it.id }; groupId = null }) { Text("찾은 ${shownPick.size}명 모두 선택") }
+            OutlinedButton(enabled = shownPick.isNotEmpty(), onClick = { selected = selected - shownPick.map { it.id }.toSet(); groupId = null }) { Text("모두 해제") }
+        }
+        shownPick.forEach { s ->
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                    .background(if (s.id in selected) Color(0xFFE0E7FF) else Color(0xFFF3F4F6))
+                    .clickable { selected = if (s.id in selected) selected - s.id else selected + s.id }
+                    .padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(checked = s.id in selected, onCheckedChange = { selected = if (it) selected + s.id else selected - s.id })
+                Text(s.name, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.width(8.dp))
+                Text(s.grade, color = Muted)
             }
         }
+        HorizontalDivider()
 
-        // 그룹 저장
+        // 명단 저장 (그룹 이름은 저장 누를 때 정함)
         Text("이 선택을 그룹으로 저장 (국기원 심사, 줄넘기, 현장체험학습, 특강 …)", fontWeight = FontWeight.Bold)
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(groupName, { groupName = it }, label = { Text("그룹 이름") }, singleLine = true, modifier = Modifier.weight(1f))
-            Button(enabled = groupName.isNotBlank() && selected.isNotEmpty(), onClick = {
-                val name = groupName.trim()
-                val same = groups.firstOrNull { it.name == name }
-                groupId = Bulk.saveGroup(same?.id, name, active.filter { it.id in selected }.map { it.id })
-                msg = if (same != null) "'$name' 그룹을 ${selected.size}명으로 바꿔 저장했어요 ✔" else "'$name' 그룹을 만들었어요 ✔ (${selected.size}명)"
-            }) { Text("저장") }
+        Button(enabled = selected.isNotEmpty(), onClick = { dlgName = groupName; saveDlg = true }, modifier = Modifier.fillMaxWidth()) {
+            Text("명단 저장 (${selected.size}명)")
         }
-        Text("같은 이름이 있으면 그 그룹을 덮어써요. 명단이 바뀌어도 퇴관한 아이는 자동으로 빠져요.", color = Muted, fontSize = 12.sp)
+        Text("저장할 때 그룹 이름을 정해요. 같은 이름이 있으면 그 그룹을 덮어써요. 명단이 바뀌어도 퇴관한 아이는 자동으로 빠져요.", color = Muted, fontSize = 12.sp)
         Row(verticalAlignment = Alignment.CenterVertically) {
             msg?.let { Text(it, color = OkGreen, modifier = Modifier.weight(1f)) } ?: Spacer(Modifier.weight(1f))
             if (groupId != null && groups.any { it.id == groupId }) TextButton(onClick = { delGroup = true }) { Text("이 그룹 삭제", color = BadRed) }
@@ -201,6 +219,35 @@ fun BulkTab(students: List<Student>) {
             dismissButton = { TextButton(onClick = { confirm = false }) { Text("취소") } },
         )
     }
+    if (saveDlg) {
+        val nm = dlgName.trim()
+        val same = groups.firstOrNull { it.name == nm }
+        AlertDialog(
+            onDismissRequest = { saveDlg = false },
+            title = { Text("그룹 이름을 정해 주세요") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(dlgName, { dlgName = it }, label = { Text("그룹 이름 (예: 국기원 심사)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Text("${selected.size}명을 저장해요." + if (same != null) "\n⚠ 같은 이름의 그룹이 있어요. 저장하면 그 그룹을 덮어써요." else "", color = if (same != null) OutOrange else Muted, fontSize = 13.sp)
+                    if (groups.isNotEmpty()) {
+                        Text("이미 있는 그룹 (누르면 이름이 들어가요)", color = Muted, fontSize = 12.sp)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            groups.forEach { g -> Pill(g.name, g.name == nm, 14.sp) { dlgName = g.name } }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(enabled = nm.isNotBlank() && selected.isNotEmpty(), onClick = {
+                    groupId = Bulk.saveGroup(same?.id, nm, active.filter { it.id in selected }.map { it.id })
+                    groupName = nm
+                    msg = if (same != null) "'$nm' 그룹을 ${selected.size}명으로 바꿔 저장했어요 ✔" else "'$nm' 그룹을 만들었어요 ✔ (${selected.size}명)"
+                    saveDlg = false
+                }) { Text("저장") }
+            },
+            dismissButton = { TextButton(onClick = { saveDlg = false }) { Text("취소") } },
+        )
+    }
     if (delGroup) {
         val g = groups.firstOrNull { it.id == groupId }
         AlertDialog(
@@ -250,5 +297,17 @@ private fun JobCard(j: BulkJob) {
                 if (j.status == BulkStatus.DONE) TextButton(onClick = { Bulk.delete(j.id) }) { Text("이 기록 삭제", color = BadRed) }
             }
         }
+    }
+}
+
+private val CHO_ALL = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ"
+private val CHO_LIST = listOf("ㄱ", "ㄴ", "ㄷ", "ㄹ", "ㅁ", "ㅂ", "ㅅ", "ㅇ", "ㅈ", "ㅊ", "ㅋ", "ㅌ", "ㅍ", "ㅎ")
+
+/** 글자의 초성 (ㄲ→ㄱ, ㄸ→ㄷ, ㅃ→ㅂ, ㅆ→ㅅ, ㅉ→ㅈ 로 묶음). 한글이 아니면 null */
+private fun choOf(c: Char?): String? {
+    if (c == null || c !in '가'..'힣') return null
+    return when (val ch = CHO_ALL[(c - '가') / 588]) {
+        'ㄲ' -> "ㄱ"; 'ㄸ' -> "ㄷ"; 'ㅃ' -> "ㅂ"; 'ㅆ' -> "ㅅ"; 'ㅉ' -> "ㅈ"
+        else -> ch.toString()
     }
 }

@@ -145,6 +145,10 @@ object Repo {
         day = m["day"] as? String ?: "",
         error = m["error"] as? String,
         message = m["message"] as? String,
+        dlvOk = (m["dlvOk"] as? Number)?.toInt() ?: 0,
+        dlvFail = (m["dlvFail"] as? Number)?.toInt() ?: 0,
+        dlvNeed = (m["dlvNeed"] as? Number)?.toInt() ?: 0,
+        dlvError = m["dlvError"] as? String,
     )
 
     fun toEvent(d: DocumentSnapshot) = toEvent(d.id, d.data ?: emptyMap())
@@ -331,10 +335,30 @@ object Repo {
 
     // ---------- 보석·네임플레이트 확률 ----------
     /** 서버의 확률 값을 지켜보다가 Loot 에 반영 (로그인하면 시작, 모든 기기 공통) */
-    fun startLootSync(): ListenerRegistration = lootDoc().addSnapshotListener { snap, _ ->
+    fun startLootSync(): ListenerRegistration = lootDoc().addSnapshotListener { snap, err ->
+        if (err != null) { Loot.syncNote = "⚠ 서버 연결 오류: ${err.message ?: err.code}"; return@addSnapshotListener }
         if (snap == null) return@addSnapshotListener
+        applyLoot(snap)
+    }
+
+    private fun applyLoot(snap: DocumentSnapshot) {
+        // getDouble 은 정수(10)로 저장돼 있어도 읽혀요. 값이 없을 때만 기본값
         Loot.gemChance = (snap.getDouble("gemChance") ?: Loot.DEFAULT_GEM_CHANCE).coerceIn(0.0, 100.0)
         Loot.plateChance = (snap.getDouble("plateChance") ?: Loot.DEFAULT_PLATE_CHANCE).coerceIn(0.0, 100.0)
+        val fromCache = snap.metadata.isFromCache
+        Loot.syncNote = (if (fromCache) "기기에 저장된 값 사용 중 (서버 확인 전) · " else "서버 값 적용됨 · ") + timeText(System.currentTimeMillis())
+    }
+
+    /**
+     * 확률·상품을 서버에서 지금 바로 다시 받아 적용 (실시간 감시가 늦거나 끊겨 있어도 최신 값으로 뽑도록).
+     * 출결번호를 입력하는 순간 + 관리자 화면의 [서버에서 다시 받기] 에서 부름. 인터넷이 없으면 조용히 무시.
+     */
+    fun refreshLootNow() {
+        lootDoc().get(com.google.firebase.firestore.Source.SERVER)
+            .addOnSuccessListener { applyLoot(it) }
+            .addOnFailureListener { Loot.syncNote = "⚠ 서버에서 못 받았어요 (인터넷 확인) · 지금은 기기 값 사용" }
+        prizes().get(com.google.firebase.firestore.Source.SERVER)
+            .addOnSuccessListener { snap -> Prizes.list = snap.documents.map(::toPrize).sortedBy { it.name } }
     }
 
     fun saveLootConfig(gem: Double, plate: Double) {

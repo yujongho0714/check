@@ -47,6 +47,28 @@ data class Student(
     fun inMonth(month: String) =
         (joinedMonth.isBlank() || joinedMonth <= month) && (leftMonth.isBlank() || month < leftMonth)
     fun phoneLabel(i: Int) = phoneLabels.getOrNull(i)?.ifBlank { null } ?: "보호자"
+
+    /**
+     * 출결번호 입력과 맞는지: 직접 정한 출결번호이거나, 등록된 학부모 번호(어머님·아버님 등 전부) 중
+     * 하나의 뒷자리 4개와 같으면 OK. (대표번호 하나만이 아니라 등록된 번호 전부 확인)
+     */
+    fun matchesNo(no: String): Boolean {
+        val n = no.trim()
+        if (n.isEmpty()) return false
+        if (attendNo.isNotBlank() && attendNo == n) return true
+        if (n.length != 4) return false
+        return phones.any { p ->
+            val d = p.filter { it.isDigit() }
+            d.length >= 4 && d.takeLast(4) == n
+        }
+    }
+
+    /** 같은 학부모 번호를 하나라도 같이 쓰는지 (형제 찾기용 — 번호 전체가 같아야 함) */
+    fun sharesPhone(o: Student): Boolean {
+        val mine = phones.map { Repo.normalizePhone(it) }.filter { it.length >= 9 }.toSet()
+        if (mine.isEmpty()) return false
+        return o.phones.any { Repo.normalizePhone(it) in mine }
+    }
 }
 
 object StudentStatus {
@@ -69,6 +91,10 @@ data class AttendEvent(
     val day: String,         // yyyy-MM-dd
     val error: String?,
     val message: String?,
+    val dlvOk: Int = 0,          // 통신사가 '도착했어요' 라고 알려준 건수 (문자 조각 단위)
+    val dlvFail: Int = 0,        // '도착 실패' 로 알려준 건수
+    val dlvNeed: Int = 0,        // 도착 확인을 기다리는 전체 건수
+    val dlvError: String? = null,
 )
 
 /** 부모님께 받은 연락 → 사유 결석 (Firestore: absences/{날짜_원생id}) */

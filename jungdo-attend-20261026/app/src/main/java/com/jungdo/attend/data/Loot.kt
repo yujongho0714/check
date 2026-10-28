@@ -23,6 +23,9 @@ object Loot {
     var gemChance by mutableDoubleStateOf(DEFAULT_GEM_CHANCE)
     var plateChance by mutableDoubleStateOf(DEFAULT_PLATE_CHANCE)
 
+    /** 마지막으로 서버 값을 받은 상태 (관리자 화면에서 "지금 이 기기에 적용된 값"을 확인하는 용도) */
+    var syncNote by androidx.compose.runtime.mutableStateOf("서버 값 기다리는 중…")
+
     private fun hit(percent: Double) = Math.random() * 100.0 < percent
 
     fun gemId(n: Int) = String.format(Locale.US, "%03d", n)
