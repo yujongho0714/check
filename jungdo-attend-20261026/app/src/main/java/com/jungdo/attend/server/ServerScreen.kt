@@ -282,6 +282,8 @@ private fun LogRow(e: AttendEvent) {
                 HorizontalDivider(Modifier.padding(vertical = 6.dp))
                 Text("받는 번호: " + e.phones.joinToString(", ") { Repo.prettyPhone(it) }, fontSize = 13.sp, color = Muted)
                 e.message?.let { Text(it, fontSize = 14.sp) }
+                if (e.status == Status.SENT)
+                    TextButton(onClick = { Repo.retry(e.id) }) { Text("이 문자 다시 보내기 (상대가 이미 받았다면 중복돼요)", color = BadRed, fontSize = 13.sp) }
             }
         }
     }
