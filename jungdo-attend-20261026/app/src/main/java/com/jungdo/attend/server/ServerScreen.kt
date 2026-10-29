@@ -75,6 +75,7 @@ import com.jungdo.attend.data.rememberStudents
 import com.jungdo.attend.data.rememberCustomHolidays
 import com.jungdo.attend.call.Phone
 import com.jungdo.attend.ui.AssetPackSettings
+import com.jungdo.attend.ui.UiSizeSettings
 import com.jungdo.attend.ui.BadRed
 import com.jungdo.attend.ui.DogamTab
 import com.jungdo.attend.ui.GemRarityTab
@@ -378,6 +379,9 @@ private fun ServerSettings(onReset: () -> Unit) {
 
         HorizontalDivider()
         ExtraSettings()
+
+        HorizontalDivider()
+        UiSizeSettings()
 
         HorizontalDivider()
         AssetPackSettings()

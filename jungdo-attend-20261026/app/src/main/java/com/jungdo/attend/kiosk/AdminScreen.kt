@@ -50,6 +50,7 @@ import com.jungdo.attend.data.Repo
 import com.jungdo.attend.data.Status
 import com.jungdo.attend.data.Student
 import com.jungdo.attend.ui.AssetPackSettings
+import com.jungdo.attend.ui.UiSizeSettings
 import com.jungdo.attend.ui.game.GameFxSettings
 import com.jungdo.attend.ui.game.LocalGameTheme
 import androidx.compose.material3.LocalContentColor
@@ -223,6 +224,9 @@ private fun SettingsTab(onReset: () -> Unit) {
 
         HorizontalDivider()
         GameFxSettings()
+
+        HorizontalDivider()
+        UiSizeSettings()
 
         HorizontalDivider()
         AssetPackSettings()

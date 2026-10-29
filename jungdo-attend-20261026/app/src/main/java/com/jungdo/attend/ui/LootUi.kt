@@ -9,6 +9,10 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -74,6 +78,7 @@ import com.jungdo.attend.data.AwardResult
 import com.jungdo.attend.data.Loot
 import com.jungdo.attend.data.Repo
 import com.jungdo.attend.data.Student
+import com.jungdo.attend.data.UiSize
 import kotlinx.coroutines.delay
 import com.jungdo.attend.ui.game.PixelText
 import com.jungdo.attend.ui.game.PixelIcon
@@ -214,8 +219,9 @@ fun DressRow(a: AwardResult) {
  * (9단계) 맨 위에 내 캐릭터 + 골드, 보석은 등급 색 테두리 · 누르면 장착/해제 (장착한 보석 1개만 골드를 줌)
  */
 @Composable
-fun CollectionDialog(s: Student, onClose: () -> Unit) {
-    var tab by remember { mutableStateOf(0) }
+fun CollectionDialog(s: Student, startTab: Int = 0, onClose: () -> Unit) {
+    var tab by remember { mutableStateOf(startTab) }
+    var charScale by rememberCharScale()
     // 아무도 안 건드리면 90초 뒤 닫힘 (누를 때마다 다시 셈)
     LaunchedEffect(tab, s.plate, s.gem, s.gold, s.dress.size, s.dressEquip) { delay(90_000); onClose() }
     val gemSet = remember(s.gems) { s.gems.toSet() }
@@ -231,9 +237,32 @@ fun CollectionDialog(s: Student, onClose: () -> Unit) {
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         GamePanel(Modifier.fillMaxWidth(0.94f).fillMaxHeight(0.9f), padding = 20.dp, horizontalAlignment = Alignment.Start) {
             run {
+                val cfg = LocalConfiguration.current
+                // 기본은 이 기기 화면에 딱 맞게 자동 계산: 창 가로의 약 30% / 캐릭터 높이는 창 높이에서 이름표·계급 자리를 뺀 만큼. 막대는 그 배율
+                val scrW = cfg.screenWidthDp.toFloat()
+                val scrH = cfg.screenHeightDp.toFloat()
+                val leftW = minOf(scrW * 0.94f * 0.30f * UiSize.box * charScale, scrW * 0.5f).dp
+                val charH = (minOf(leftW.value * 0.9f, maxOf(scrH * 0.9f - 250f, 100f) * charScale) * UiSize.char).dp
+                Row(Modifier.fillMaxSize()) {
+                // ── 왼쪽 고정: 내 캐릭터(크게) → 네임플레이트 → 레벨·계급 (크기 조절 가능) ──
+                Column(
+                    Modifier.width(leftW).fillMaxHeight().verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    MyCharacter(s, charH)
+                    Spacer(Modifier.size(8.dp))
+                    if (s.plate.isNotBlank()) NamePlate(s.plate, s.name, leftW, 24.sp)
+                    else Text(s.name, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.size(6.dp))
+                    RankHeader(s.level)
+                    if (s.grade.isNotBlank()) Text(s.grade, fontSize = 16.sp, color = gameMuted())
+                    Spacer(Modifier.size(10.dp))
+                    CharSizeBar(charScale, { charScale = it })
+                }
+                Spacer(Modifier.width(16.dp))
+                // ── 오른쪽: 제목 · 탭 · 내용 ──
+                Column(Modifier.weight(1f).fillMaxHeight()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    MyCharacter(s, 84.dp)
-                    Spacer(Modifier.width(10.dp))
                     Column {
                         Text("${s.name}의 보관함", fontSize = 28.sp, fontWeight = FontWeight.Bold)
                         PixelText("💰 ${s.gold} 골드", fontSize = 18.sp, fontWeight = FontWeight.Bold)
@@ -243,7 +272,7 @@ fun CollectionDialog(s: Student, onClose: () -> Unit) {
                     GameTextButton("닫기", 20.sp) { onClose() }
                 }
                 Spacer(Modifier.size(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     GamePill("보석 ${s.gems.size}/${maxOf(Loot.enabledCount, s.gems.size)}", tab == 0, 20.sp) { tab = 0 }
                     GamePill("네임플레이트 ${s.plates.size}/${Loot.PLATE_COUNT}", tab == 1, 20.sp) { tab = 1 }
                     GamePill("🎁 뽑기", tab == 2, 20.sp) { tab = 2 }
@@ -315,6 +344,8 @@ fun CollectionDialog(s: Student, onClose: () -> Unit) {
                 } else {
                     DogamPanel(s, Modifier.weight(1f).fillMaxWidth())   // 도감
                 }
+                }   // 오른쪽 Column 끝
+                }   // 왼쪽+오른쪽 Row 끝
             }
         }
     }
@@ -323,40 +354,36 @@ fun CollectionDialog(s: Student, onClose: () -> Unit) {
 private fun pctText(v: Double): String = if (v % 1.0 == 0.0) v.toInt().toString() else v.toString()
 
 /**
- * 관리자 설정: 보석 · 네임플레이트 얻을 확률 (%)
+ * 관리자 설정: 네임플레이트 얻을 확률 (%) + 드레스업 설정(보석 등급별 확률 등)
  * 저장하면 Firestore(config/loot)에 올라가서 출석 단말기에도 바로 똑같이 적용돼요.
  */
 @Composable
 fun LootSettings() {
-    var gem by remember { mutableStateOf(pctText(Loot.gemChance)) }
     var plate by remember { mutableStateOf(pctText(Loot.plateChance)) }
     var msg by remember { mutableStateOf("") }
     // 서버 값이 늦게 도착하거나 저장 후 바뀌면 입력칸도 맞춰 줌
-    LaunchedEffect(Loot.gemChance, Loot.plateChance) { gem = pctText(Loot.gemChance); plate = pctText(Loot.plateChance) }
+    LaunchedEffect(Loot.plateChance) { plate = pctText(Loot.plateChance) }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SectionTitle("보석 · 네임플레이트 얻을 확률")
-        Text("등원·하원을 누를 때마다 이 확률로 뽑아요 (0 ~ 100%, 소수점 가능). 하루에 등원 한 번·하원 한 번만 뽑아요.\n" +
+        SectionTitle("네임플레이트 얻을 확률")
+        Text("등원·하원을 누를 때마다 이 확률로 뽑아요 (0 ~ 100%, 소수점 가능). 하루에 등원 한 번·하원 한 번만 뽑아요.\n보석은 아래 [보석 등급별 획득 확률]에서 등급마다 정해요.\n" +
             "※ 같은 아이로 같은 날 다시 눌러 보면 이미 뽑았기 때문에 아무것도 안 나와요. 확인할 땐 다른 아이로 눌러 보세요. 이미 가진 보석·네임플레이트는 다시 안 나와요.", color = Muted, fontSize = 13.sp)
-        Text("지금 이 기기에 적용된 값: 보석 ${pctText(Loot.gemChance)}% · 네임플레이트 ${pctText(Loot.plateChance)}%", fontWeight = FontWeight.Bold, color = Navy, fontSize = 14.sp)
+        Text("지금 이 기기에 적용된 값: 보석(등급 합계) ${pctText(Loot.gemChance)}% · 네임플레이트 ${pctText(Loot.plateChance)}%", fontWeight = FontWeight.Bold, color = Navy, fontSize = 14.sp)
         PixelText(Loot.syncNote, color = if (Loot.syncNote.startsWith("⚠")) BadRed else Muted, fontSize = 12.sp)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(gem, { gem = it.filter { c -> c.isDigit() || c == '.' }; msg = "" }, label = { Text("보석 확률 %") }, singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f))
             OutlinedTextField(plate, { plate = it.filter { c -> c.isDigit() || c == '.' }; msg = "" }, label = { Text("네임플레이트 확률 %") }, singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("보석 빠른 선택", color = Muted, fontSize = 13.sp)
-            listOf("100", "50", "30", "10").forEach { v -> TextButton(onClick = { gem = v; msg = "" }) { Text("$v%") } }
+            Text("빠른 선택", color = Muted, fontSize = 13.sp)
+            listOf("100", "50", "30", "10").forEach { v -> TextButton(onClick = { plate = v; msg = "" }) { Text("$v%") } }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Button(onClick = {
-                val g = gem.toDoubleOrNull()?.coerceIn(0.0, 100.0) ?: Loot.gemChance
                 val p = plate.toDoubleOrNull()?.coerceIn(0.0, 100.0) ?: Loot.plateChance
-                Repo.saveLootConfig(g, p)
-                gem = pctText(g); plate = pctText(p)
-                msg = "저장됐어요 ✔ (지금 적용: 보석 ${pctText(g)}%, 네임플레이트 ${pctText(p)}%)"
+                Repo.saveLootConfig(p)
+                plate = pctText(p)
+                msg = "저장됐어요 ✔ (지금 적용: 네임플레이트 ${pctText(p)}%)"
             }) { Text("확률 저장") }
             OutlinedButton(onClick = { Repo.refreshLootNow(); msg = "서버에서 다시 받는 중…" }) { Text("서버에서 다시 받기") }
             if (msg.isNotBlank()) PixelText(msg, color = OkGreen, fontSize = 13.sp)

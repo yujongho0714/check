@@ -9,12 +9,13 @@ import java.util.Locale
 
 /**
  * 보석 · 네임플레이트 (출석 보상)
- *  - 보석 396종 (assets/gem/001.webp … 396.webp): 등원/하원을 누를 때마다 gemChance(%) 확률로 하나씩
+ *  - 보석 396종 (assets/gem/001.webp … 396.webp): 등원/하원을 누를 때마다 한 번만 굴려서 등급별 확률(rarityChances, %)대로 하나씩
  *  - 네임플레이트 47종 (assets/plate/01.webp … 47.webp): 등원/하원 때마다 plateChance(%) 확률
  *  - 확률은 관리자 화면에서 바꾸고, Firestore config/loot 에 저장돼서 모든 기기에 똑같이 적용됨
  *  - 이미 가진 건 다시 안 나옴. 다 모으면 더 안 나옴
- *  - (드레스업) 보석마다 등급(노말~레전드리)이 있고, 관리자가 정한 등급별 비율로 "등급 먼저 → 그 등급 안에서 미보유 보석" 순서로 뽑음
- *    · 뽑힌 등급에 미보유 보석이 없으면 미보유 보석이 남은 다른 등급으로 이월 (비율 0% 등급은 안 나옴)
+ *  - (드레스업) 보석마다 등급(노말~레전드리)이 있고, 관리자가 정한 등급별 확률(%, 한 번 누를 때 그 등급이 나올 확률)로 뽑음
+ *    · 한 번만 굴려서 등급별 구간으로 나눔 (노말 20 · 레어 8 → 0~20 노말 / 20~28 레어 / 나머지 꽝). 전체 보석 확률 = 합계
+ *    · 뽑힌 등급에 미보유 보석이 없으면 그냥 꽝 (다른 등급으로 넘기지 않음 → 적은 확률이 그대로 지켜짐)
  *  - (드레스업) 관리자가 "사용 지정"한 보석만 나옴. 지정한 적이 없으면(gemEnabled == null) 396종 전부 사용
  *  - (드레스업) 옷 드롭 확률 / 뽑기 가격 / 중복 환급 골드도 여기서 들고 있음
  */
@@ -28,15 +29,16 @@ object Loot {
     const val DEFAULT_GACHA_PRICE = 3      // 뽑기 1회 골드
     const val DEFAULT_DUP_REFUND = 1       // 중복 옷 1개당 돌려받는 골드
 
+    /** 보석이 나올 전체 확률 (%) = 등급별 확률의 합. 읽기 전용 (표시용) */
+    val gemChance: Double get() = rarityChances.values.sum().coerceIn(0.0, 100.0)
     /** 지금 적용 중인 확률 (%, 0 ~ 100). Repo.startLootSync 가 서버 값으로 계속 갱신 */
-    var gemChance by mutableDoubleStateOf(DEFAULT_GEM_CHANCE)
     var plateChance by mutableDoubleStateOf(DEFAULT_PLATE_CHANCE)
     var dressChance by mutableDoubleStateOf(DEFAULT_DRESS_CHANCE)
     var gachaPrice by mutableIntStateOf(DEFAULT_GACHA_PRICE)
     var dupRefund by mutableIntStateOf(DEFAULT_DUP_REFUND)
 
-    /** 등급별 획득 비율 (합이 100이 아니어도 비율로 계산). 서버(config/loot.rarityWeights) 값이 오면 갱신 */
-    var rarityWeights by mutableStateOf<Map<Rarity, Double>>(Rarity.values().associateWith { it.defaultWeight })
+    /** 등급별 획득 확률 (%, 등원/하원 한 번 누를 때 그 등급 보석이 나올 확률). 합이 100을 넘으면 넘는 부분은 무시. 서버(config/loot.rarityChances) 값이 오면 갱신 */
+    var rarityChances by mutableStateOf<Map<Rarity, Double>>(Rarity.values().associateWith { it.defaultWeight })
 
     /** 보석별 등급 (서버 config/gemRarity). 없는 보석은 노말 */
     var gemRarity by mutableStateOf<Map<String, Rarity>>(emptyMap())
@@ -62,24 +64,22 @@ object Loot {
 
     fun rarityOf(gemId: String): Rarity = gemRarity[gemId] ?: Rarity.NORMAL
 
-    fun rollGem(owned: List<String>): String? {
-        if (!hit(gemChance)) return null
-        return pickGem(owned)
-    }
+    fun rollGem(owned: List<String>): String? = pickGem(owned)
 
-    /** 등급 먼저 뽑고(관리자 비율), 그 등급의 미보유 보석 중 하나. 이월 규칙은 위 설명 참고 */
+    /** 한 번만 굴려서 등급별 구간으로 나눔. 뽑힌 등급에 미보유 보석이 없으면 꽝 (다른 등급으로 이월 안 함) */
     fun pickGem(owned: List<String>): String? {
         val have = owned.toSet()
         val pool = allGems.filter { it !in have && isGemOn(it) }.groupBy { rarityOf(it) }
-        val cands = Rarity.values().filter { (rarityWeights[it] ?: 0.0) > 0.0 && !pool[it].isNullOrEmpty() }
-        if (cands.isEmpty()) return null
-        val total = cands.sumOf { rarityWeights[it] ?: 0.0 }
-        var x = Math.random() * total
-        for (r in cands) {
-            x -= rarityWeights[r] ?: 0.0
-            if (x < 0) return pool[r]!!.random()
+        val r = Math.random() * 100.0
+        var acc = 0.0
+        for (rar in Rarity.values()) {
+            val c = (rarityChances[rar] ?: 0.0).coerceAtLeast(0.0)
+            if (c <= 0.0) continue
+            val lo = acc
+            acc += c
+            if (r >= lo && r < acc) return pool[rar]?.random()
         }
-        return pool[cands.last()]!!.random()
+        return null
     }
 
     /** 도감 보너스 배율. 추후 도감 시스템이 여기만 바꾸면 골드 계산 전체에 적용됨 (지금은 1.0 = 보너스 없음) */

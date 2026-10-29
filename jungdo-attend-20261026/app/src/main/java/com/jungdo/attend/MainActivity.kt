@@ -82,7 +82,8 @@ fun AppRoot() {
         val gemRarityReg = if (loggedIn) Repo.startGemRaritySync() else null // 보석별 등급
         val dogamReg = if (loggedIn) Repo.startDogamSync() else null // 도감
         val prizeReg = if (loggedIn) Repo.startPrizeSync() else null // 상품 목록·확률
-        onDispose { reg?.remove(); lootReg?.remove(); gemRarityReg?.remove(); dogamReg?.remove(); prizeReg?.remove() }
+        val uiReg = if (loggedIn) Repo.startUiSync() else null // 박스·캐릭터 크기
+        onDispose { reg?.remove(); lootReg?.remove(); gemRarityReg?.remove(); dogamReg?.remove(); prizeReg?.remove(); uiReg?.remove() }
     }
 
     UpdatePrompt() // 앱을 켜면 새 버전 확인 → "업데이트할까요?"

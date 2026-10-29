@@ -21,8 +21,8 @@ import java.util.Locale
  *  absences/{날짜_id}    : day, studentId, name, reason   ← 부모님 연락 받은 사유 결석
  *  config/messages      : 문자 문구 / notices/{날짜} : 그날 안내
  *  config/holidays      : days{ "2026-12-31": "도장 휴관" }
- *  config/loot          : gemChance(%), plateChance(%)  ← 보석·네임플레이트 얻을 확률
- *                         dressChance(%) 출석 옷 드롭, rarityWeights{normal,rare,epic,unique,legendary} 등급별 비율,
+ *  config/loot          : plateChance(%)  ← 네임플레이트 얻을 확률 (보석은 아래 rarityChances 합)
+ *                         dressChance(%) 출석 옷 드롭, rarityChances{normal,rare,epic,unique,legendary} 등급별 보석 확률(%),
  *                         gachaPrice 뽑기 1회 골드, dupRefund 중복 환급 골드
  *  config/dogam          : sets[ {id, name, gems["001",…](1~5개), goldIn, goldOut} ]  ← 도감 (보석 세트 추가 골드)
  *  config/gemRarity     : r{ "001": "rare", … }  ← 보석별 등급 (없으면 노말)
@@ -227,10 +227,10 @@ object Repo {
         val dogamGold = Dogam.bonusFor(type, s.gems + listOfNotNull(gem))
         val totalGold = gold + dressRefund + dogamGold
         if (totalGold > 0) f["gold"] = FieldValue.increment(totalGold.toLong())
-        // 상품 추첨: 일반 상품 → 안 맞았고 장착 보석이 레전드리면 레전드리 보너스 상품 한 번 더
+        // 상품 추첨: 한 번만 굴려서 상품별 구간 → (장착 보석이 레전드리면 그 뒤에 레전드리 보너스 구간이 이어짐)
         // 오늘 이미 상품에 당첨된 원생(등원에서 당첨 → 하원)은 오늘 상품 추첨 안 함. 원생 기록(prizeDay)에 직접 남겨서 확실하게 막음
-        val prize = if (s.prizeDay == today()) null else (Prizes.roll(s.id)
-            ?: if (equippedGem.isNotBlank() && Loot.rarityOf(equippedGem) == Rarity.LEGENDARY) Prizes.rollLegendary(s.id) else null)
+        val legendEquipped = equippedGem.isNotBlank() && Loot.rarityOf(equippedGem) == Rarity.LEGENDARY
+        val prize = if (s.prizeDay == today()) null else Prizes.roll(s.id, legendEquipped)
         if (prize != null) f["prizeDay"] = today()
         if (plate != null) {
             f["plates"] = FieldValue.arrayUnion(plate)
@@ -402,15 +402,23 @@ object Repo {
 
     private fun applyLoot(snap: DocumentSnapshot) {
         // getDouble 은 정수(10)로 저장돼 있어도 읽혀요. 값이 없을 때만 기본값
-        Loot.gemChance = (snap.getDouble("gemChance") ?: Loot.DEFAULT_GEM_CHANCE).coerceIn(0.0, 100.0)
         Loot.plateChance = (snap.getDouble("plateChance") ?: Loot.DEFAULT_PLATE_CHANCE).coerceIn(0.0, 100.0)
         Loot.dressChance = (snap.getDouble("dressChance") ?: Loot.DEFAULT_DRESS_CHANCE).coerceIn(0.0, 100.0)
         Loot.gachaPrice = (snap.getLong("gachaPrice") ?: Loot.DEFAULT_GACHA_PRICE.toLong()).toInt().coerceAtLeast(0)
         Loot.dupRefund = (snap.getLong("dupRefund") ?: Loot.DEFAULT_DUP_REFUND.toLong()).toInt().coerceAtLeast(0)
         Prizes.legendaryChance = (snap.getDouble("legendPrizeChance") ?: 0.0).coerceIn(0.0, 100.0)
         Prizes.legendaryIds = (snap.get("legendPrizeIds") as? List<*>)?.mapNotNull { it as? String }?.toSet() ?: emptySet()
-        val w = snap.get("rarityWeights") as? Map<*, *>
-        Loot.rarityWeights = Rarity.values().associateWith { r -> ((w?.get(r.code) as? Number)?.toDouble() ?: r.defaultWeight).coerceAtLeast(0.0) }
+        // 등급별 확률(%): 새 값(rarityChances)이 있으면 그대로. 없으면 예전 설정(보석 확률 × 등급 비율)을 같은 확률로 환산
+        val rc = snap.get("rarityChances") as? Map<*, *>
+        Loot.rarityChances = if (rc != null) {
+            Rarity.values().associateWith { r -> ((rc[r.code] as? Number)?.toDouble() ?: 0.0).coerceAtLeast(0.0) }
+        } else {
+            val gc = (snap.getDouble("gemChance") ?: Loot.DEFAULT_GEM_CHANCE).coerceIn(0.0, 100.0)
+            val w = snap.get("rarityWeights") as? Map<*, *>
+            val ws = Rarity.values().associateWith { r -> ((w?.get(r.code) as? Number)?.toDouble() ?: r.defaultWeight).coerceAtLeast(0.0) }
+            val sum = ws.values.sum()
+            Rarity.values().associateWith { r -> if (sum > 0) gc * (ws[r] ?: 0.0) / sum else 0.0 }
+        }
         val fromCache = snap.metadata.isFromCache
         Loot.syncNote = (if (fromCache) "기기에 저장된 값 사용 중 (서버 확인 전) · " else "서버 값 적용됨 · ") + timeText(System.currentTimeMillis())
     }
@@ -429,8 +437,8 @@ object Repo {
             .addOnSuccessListener { snap -> Prizes.list = snap.documents.map(::toPrize).sortedBy { it.name } }
     }
 
-    fun saveLootConfig(gem: Double, plate: Double) {
-        lootDoc().set(mapOf("gemChance" to gem.coerceIn(0.0, 100.0), "plateChance" to plate.coerceIn(0.0, 100.0)), SetOptions.merge())
+    fun saveLootConfig(plate: Double) {
+        lootDoc().set(mapOf("plateChance" to plate.coerceIn(0.0, 100.0)), SetOptions.merge())
     }
 
     // ---------- 드레스업: 등급·뽑기·골드 ----------
@@ -507,8 +515,8 @@ object Repo {
     }
 
     /** 관리자: 등급별 획득 비율 */
-    fun saveRarityWeights(w: Map<Rarity, Double>) {
-        lootDoc().set(mapOf("rarityWeights" to w.entries.associate { it.key.code to it.value.coerceAtLeast(0.0) }), SetOptions.merge())
+    fun saveRarityChances(w: Map<Rarity, Double>) {
+        lootDoc().set(mapOf("rarityChances" to w.entries.associate { it.key.code to it.value.coerceIn(0.0, 100.0) }), SetOptions.merge())
     }
 
     /** 관리자: 레전드리 보석 장착자가 받는 보너스 상품 (확률 %, 상품 id 목록). 확률 0 이면 꺼짐 */
@@ -589,6 +597,21 @@ object Repo {
         stock = d.getLong("stock")?.toInt(),
         photo = d.getString("photo") ?: "",
     )
+
+    // ---------- 화면 크기 설정 (모든 기기 공통) ----------
+    fun uiDoc() = db.collection("config").document("ui")
+
+    fun startUiSync(): ListenerRegistration = uiDoc().addSnapshotListener { snap, _ ->
+        if (snap == null) return@addSnapshotListener
+        UiSize.box = (snap.getDouble("boxScale") ?: 1.0).toFloat().coerceIn(UiSize.MIN, UiSize.MAX)
+        UiSize.char = (snap.getDouble("charScale") ?: 1.0).toFloat().coerceIn(UiSize.MIN, UiSize.MAX)
+    }
+
+    fun saveUiSize(box: Float, char: Float) {
+        val b = box.coerceIn(UiSize.MIN, UiSize.MAX); val c = char.coerceIn(UiSize.MIN, UiSize.MAX)
+        UiSize.box = b; UiSize.char = c   // 이 기기는 바로 적용
+        uiDoc().set(mapOf("boxScale" to b.toDouble(), "charScale" to c.toDouble()), SetOptions.merge())
+    }
 
     /** 서버의 상품 목록을 지켜보다가 Prizes 에 반영 (로그인하면 시작, 모든 기기 공통) */
     fun startPrizeSync(): ListenerRegistration {

@@ -37,15 +37,15 @@ private fun pct(v: Double): String = if (v % 1.0 == 0.0) v.toInt().toString() el
 private fun cleanNum(s: String) = s.filter { it.isDigit() || it == '.' }
 
 /**
- * 관리자 설정 (드레스업): 보석 등급별 획득 비율 · 뽑기 가격/환급/옷 드롭 확률 · 레전드리 보너스 상품
+ * 관리자 설정 (드레스업): 보석 등급별 획득 확률 · 뽑기 가격/환급/옷 드롭 확률 · 레전드리 보너스 상품
  * LootSettings 맨 아래에 붙어서 관리자 화면·서버 화면 양쪽에 나옴. 저장은 Firestore config/loot, 모든 기기에 바로 반영.
  */
 @Composable
 fun DressSettings() {
     // ── 등급별 획득 비율 ──
     val wText = remember { mutableStateMapOf<Rarity, String>() }
-    LaunchedEffect(Loot.rarityWeights) {
-        Rarity.values().forEach { wText[it] = pct(Loot.rarityWeights[it] ?: it.defaultWeight) }
+    LaunchedEffect(Loot.rarityChances) {
+        Rarity.values().forEach { wText[it] = pct(Loot.rarityChances[it] ?: it.defaultWeight) }
     }
     var wMsg by remember { mutableStateOf("") }
     val wSum = Rarity.values().sumOf { wText[it]?.toDoubleOrNull() ?: 0.0 }
@@ -66,34 +66,31 @@ fun DressSettings() {
     var lMsg by remember { mutableStateOf("") }
 
     Column(Modifier.padding(top = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SectionTitle("보석 등급별 획득 비율")
+        SectionTitle("보석 등급별 획득 확률")
         Text(
-            "보석이 나올 때 등급을 먼저 뽑고, 그 등급의 안 가진 보석 중 하나가 나와요. 숫자는 비율이라 합이 100이 아니어도 돼요. 0 이면 그 등급은 안 나와요. 그 등급 보석을 다 모았으면 다른 등급으로 넘어가요.",
+            "등원·하원을 한 번 누를 때 그 등급 보석이 나올 확률(%)이에요. 적은 숫자가 그대로 확률이고, 합계가 보석이 나올 전체 확률이에요 (합 100% 이하). 0 이면 그 등급은 안 나와요. 그 등급 보석을 다 모았으면 그 확률은 꽝이에요.",
             color = Muted, fontSize = 13.sp,
         )
         Rarity.values().forEach { r ->
             OutlinedTextField(
                 wText[r] ?: "", { wText[r] = cleanNum(it); wMsg = "" },
-                label = { Text("${r.label} 비율 (골드 ${r.goldMin}~${r.goldMax})") }, singleLine = true,
+                label = { Text("${r.label} 확률 % (골드 ${r.goldMin}~${r.goldMax})") }, singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(),
             )
         }
         Text(
-            "합계 ${pct(wSum)} → " + Rarity.values().joinToString(" · ") { r ->
-                val v = wText[r]?.toDoubleOrNull() ?: 0.0
-                "${r.label} ${if (wSum > 0) String.format(java.util.Locale.US, "%.1f", v / wSum * 100.0) else "0"}%"
-            },
-            color = Navy, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+            "보석 나올 전체 확률 ${pct(wSum)}%" + if (wSum > 100.0) " ⚠ 100%를 넘으면 넘는 등급은 안 나와요" else "",
+            color = if (wSum > 100.0) BadRed else Navy, fontSize = 13.sp, fontWeight = FontWeight.Bold,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = {
-                if (wSum <= 0.0) { wMsg = "⚠ 비율이 전부 0 이면 보석이 안 나와요. 하나는 0보다 크게 적어 주세요." }
+                if (wSum > 100.0) { wMsg = "⚠ 합계가 100%를 넘어요. 합이 100 이하가 되게 줄여 주세요." }
                 else {
-                    Repo.saveRarityWeights(Rarity.values().associateWith { wText[it]?.toDoubleOrNull() ?: 0.0 })
-                    wMsg = "저장됐어요 ✔"
+                    Repo.saveRarityChances(Rarity.values().associateWith { wText[it]?.toDoubleOrNull() ?: 0.0 })
+                    wMsg = "저장됐어요 ✔ (보석 전체 확률 ${pct(wSum)}%)"
                 }
-            }) { Text("비율 저장") }
-            OutlinedButton(onClick = { Rarity.values().forEach { wText[it] = pct(it.defaultWeight) }; wMsg = "기본값을 채웠어요. [비율 저장]을 눌러야 적용돼요." }) { Text("기본값") }
+            }) { Text("확률 저장") }
+            OutlinedButton(onClick = { Rarity.values().forEach { wText[it] = pct(it.defaultWeight) }; wMsg = "기본값을 채웠어요. [확률 저장]을 눌러야 적용돼요." }) { Text("기본값") }
         }
         if (wMsg.isNotBlank()) PixelText(wMsg, color = if (wMsg.startsWith("⚠")) BadRed else OkGreen, fontSize = 13.sp)
 

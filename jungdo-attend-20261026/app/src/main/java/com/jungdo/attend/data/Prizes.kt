@@ -15,7 +15,7 @@ import java.io.ByteArrayOutputStream
 
 /**
  * 상품 한 가지 (Firestore: prizes/{id})
- *  - chance : 당첨 확률 (%) — 등원/하원 한 번 누를 때마다 이 확률로 당첨. 상품마다 따로 굴리므로 합이 100% 를 넘어도 됨
+ *  - chance : 당첨 확률 (%) — 등원/하원 한 번 누를 때마다 이 확률로 당첨. 한 번만 굴려 상품별 구간으로 나누므로 합이 100% 를 넘기지 않게 설정
  *  - stock  : 남은 재고. null 이면 무제한. 0 이 되면 더 이상 당첨 안 됨
  *  - photo  : 작게 줄인 사진 (JPEG 을 글자로 바꾼 base64)
  */
@@ -49,30 +49,34 @@ object Prizes {
     fun markWon(studentId: String) { if (studentId.isNotBlank()) winnerDays = winnerDays + (studentId to Repo.today()) }
 
     /**
-     * 상품 추첨 — 상품마다 자기 확률(chance %)로 따로 굴림. 다른 상품의 확률·순서에 영향받지 않음.
-     * 재고 0 인 상품은 후보에서 빠지고, 여러 상품이 동시에 맞으면 그중 하나를 무작위로 (한 번에 최대 1개).
-     * 오늘 이미 당첨된 원생(studentId)은 오늘 추첨 안 함 (내일부터 다시 추첨).
-     */
-    fun roll(studentId: String = ""): Prize? {
-        if (ONE_WIN_PER_STUDENT && hasWon(studentId)) return null
-        val hits = list.filter { p ->
-            p.chance > 0.0 && (p.stock == null || p.stock > 0) && Math.random() * 100.0 < p.chance
-        }
-        return hits.randomOrNull()
-    }
-
-    /**
-     * 레전드리 보너스 상품 — 장착한 보석이 레전드리일 때만, 일반 상품 추첨에서 안 맞았으면 한 번 더 굴림.
-     * legendaryChance(%) 에 맞으면 legendaryIds 로 지정된 상품 중 재고 있는 것 하나. 서버(config/loot) 값은 Repo.applyLoot 가 채움.
-     * 관리자가 아직 안 정했으면(확률 0 또는 상품 없음) 아무 일도 안 일어남.
+     * 레전드리 보너스 상품 설정 — 장착한 보석이 레전드리일 때만 일반 상품 구간 바로 뒤에 이 확률(%)의 구간이 하나 더 붙음.
+     * 서버(config/loot) 값은 Repo.applyLoot 가 채움. 확률 0 또는 상품 없음이면 꺼짐.
      */
     var legendaryChance by mutableStateOf(0.0)
     var legendaryIds by mutableStateOf<Set<String>>(emptySet())
 
-    fun rollLegendary(studentId: String = ""): Prize? {
+    /**
+     * 상품 추첨 — 한 번만 굴려서 상품별 구간으로 나눔 (서로 겹치지 않음).
+     * 예) 마이쮸 5%, 레크쿠폰 1% → 0~5 마이쮸 / 5~6 레크쿠폰 / 그 외 꽝. 상품별 당첨 확률은 적힌 % 그대로, 전체 당첨 확률은 합계(6%).
+     * legendary=true(레전드리 보석 장착)면 그 뒤에 레전드리 보너스 구간(legendaryChance %)이 이어져서 합계에 더해짐.
+     * 재고 0 인 상품은 자기 구간만 꽝이 되고 다른 상품의 확률은 그대로. 확률 합이 100% 를 넘으면 넘는 부분은 무시.
+     * 오늘 이미 당첨된 원생(studentId)은 오늘 추첨 안 함 (내일부터 다시 추첨).
+     */
+    fun roll(studentId: String = "", legendary: Boolean = false): Prize? {
         if (ONE_WIN_PER_STUDENT && hasWon(studentId)) return null
-        if (legendaryChance <= 0.0 || Math.random() * 100.0 >= legendaryChance) return null
-        return list.filter { it.id in legendaryIds && (it.stock == null || it.stock > 0) }.randomOrNull()
+        val r = Math.random() * 100.0
+        var acc = 0.0
+        for (p in list) {
+            if (p.chance <= 0.0) continue
+            val lo = acc
+            acc += p.chance
+            if (p.stock != null && p.stock <= 0) continue
+            if (r >= lo && r < acc) return p
+        }
+        if (legendary && legendaryChance > 0.0 && r >= acc && r < acc + legendaryChance) {
+            return list.filter { it.id in legendaryIds && (it.stock == null || it.stock > 0) }.randomOrNull()
+        }
+        return null
     }
 
     /** 당첨 직후 화면에서 바로 재고를 하나 줄임 (같이 온 형제가 연달아 뽑을 때 재고 넘침 방지) */

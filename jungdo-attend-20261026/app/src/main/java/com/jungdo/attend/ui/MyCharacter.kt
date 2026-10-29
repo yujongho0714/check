@@ -88,13 +88,14 @@ fun MyCharacterStage(
     modifier: Modifier = Modifier,
     stageWidth: Dp = 300.dp,
     stageHeight: Dp? = null,
+    charHeight: Dp? = null,
     onTouch: () -> Unit = {},
 ) {
     val theme = LocalGameTheme.current
     val density = LocalDensity.current
     val land = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val stageH = stageHeight ?: if (land) 120.dp else 150.dp
-    val charH = stageH - 40.dp
+    val charH = charHeight ?: (stageH - 40.dp)
     val pack = rememberDressPack()
     val touch by rememberUpdatedState(onTouch)
 
