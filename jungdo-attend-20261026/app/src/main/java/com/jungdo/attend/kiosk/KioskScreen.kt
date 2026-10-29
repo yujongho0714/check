@@ -79,6 +79,7 @@ import com.jungdo.attend.data.rememberCustomHolidays
 import com.jungdo.attend.ui.AwardRow
 import com.jungdo.attend.ui.CollectionDialog
 import com.jungdo.attend.ui.DressRow
+import com.jungdo.attend.ui.GiftRow
 import com.jungdo.attend.ui.GoldRow
 import com.jungdo.attend.ui.LootRow
 import com.jungdo.attend.ui.PrizeRow
@@ -181,7 +182,7 @@ fun KioskScreen(onReset: () -> Unit, preview: Boolean = false) {
             delay(60_000)
         }
     }
-    LaunchedEffect(done) { if (done != null) { delay(if (doneAwards.any { it.prize != null }) 10_000 else if (doneAwards.any { it.gemId != null || it.plateId != null || it.dressKey != null }) 6_000 else 3_500); done = null } }
+    LaunchedEffect(done) { if (done != null) { delay(if (doneAwards.any { it.prize != null || it.giftPrizes.isNotEmpty() }) 10_000 else if (doneAwards.any { it.gemId != null || it.plateId != null || it.dressKey != null || it.hasGift }) 7_000 else 3_500); done = null } }
 
     if (showAdmin) {
         AdminScreen(
@@ -278,6 +279,7 @@ fun KioskScreen(onReset: () -> Unit, preview: Boolean = false) {
                         Box(Modifier.padding(top = 10.dp)) { LootRow(a) }
                         Box(Modifier.padding(top = 10.dp)) { DressRow(a) }
                         Box(Modifier.padding(top = 10.dp)) { PrizeRow(a) }
+                        Box(Modifier.padding(top = 10.dp)) { GiftRow(a) }
                     }
                 }
             }

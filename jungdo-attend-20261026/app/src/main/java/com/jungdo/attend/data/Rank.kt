@@ -22,7 +22,13 @@ data class AwardResult(
     val dressDup: Boolean = false, // 그 옷이 이미 가진 옷이라 골드로 환급됐는지
     val dressRefund: Int = 0,      // 중복이라 돌려받은 골드
     val dogamGold: Int = 0,        // 활성화된 도감으로 받은 추가 골드 (gold 와 별도)
+    val giftGems: List<String> = emptyList(),    // 관장님 선물로 받은 보석
+    val giftPlates: List<String> = emptyList(),  // 관장님 선물로 받은 네임플레이트
+    val giftDress: List<String> = emptyList(),   // 관장님 선물로 받은 옷 (새로 얻은 것만)
+    val giftPrizes: List<PrizeWin> = emptyList(),// 관장님 선물로 받은 상품 (개수만큼)
+    val giftGold: Int = 0,                       // 선물 옷이 이미 있는 옷이라 골드로 환급된 합계
 ) {
+    val hasGift: Boolean get() = giftGems.isNotEmpty() || giftPlates.isNotEmpty() || giftDress.isNotEmpty() || giftPrizes.isNotEmpty() || giftGold > 0
     val levelBefore: Int get() = Rank.levelOf(expBefore)
     val level: Int get() = Rank.levelOf(expAfter)
     val leveledUp: Boolean get() = level > levelBefore

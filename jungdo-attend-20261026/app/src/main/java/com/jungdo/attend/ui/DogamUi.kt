@@ -84,6 +84,7 @@ fun DogamTab() {
             "도감 하나에 보석을 1~5개 고르고, 등원할 때 / 하원할 때 추가로 받을 골드를 정해요. 아이가 그 보석을 전부 모으면 도감이 활성화돼서 등원·하원마다 추가 골드를 받아요. (장착하지 않아도 가지고만 있으면 돼요 · 활성 도감이 여러 개면 전부 더해져요)",
             color = Muted, fontSize = 13.sp,
         )
+        DogamMaker { msg = it }
         Button(onClick = { editing = DogamSet(Dogam.newId(), "", emptyList(), 0, 0) }) { Text("＋ 도감 추가") }
         if (msg.isNotBlank()) PixelText(msg, color = OkGreen, fontSize = 13.sp)
 
@@ -103,7 +104,7 @@ fun DogamTab() {
                         }
                     }
                 }
-                Text("등원 +${d.goldIn}골드 · 하원 +${d.goldOut}골드", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                Text(Dogam.effectText(d), fontWeight = FontWeight.Bold, fontSize = 15.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { editing = d }) { Text("수정") }
                     OutlinedButton(onClick = { delTarget = d }) { Text("삭제", color = BadRed) }
@@ -225,7 +226,7 @@ private fun DogamEditor(init: DogamSet, onCancel: () -> Unit, onSave: (DogamSet)
                             when {
                                 n.isEmpty() -> err = "도감 이름을 적어 주세요"
                                 picked.isEmpty() -> err = "보석을 1개 이상 골라 주세요"
-                                else -> onSave(DogamSet(init.id, n, picked, goldIn.toIntOrNull() ?: 0, goldOut.toIntOrNull() ?: 0))
+                                else -> onSave(init.copy(name = n, gems = picked, goldIn = goldIn.toIntOrNull() ?: 0, goldOut = goldOut.toIntOrNull() ?: 0))
                             }
                         },
                     ) { Text("저장") }
@@ -244,7 +245,7 @@ fun DogamBadge(s: Student) {
     val act = Dogam.sets.filter { Dogam.isActive(it, own) }
     if (act.isEmpty()) return
     PixelText(
-        "📖 도감 ${act.size}개 활성 · 등원 +${Dogam.totalIn(own)} · 하원 +${Dogam.totalOut(own)} 골드",
+        "📖 도감 ${act.size}개 활성 · 등원 +${Dogam.totalIn(own)} · 하원 +${Dogam.totalOut(own)} 골드" + Dogam.bonusSummary(own),
         fontSize = 14.sp, fontWeight = FontWeight.Bold, color = OkGreen,
     )
 }
@@ -265,7 +266,7 @@ fun DogamPanel(s: Student, modifier: Modifier = Modifier) {
         }
         Text("도감의 보석을 전부 모으면 활성화돼요. 활성화된 도감은 등원·하원 때마다 골드를 더 줘요!", color = gameMuted(), fontSize = 14.sp)
         Text(
-            "활성 $actCount/${sets.size} · 지금 등원할 때 +${Dogam.totalIn(own)}골드 · 하원할 때 +${Dogam.totalOut(own)}골드 더 받아요",
+            "활성 $actCount/${sets.size} · 지금 등원할 때 +${Dogam.totalIn(own)}골드 · 하원할 때 +${Dogam.totalOut(own)}골드 더 받아요" + Dogam.bonusSummary(own),
             fontSize = 16.sp, fontWeight = FontWeight.Bold, color = if (actCount > 0) OkGreen else gameMuted(),
             modifier = Modifier.padding(vertical = 6.dp),
         )
@@ -286,8 +287,8 @@ fun DogamPanel(s: Student, modifier: Modifier = Modifier) {
                     Column(Modifier.weight(1f)) {
                         Text(d.name, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         PixelText(
-                            if (active) "✔ 활성화! 등원 +${d.goldIn} · 하원 +${d.goldOut} 골드"
-                            else "$have/${d.gems.size} 모음 · 다 모으면 등원 +${d.goldIn} · 하원 +${d.goldOut} 골드",
+                            if (active) "✔ 활성화! ${Dogam.effectText(d)}"
+                            else "$have/${d.gems.size} 모음 · 다 모으면 ${Dogam.effectText(d)}",
                             fontSize = 14.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
                             color = if (active) OkGreen else gameMuted(),
                         )

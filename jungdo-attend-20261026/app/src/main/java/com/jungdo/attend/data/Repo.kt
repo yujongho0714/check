@@ -104,6 +104,7 @@ object Repo {
             dressEquip = (d.get("dressEquip") as? Map<*, *>)
                 ?.mapNotNull { e -> val k = e.key as? String; val v = e.value as? String; if (k != null && v != null) k to v else null }
                 ?.toMap() ?: emptyMap(),
+            gifts = strList(d.get("gifts")),
         )
         // 나이가 있으면 올해 학년을 계산해서 보여줌 (저장된 grade 글자는 옛 값일 수 있음)
         if (base.age > 0 && base.ageYear > 0) return base.copy(grade = GradeCalc.labelOf(base.curAge))
@@ -207,39 +208,88 @@ object Repo {
         val p = Rank.plan(s, type, today())
         val base = p.result.copy(equipped = s.plate)
         if ((p.fields.isEmpty() && !retry) || s.id.isBlank()) return base
-        val gem = Loot.rollGem(s.gems)
+        val gem = Loot.rollGem(s.gems, Loot.gemMultFor(s.gem), Dogam.gemBonusFor(s.gems))   // 에픽 보석 장착 중이면 보석 획득 확률 상승
         val plate = Loot.rollPlate(s.plates)
+        // ── 관장님 선물: 진짜 첫 등원/하원(p.fields 가 비어 있지 않을 때)에만 받고, 받는 순간 같은 저장(arrayRemove)으로 지워서 딱 한 번만 ──
+        val gotGems = ArrayList<String>(); val gotPlates = ArrayList<String>(); val gotDress = ArrayList<String>()
+        val gotPrizes = ArrayList<Prize>(); val consumed = ArrayList<String>(); var giftGold = 0
+        val haveDress = s.dress.toHashSet()
+        if (p.fields.isNotEmpty()) {
+            val haveGems = (s.gems + listOfNotNull(gem)).toHashSet()
+            val havePlates = (s.plates + listOfNotNull(plate)).toHashSet()
+            for (raw in s.gifts) {
+                val g = Gifts.parse(raw)
+                if (g == null) { consumed.add(raw); continue }            // 깨진 글자는 그냥 치움
+                val key = s.id + "/" + g.id
+                if (key in Gifts.claimed) continue                        // 낡은 화면 값으로 두 번 받는 것 방지
+                Gifts.claimed.add(key); consumed.add(raw)
+                when (g.kind) {
+                    Gifts.GEM -> {
+                        val rar = Rarity.ofOrNull(g.arg)
+                        Loot.allGems.filter { it !in haveGems && Loot.isGemOn(it) && (rar == null || Loot.rarityOf(it) == rar) }
+                            .shuffled().take(g.n).forEach { haveGems.add(it); gotGems.add(it) }
+                    }
+                    Gifts.PLATE -> Loot.allPlates.filter { it !in havePlates }.shuffled().take(g.n).forEach { havePlates.add(it); gotPlates.add(it) }
+                    Gifts.DRESS -> for (i in 1..g.n) {
+                        val all = Dress.allKeys.filter { g.arg !in Dress.CATS || Dress.catOf(it) == g.arg }
+                        val fresh = all.filter { it !in haveDress }
+                        val k = (if (fresh.isNotEmpty()) fresh else all).random()
+                        if (haveDress.add(k)) {
+                            gotDress.add(k)
+                        } else {
+                            giftGold += Loot.dupRefund.coerceAtLeast(0)
+                        }
+                    }
+                    Gifts.PRIZE -> {
+                        val pz = Prizes.list.firstOrNull { it.id == g.arg }
+                        if (pz != null) for (i in 1..g.n) gotPrizes.add(pz)
+                    }
+                }
+            }
+        }
         val f = HashMap<String, Any>(p.fields)
         if (retry) f[if (type == EventType.IN) "retryIn" else "retryOut"] = RETRY_DAY
-        if (gem != null) {
-            f["gems"] = FieldValue.arrayUnion(gem)
-            if (s.gem.isBlank()) f["gem"] = gem   // 처음 얻은 보석은 자동 장착
+        val newGems = listOfNotNull(gem) + gotGems
+        if (newGems.isNotEmpty()) {
+            f["gems"] = FieldValue.arrayUnion(*newGems.toTypedArray())
+            if (s.gem.isBlank()) f["gem"] = newGems.first()   // 처음 얻은 보석은 자동 장착
         }
         // 장착한 보석(처음 얻은 보석이면 방금 자동 장착된 것)의 골드 지급 — 등원/하원마다 한 번 (위 early return 덕분에 같은 날 중복 지급 없음)
-        val equippedGem = s.gem.ifBlank { gem ?: "" }
+        val equippedGem = s.gem.ifBlank { newGems.firstOrNull() ?: "" }
         val gold = Loot.goldFor(equippedGem)
         // 옷 드롭: 새 옷이면 추가, 이미 가진 옷이면 환급 골드 (뽑기와 같은 규칙)
-        val dressKey = Loot.rollDress()
-        val dressDup = dressKey != null && dressKey in s.dress
+        val dressKey = Loot.rollDress(Loot.dressMultFor(equippedGem), Dogam.dressBonusFor(s.gems + newGems))   // 유니크 보석 장착 중이면 옷(장비) 획득 확률 상승
+        val dressDup = dressKey != null && dressKey in haveDress
         val dressRefund = if (dressDup) Loot.dupRefund.coerceAtLeast(0) else 0
-        if (dressKey != null && !dressDup) f["dress"] = FieldValue.arrayUnion(dressKey)
+        val newDress = gotDress + listOfNotNull(dressKey?.takeIf { !dressDup })
+        if (newDress.isNotEmpty()) f["dress"] = FieldValue.arrayUnion(*newDress.toTypedArray())
         // 도감: 방금 얻은 보석까지 포함해서, 전부 모은 도감의 등원/하원 추가 골드
-        val dogamGold = Dogam.bonusFor(type, s.gems + listOfNotNull(gem))
-        val totalGold = gold + dressRefund + dogamGold
+        val dogamGold = Dogam.bonusFor(type, s.gems + newGems)
+        val totalGold = gold + dressRefund + dogamGold + giftGold
         if (totalGold > 0) f["gold"] = FieldValue.increment(totalGold.toLong())
         // 상품 추첨: 한 번만 굴려서 상품별 구간 → (장착 보석이 레전드리면 그 뒤에 레전드리 보너스 구간이 이어짐)
         // 오늘 이미 상품에 당첨된 원생(등원에서 당첨 → 하원)은 오늘 상품 추첨 안 함. 원생 기록(prizeDay)에 직접 남겨서 확실하게 막음
         val legendEquipped = equippedGem.isNotBlank() && Loot.rarityOf(equippedGem) == Rarity.LEGENDARY
         val prize = if (s.prizeDay == today()) null else Prizes.roll(s.id, legendEquipped)
         if (prize != null) f["prizeDay"] = today()
-        if (plate != null) {
-            f["plates"] = FieldValue.arrayUnion(plate)
-            if (s.plate.isBlank()) f["plate"] = plate
+        val newPlates = listOfNotNull(plate) + gotPlates
+        if (newPlates.isNotEmpty()) {
+            f["plates"] = FieldValue.arrayUnion(*newPlates.toTypedArray())
+            if (s.plate.isBlank()) f["plate"] = newPlates.first()
         }
+        if (consumed.isNotEmpty()) f["gifts"] = FieldValue.arrayRemove(*consumed.toTypedArray())
         students().document(s.id).update(f)
         if (prize != null) { Prizes.consume(prize.id); Prizes.markWon(s.id); runCatching { recordWin(s, prize) } }
+        // 선물 상품: 개수만큼 당첨 기록(지급 대기)을 남김. 오늘의 상품 추첨(prizeDay)에는 영향 없음
+        gotPrizes.forEach { pz ->
+            val cur = Prizes.list.firstOrNull { it.id == pz.id } ?: pz
+            runCatching { recordWin(s, cur) }
+            Prizes.consume(cur.id)
+        }
         return base.copy(
             gemId = gem, plateId = plate, gold = gold, dogamGold = dogamGold,
+            giftGems = gotGems, giftPlates = gotPlates, giftDress = gotDress, giftGold = giftGold,
+            giftPrizes = gotPrizes.map { PrizeWin(it.id, it.name, it.message, it.photo) },
             dressKey = dressKey, dressDup = dressDup, dressRefund = dressRefund,
             prize = prize?.let { PrizeWin(it.id, it.name, it.message, it.photo) },
             equipped = if (s.plate.isBlank() && plate != null) plate else s.plate,
@@ -257,8 +307,22 @@ object Repo {
             "paid" to false,
             "createdAt" to FieldValue.serverTimestamp(),
         ))
-        if (p.stock != null) batch.update(prizes().document(p.id), mapOf<String, Any>("stock" to FieldValue.increment(-1)))
+        if (p.stock != null && p.stock > 0) batch.update(prizes().document(p.id), mapOf<String, Any>("stock" to FieldValue.increment(-1)))
         batch.commit()
+    }
+
+    /** 관장님 선물 보내기: 고른 원생들의 gifts 칸에 한 줄 추가 (다음 등원/하원 때 한 번 받음) */
+    fun sendGifts(targets: List<Student>, raw: String) {
+        targets.chunked(400).forEach { chunk ->
+            val batch = db.batch()
+            chunk.forEach { batch.update(students().document(it.id), mapOf<String, Any>("gifts" to FieldValue.arrayUnion(raw))) }
+            batch.commit()
+        }
+    }
+
+    /** 아직 안 받은 선물 취소 */
+    fun cancelGift(studentId: String, raw: String) {
+        students().document(studentId).update(mapOf<String, Any>("gifts" to FieldValue.arrayRemove(raw)))
     }
 
     /** 키오스크에서 본인이 네임플레이트 바꾸기 ("" 이면 안 씀) */
@@ -406,6 +470,8 @@ object Repo {
         Loot.dressChance = (snap.getDouble("dressChance") ?: Loot.DEFAULT_DRESS_CHANCE).coerceIn(0.0, 100.0)
         Loot.gachaPrice = (snap.getLong("gachaPrice") ?: Loot.DEFAULT_GACHA_PRICE.toLong()).toInt().coerceAtLeast(0)
         Loot.dupRefund = (snap.getLong("dupRefund") ?: Loot.DEFAULT_DUP_REFUND.toLong()).toInt().coerceAtLeast(0)
+        Loot.epicGemBonus = (snap.getDouble("epicGemBonus") ?: Loot.DEFAULT_EPIC_GEM_BONUS).coerceIn(0.0, 1000.0)
+        Loot.uniqueDressBonus = (snap.getDouble("uniqueDressBonus") ?: Loot.DEFAULT_UNIQUE_DRESS_BONUS).coerceIn(0.0, 1000.0)
         Prizes.legendaryChance = (snap.getDouble("legendPrizeChance") ?: 0.0).coerceIn(0.0, 100.0)
         Prizes.legendaryIds = (snap.get("legendPrizeIds") as? List<*>)?.mapNotNull { it as? String }?.toSet() ?: emptySet()
         // 등급별 확률(%): 새 값(rarityChances)이 있으면 그대로. 없으면 예전 설정(보석 확률 × 등급 비율)을 같은 확률로 환산
@@ -472,6 +538,9 @@ object Repo {
                 id, (m["name"] as? String).orEmpty(), gems,
                 ((m["goldIn"] as? Number)?.toInt() ?: 0).coerceAtLeast(0),
                 ((m["goldOut"] as? Number)?.toInt() ?: 0).coerceAtLeast(0),
+                (m["rarity"] as? String).orEmpty(),
+                ((m["gemBonus"] as? Number)?.toDouble() ?: 0.0).coerceAtLeast(0.0),
+                ((m["dressBonus"] as? Number)?.toDouble() ?: 0.0).coerceAtLeast(0.0),
             )
         }.orEmpty()
     }
@@ -480,7 +549,8 @@ object Repo {
     fun saveDogam(list: List<DogamSet>) {
         Dogam.sets = list   // 이 기기에는 바로 반영
         dogamDoc().set(mapOf("sets" to list.map {
-            mapOf("id" to it.id, "name" to it.name, "gems" to it.gems, "goldIn" to it.goldIn.toLong(), "goldOut" to it.goldOut.toLong())
+            mapOf("id" to it.id, "name" to it.name, "gems" to it.gems, "goldIn" to it.goldIn.toLong(), "goldOut" to it.goldOut.toLong(),
+                "rarity" to it.rarity, "gemBonus" to it.gemBonus, "dressBonus" to it.dressBonus)
         }))
     }
 
@@ -518,7 +588,7 @@ object Repo {
      * 관리자: 자동 배정 — 396종 중 등급별 개수(counts)만큼 무작위로 뽑아서 그 등급으로 정하고, 뽑힌 보석만 사용으로 켬 (나머지는 끔).
      * 이미 가진 원생의 보석은 그대로 (꺼진 보석도 가지고 있으면 보관함에 보임). 같은 보석이 두 등급에 겹치지 않음.
      */
-    fun autoAssignGems(counts: Map<Rarity, Int>) {
+    fun autoAssignGems(counts: Map<Rarity, Int>, withDogam: Boolean = false) {
         val pool = Loot.allGems.shuffled()
         val r = HashMap<String, String>()
         val chosen = ArrayList<String>()
@@ -529,6 +599,12 @@ object Repo {
             }
         }
         gemRarityDoc().set(mapOf("r" to r, "on" to chosen.sorted()), SetOptions.merge())
+        if (withDogam) saveDogam(Dogam.build(r.entries.groupBy({ Rarity.of(it.value) }, { it.key })))
+    }
+
+    /** 관리자: 지금 사용중인 보석을 등급별로 무작위 2개씩 짝지어 도감을 새로 만듦 (지금 도감은 모두 지워짐) */
+    fun autoBuildDogamFromCurrent() {
+        saveDogam(Dogam.build(Loot.allGems.filter { Loot.isGemOn(it) }.groupBy { Loot.rarityOf(it) }))
     }
 
     /** 관리자: 등급별 획득 비율 */
@@ -545,6 +621,14 @@ object Repo {
     }
 
     /** 관리자: 뽑기 가격 / 중복 환급 / 출석 옷 드롭 확률 */
+    /** 관리자: 장착 보석 능력 — 에픽(보석 획득 확률 상승 %), 유니크(옷·장비 획득 확률 상승 %) */
+    fun saveGemSkillBonus(epicGem: Double, uniqueDress: Double) {
+        lootDoc().set(mapOf(
+            "epicGemBonus" to epicGem.coerceIn(0.0, 1000.0),
+            "uniqueDressBonus" to uniqueDress.coerceIn(0.0, 1000.0),
+        ), SetOptions.merge())
+    }
+
     fun saveGachaConfig(price: Int, refund: Int, dressChance: Double) {
         lootDoc().set(mapOf(
             "gachaPrice" to price.coerceAtLeast(0),

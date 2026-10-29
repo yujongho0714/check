@@ -80,6 +80,7 @@ import com.jungdo.attend.ui.UiSizeSettings
 import com.jungdo.attend.kiosk.KioskScreen
 import com.jungdo.attend.ui.BadRed
 import com.jungdo.attend.ui.DogamTab
+import com.jungdo.attend.ui.GiftTab
 import com.jungdo.attend.ui.GemRarityTab
 import com.jungdo.attend.ui.LootSettings
 import com.jungdo.attend.ui.PrizeSettings
@@ -119,7 +120,7 @@ fun ServerScreen(onReset: () -> Unit) {
     val recent by com.jungdo.attend.data.rememberInboxRange(Repo.shiftDay(Repo.today(), -30), Repo.today())
     val openMsgs = recent.count { !it.handled }
     val pendingWins by com.jungdo.attend.data.rememberPendingWins()
-    val tabs = listOf("오늘 출결", "월간 출석부", if (openMsgs > 0) "받은 문자 ($openMsgs)" else "받은 문자", "단체 문자", "퇴관 위험", "결석 통계", "명단·형제", if (pendingWins.isNotEmpty()) "당첨·지급 (${pendingWins.size})" else "당첨·지급", "지급내역", "내 정보 보내기", "문자·안내", "상태·기록", "보석 등급", "도감", "키오스크 화면", "설정")
+    val tabs = listOf("오늘 출결", "월간 출석부", if (openMsgs > 0) "받은 문자 ($openMsgs)" else "받은 문자", "단체 문자", "퇴관 위험", "결석 통계", "명단·형제", if (pendingWins.isNotEmpty()) "당첨·지급 (${pendingWins.size})" else "당첨·지급", "지급내역", "내 정보 보내기", "문자·안내", "상태·기록", "보석 등급", "도감", "선물 보내기", "키오스크 화면", "설정")
     Column(Modifier.fillMaxSize().background(PageBg)) {
         Row(Modifier.fillMaxWidth().background(Navy).padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("정도 출결 · 관장님 폰", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
@@ -145,7 +146,8 @@ fun ServerScreen(onReset: () -> Unit) {
             11 -> StatusAndLog()
             12 -> GemRarityTab()
             13 -> DogamTab()
-            14 -> KioskPreviewTab()
+            14 -> GiftTab(students)
+            15 -> KioskPreviewTab()
             else -> ServerSettings(onReset)
         }
     }

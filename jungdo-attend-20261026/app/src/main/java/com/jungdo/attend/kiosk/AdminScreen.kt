@@ -58,6 +58,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import com.jungdo.attend.ui.BadRed
 import com.jungdo.attend.ui.DogamTab
 import com.jungdo.attend.ui.GemRarityTab
+import com.jungdo.attend.ui.GiftTab
 import com.jungdo.attend.ui.LootSettings
 import com.jungdo.attend.ui.PrizeSettings
 import com.jungdo.attend.ui.MessageSettings
@@ -73,7 +74,7 @@ import com.jungdo.attend.ui.game.PixelText
 @Composable
 fun AdminScreen(students: List<Student>, todayEvents: List<AttendEvent>, onClose: () -> Unit, onReset: () -> Unit, onAdjustPopup: () -> Unit = {}) {
     var tab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("원생 관리", "일괄 등록", "오늘 기록", "문자·안내", "보석 등급", "도감", "설정")
+    val tabs = listOf("원생 관리", "일괄 등록", "오늘 기록", "문자·안내", "보석 등급", "도감", "선물 보내기", "설정")
     BackHandler { onClose() }
 
     val gt = LocalGameTheme.current
@@ -109,6 +110,7 @@ fun AdminScreen(students: List<Student>, todayEvents: List<AttendEvent>, onClose
                     }
                     4 -> GemRarityTab()
                     5 -> DogamTab()
+                    6 -> GiftTab(students)
                     else -> SettingsTab(onReset, onAdjustPopup)
                 }
             }
