@@ -25,6 +25,8 @@ data class Student(
     val streakDay: String = "",                 // 연속 출석을 마지막으로 센 날 (yyyy-MM-dd)
     val inDay: String = "",                     // 등원 경험치를 마지막으로 받은 날
     val outDay: String = "",                    // 하원 경험치를 마지막으로 받은 날
+    val retryIn: String = "",                   // (임시) 등원 보상을 다시 받아간 날
+    val retryOut: String = "",                  // (임시) 하원 보상을 다시 받아간 날
     val gems: List<String> = emptyList(),       // 모은 보석 번호 ("001" … "396")
     val plates: List<String> = emptyList(),     // 모은 네임플레이트 번호 ("01" … "47")
     val plate: String = "",                     // 지금 쓰고 있는 네임플레이트 (비어 있으면 안 씀)

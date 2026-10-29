@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.text.InlineTextContent
-import androidx.compose.ui.text.appendInlineContent
+import androidx.compose.foundation.text.appendInlineContent
 import java.util.concurrent.ConcurrentHashMap
 
 /**

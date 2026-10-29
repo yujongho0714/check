@@ -92,6 +92,8 @@ object Repo {
             streakDay = d.getString("streakDay") ?: "",
             inDay = d.getString("inDay") ?: "",
             outDay = d.getString("outDay") ?: "",
+            retryIn = d.getString("retryIn") ?: "",
+            retryOut = d.getString("retryOut") ?: "",
             gems = strList(d.get("gems")),
             plates = strList(d.get("plates")),
             plate = d.getString("plate") ?: "",
@@ -189,13 +191,25 @@ object Repo {
      * 상품(마이쮸 등)도 같이 추첨: 관리자가 정한 상품별 확률로 최대 1개 (Prizes.roll). 당첨되면 wins 에 기록.
      * (경험치·보석 칸은 studentData 에 넣지 않아서 명단 저장이 덮어쓰지 않음)
      */
+    /** (임시) 이 날짜 하루만: 패치 전에 이미 눌러서 보상을 못 받은 친구가 보상을 딱 한 번 더 받을 수 있음 (등원·하원 합쳐서 1회, 경험치·연속출석은 그대로) */
+    const val RETRY_DAY = "2026-10-29"
+
+    fun retryEligible(s: Student, type: String): Boolean {
+        if (s.id.isBlank() || today() != RETRY_DAY) return false
+        val already = if (type == EventType.IN) s.inDay == RETRY_DAY else s.outDay == RETRY_DAY
+        val used = s.retryIn == RETRY_DAY || s.retryOut == RETRY_DAY   // 등원·하원 합쳐서 한 번만
+        return already && !used
+    }
+
     fun awardExp(s: Student, type: String): AwardResult {
+        val retry = retryEligible(s, type)
         val p = Rank.plan(s, type, today())
         val base = p.result.copy(equipped = s.plate)
-        if (p.fields.isEmpty() || s.id.isBlank()) return base
+        if ((p.fields.isEmpty() && !retry) || s.id.isBlank()) return base
         val gem = Loot.rollGem(s.gems)
         val plate = Loot.rollPlate(s.plates)
         val f = HashMap<String, Any>(p.fields)
+        if (retry) f[if (type == EventType.IN) "retryIn" else "retryOut"] = RETRY_DAY
         if (gem != null) {
             f["gems"] = FieldValue.arrayUnion(gem)
             if (s.gem.isBlank()) f["gem"] = gem   // 처음 얻은 보석은 자동 장착

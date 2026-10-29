@@ -172,13 +172,14 @@ fun KioskScreen(onReset: () -> Unit) {
     fun attend(s: Student, type: String, force: Boolean = false) {
         val last = latest[s.id]
         // 10분 안에 같은 버튼을 또 누르면 한 번 더 확인 (문자 중복 방지)
-        if (!force && last != null && last.type == type && System.currentTimeMillis() - last.clientTime < 10 * 60_000) {
+        if (!force && !Repo.retryEligible(s, type) && last != null && last.type == type && System.currentTimeMillis() - last.clientTime < 10 * 60_000) {
             selected = null; dup = s to type; return
         }
         // 같이 온 형제도 함께 체크
         val sibs = students.filter { it.id in withSibs && it.id != s.id }
         val group = listOf(s) + sibs
-        group.forEach { Repo.addEvent(it, type, typedNo) }
+        // (임시) 보상 다시 받기인 친구는 문자가 또 나가지 않게 기록을 새로 만들지 않음
+        group.forEach { if (!Repo.retryEligible(it, type)) Repo.addEvent(it, type, typedNo) }
         // 경험치: 등원 +10, 하원 +10 (하루 한 번씩) + 연속 출석 보너스
         val awards = group.map { runCatching { Repo.awardExp(it, type) }.getOrNull() }.filterNotNull()
         val names = group.joinToString(", ") { it.name }
