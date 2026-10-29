@@ -603,28 +603,49 @@ object Repo {
 
     fun startUiSync(): ListenerRegistration = uiDoc().addSnapshotListener { snap, _ ->
         if (snap == null) return@addSnapshotListener
-        UiSize.box = (snap.getDouble("boxScale") ?: 1.0).toFloat().coerceIn(UiSize.MIN, UiSize.MAX)
-        UiSize.char = (snap.getDouble("charScale") ?: 1.0).toFloat().coerceIn(UiSize.MIN, UiSize.MAX)
-        UiSize.popScale = (snap.getDouble("popScale") ?: 1.0).toFloat().coerceIn(UiSize.POP_MIN, UiSize.POP_MAX)
-        UiSize.popX = (snap.getDouble("popX") ?: 0.0).toFloat().coerceIn(-UiSize.X_RANGE, UiSize.X_RANGE)
-        UiSize.popY = (snap.getDouble("popY") ?: 0.0).toFloat().coerceIn(-UiSize.Y_RANGE, UiSize.Y_RANGE)
+        // L_ = 가로 화면, P_ = 세로 화면. 값이 아직 없으면 예전에 저장한 값(접두어 없는 것)을 그대로 씀
+        fun num(key: String, legacy: String, def: Double): Float = (snap.getDouble(key) ?: snap.getDouble(legacy) ?: def).toFloat()
+        fun lay(p: String) = PopupLayout(
+            box = num("${p}popBox", "popBox", 1.0).coerceIn(UiSize.MIN, UiSize.MAX),
+            char = num("${p}popChar", "popChar", 1.0).coerceIn(UiSize.MIN, UiSize.CHAR_MAX),
+            pop = num("${p}popScale", "popScale", 1.0).coerceIn(UiSize.POP_MIN, UiSize.POP_MAX),
+            x = num("${p}popX", "popX", 0.0).coerceIn(-UiSize.X_RANGE, UiSize.X_RANGE),
+            y = num("${p}popY", "popY", 0.0).coerceIn(-UiSize.Y_RANGE, UiSize.Y_RANGE),
+            plate = num("${p}popPlate", "popPlate", 1.0).coerceIn(UiSize.ELEM_MIN, UiSize.ELEM_MAX),
+            rank = num("${p}popRank", "popRank", 1.0).coerceIn(UiSize.ELEM_MIN, UiSize.ELEM_MAX),
+            btn = num("${p}popBtn", "popBtn", 1.0).coerceIn(UiSize.ELEM_MIN, UiSize.ELEM_MAX),
+            sub = num("${p}popSub", "popSub", 1.0).coerceIn(UiSize.ELEM_MIN, UiSize.ELEM_MAX),
+        )
+        UiSize.popLand = lay("L_")
+        UiSize.popPort = lay("P_")
+        UiSize.boxLand = num("L_boxScale", "boxScale", 1.0).coerceIn(UiSize.MIN, UiSize.MAX)
+        UiSize.charLand = num("L_charScale", "charScale", 1.0).coerceIn(UiSize.MIN, UiSize.MAX)
+        UiSize.boxPort = num("P_boxScale", "boxScale", 1.0).coerceIn(UiSize.MIN, UiSize.MAX)
+        UiSize.charPort = num("P_charScale", "charScale", 1.0).coerceIn(UiSize.MIN, UiSize.MAX)
     }
 
-    fun saveUiSize(box: Float, char: Float) {
+    fun saveUiSize(box: Float, char: Float, land: Boolean) {
         val b = box.coerceIn(UiSize.MIN, UiSize.MAX); val c = char.coerceIn(UiSize.MIN, UiSize.MAX)
-        UiSize.box = b; UiSize.char = c   // 이 기기는 바로 적용
-        uiDoc().set(mapOf("boxScale" to b.toDouble(), "charScale" to c.toDouble()), SetOptions.merge())
+        if (land) { UiSize.boxLand = b; UiSize.charLand = c } else { UiSize.boxPort = b; UiSize.charPort = c }   // 이 기기는 바로 적용
+        val p = if (land) "L_" else "P_"
+        uiDoc().set(mapOf("${p}boxScale" to b.toDouble(), "${p}charScale" to c.toDouble()), SetOptions.merge())
     }
 
-    /** 출결 팝업 배치(크기·위치) 저장 — 이 기기는 바로 적용, 다른 기기는 서버 동기화로 */
-    fun saveUiLayout(l: PopupLayout) {
-        val b = l.box.coerceIn(UiSize.MIN, UiSize.MAX); val c = l.char.coerceIn(UiSize.MIN, UiSize.MAX)
-        val p = l.pop.coerceIn(UiSize.POP_MIN, UiSize.POP_MAX)
-        val x = l.x.coerceIn(-UiSize.X_RANGE, UiSize.X_RANGE); val y = l.y.coerceIn(-UiSize.Y_RANGE, UiSize.Y_RANGE)
-        UiSize.box = b; UiSize.char = c; UiSize.popScale = p; UiSize.popX = x; UiSize.popY = y
+    /** 출결 팝업 배치(칸별 크기·위치) 저장 — 이 기기는 바로 적용, 다른 기기는 서버 동기화로 */
+    fun saveUiLayout(l: PopupLayout, land: Boolean) {
+        val fixed = PopupLayout(
+            box = l.box.coerceIn(UiSize.MIN, UiSize.MAX), char = l.char.coerceIn(UiSize.MIN, UiSize.CHAR_MAX),
+            pop = l.pop.coerceIn(UiSize.POP_MIN, UiSize.POP_MAX),
+            x = l.x.coerceIn(-UiSize.X_RANGE, UiSize.X_RANGE), y = l.y.coerceIn(-UiSize.Y_RANGE, UiSize.Y_RANGE),
+            plate = l.plate.coerceIn(UiSize.ELEM_MIN, UiSize.ELEM_MAX), rank = l.rank.coerceIn(UiSize.ELEM_MIN, UiSize.ELEM_MAX),
+            btn = l.btn.coerceIn(UiSize.ELEM_MIN, UiSize.ELEM_MAX), sub = l.sub.coerceIn(UiSize.ELEM_MIN, UiSize.ELEM_MAX),
+        )
+        if (land) UiSize.popLand = fixed else UiSize.popPort = fixed
+        val p = if (land) "L_" else "P_"
         uiDoc().set(mapOf(
-            "boxScale" to b.toDouble(), "charScale" to c.toDouble(),
-            "popScale" to p.toDouble(), "popX" to x.toDouble(), "popY" to y.toDouble(),
+            "${p}popBox" to fixed.box.toDouble(), "${p}popChar" to fixed.char.toDouble(), "${p}popPlate" to fixed.plate.toDouble(),
+            "${p}popRank" to fixed.rank.toDouble(), "${p}popBtn" to fixed.btn.toDouble(), "${p}popSub" to fixed.sub.toDouble(),
+            "${p}popScale" to fixed.pop.toDouble(), "${p}popX" to fixed.x.toDouble(), "${p}popY" to fixed.y.toDouble(),
         ), SetOptions.merge())
     }
 

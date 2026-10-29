@@ -13,6 +13,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jungdo.attend.data.Repo
@@ -23,14 +24,16 @@ import kotlin.math.roundToInt
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun UiSizeSettings() {
-    var box by remember(UiSize.box) { mutableStateOf(UiSize.box) }
-    var ch by remember(UiSize.char) { mutableStateOf(UiSize.char) }
+    val cfg = LocalConfiguration.current
+    val land = cfg.screenWidthDp > cfg.screenHeightDp   // 가로/세로 화면은 따로 저장 — 지금 이 기기 방향의 값을 조절
+    var box by remember(land, UiSize.box(land)) { mutableStateOf(UiSize.box(land)) }
+    var ch by remember(land, UiSize.char(land)) { mutableStateOf(UiSize.char(land)) }
     var msg by remember { mutableStateOf("") }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SectionTitle("캐릭터 · 내 정보 크기 (모든 기기, 모든 원생에게 적용)")
+        SectionTitle("캐릭터 · 내 정보 크기 · 지금 ${if (land) "가로" else "세로"} 화면 (모든 기기, 모든 원생에게 적용)")
         Text(
-            "출결 팝업과 보관함에서 박스와 캐릭터가 얼마나 크게 보일지 정해요. 100% = 각 기기 화면에 딱 맞는 기본 크기예요. 저장하면 키오스크와 다른 폰에도 바로 적용돼요.",
+            "출결 팝업과 보관함에서 박스와 캐릭터가 얼마나 크게 보일지 정해요. 100% = 각 기기 화면에 딱 맞는 기본 크기예요. 저장하면 키오스크와 다른 폰에도 바로 적용돼요. 가로·세로 화면은 따로 저장되니 기기를 돌려서 각각 맞춰 주세요.",
             color = Muted, fontSize = 13.sp,
         )
         Text("박스 크기 ${(box * 100).roundToInt()}%  (캐릭터 무대 · 보관함 왼쪽 칸)", fontSize = 15.sp)
@@ -38,8 +41,8 @@ fun UiSizeSettings() {
         Text("캐릭터 크기 ${(ch * 100).roundToInt()}%  (박스 안에서)", fontSize = 15.sp)
         Slider(ch, { ch = it; msg = "" }, valueRange = UiSize.MIN..UiSize.MAX)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { Repo.saveUiSize(box, ch); msg = "저장했어요 ✔ 모든 기기에 적용돼요" }) { Text("저장 (모든 기기에 적용)") }
-            OutlinedButton(onClick = { box = 1f; ch = 1f; Repo.saveUiSize(1f, 1f); msg = "기본 크기(100%)로 돌렸어요 ✔" }) { Text("기본값으로") }
+            Button(onClick = { Repo.saveUiSize(box, ch, land); msg = "저장했어요 ✔ 모든 기기에 적용돼요" }) { Text("저장 (모든 기기에 적용)") }
+            OutlinedButton(onClick = { box = 1f; ch = 1f; Repo.saveUiSize(1f, 1f, land); msg = "기본 크기(100%)로 돌렸어요 ✔" }) { Text("기본값으로") }
         }
         if (msg.isNotBlank()) Text(msg, color = OkGreen, fontSize = 14.sp)
     }

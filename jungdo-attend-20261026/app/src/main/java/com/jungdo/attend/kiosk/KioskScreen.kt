@@ -56,6 +56,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.layout.layout
+import kotlin.math.roundToInt
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -161,6 +163,7 @@ fun KioskScreen(onReset: () -> Unit, preview: Boolean = false) {
     var adjustMode by remember { mutableStateOf(false) }          // 관리자: 출결 팝업을 직접 보면서 크기·위치 조절 중 (출결은 기록 안 됨)
     var draft by remember { mutableStateOf<PopupLayout?>(null) }   // 조절 중인 값 (저장 전). null 이면 저장된 값 그대로
     val adjusting = preview || adjustMode
+    var panelTop by remember { mutableStateOf(false) }             // 조절 패널을 위에 둘지 (아래 버튼을 가리면 위로 옮김)
     LaunchedEffect(selected) { if (selected == null) { adjustMode = false; draft = null } }
     var padChoices by remember { mutableStateOf<List<Student>?>(null) }
     var typedNo by remember { mutableStateOf("") }   // 마지막으로 입력한 번호 (어느 학부모 번호로 눌렀는지 알아내려고)
@@ -183,7 +186,7 @@ fun KioskScreen(onReset: () -> Unit, preview: Boolean = false) {
     if (showAdmin) {
         AdminScreen(
             students = allStudents, todayEvents = events, onClose = { showAdmin = false }, onReset = onReset,
-            onAdjustPopup = { students.firstOrNull()?.let { st -> showAdmin = false; draft = UiSize.layout(); adjustMode = true; selected = st } },
+            onAdjustPopup = { students.firstOrNull()?.let { st -> showAdmin = false; draft = null; adjustMode = true; selected = st } },
         )
         return
     }
@@ -287,10 +290,11 @@ fun KioskScreen(onReset: () -> Unit, preview: Boolean = false) {
         LaunchedEffect(s0, withSibs, collectionId, touchTick) { if (collectionId == null && !adjusting) { delay(15_000); selected = null; withSibs = emptySet() } } // 15초 동안 안 누르면 자동 닫힘 (조절 중에는 안 닫힘)
         var charScale by rememberCharScale()
         val cfgDlg = LocalConfiguration.current
-        val lay = draft ?: UiSize.layout()   // 관리자가 정한 팝업 배치 (조절 중이면 저장 전 값)
         val scrW = cfgDlg.screenWidthDp.toFloat()
         val scrH = cfgDlg.screenHeightDp.toFloat()
         val landscape = scrW > scrH
+        LaunchedEffect(landscape) { draft = null }   // 화면을 돌리면 저장 전 값은 버리고 그 방향의 저장값부터 다시 조절
+        val lay = draft ?: UiSize.layout(landscape)   // 관리자가 정한 팝업 배치 (가로/세로 따로, 조절 중이면 저장 전 값)
         // 캐릭터 무대 크기: 기본은 이 기기 화면에 딱 맞게 자동 계산, 관리자 배율(박스)과 아래 막대(임시)가 그 위에 곱해짐
         val stageSize = if (landscape) {
             // 가로 화면(태블릿): 왼쪽에 큰 캐릭터 무대, 오른쪽에 이름·등원/하원 버튼 → 버튼이 화면 밖으로 안 잘림
@@ -302,19 +306,21 @@ fun KioskScreen(onReset: () -> Unit, preview: Boolean = false) {
         }
         val stageH = stageSize.first
         val stageW = stageSize.second
-        val stageCharH = minOf((stageH - 40.dp) * lay.char, stageH)   // 관리자가 정한 캐릭터 크기 (박스 안에서)
+        val stageCharH = stageH - 40.dp   // 캐릭터가 걷는 범위 기준 칸 (실제 그려지는 캐릭터 크기는 zoom: 관리자 설정 × 기본 배율)
 
         // 내 캐릭터 (걷기·공격 조작 가능, 조작하는 동안은 창이 안 닫힘) + 크기 막대
         val stageBlock: @Composable () -> Unit = {
-            MyCharacterStage(s, stageWidth = stageW, stageHeight = stageH, charHeight = stageCharH, onTouch = { touchTick++ })
+            MyCharacterStage(s, stageWidth = stageW, stageHeight = stageH, charHeight = stageCharH, zoom = lay.char * UiSize.CHAR_BASE, onTouch = { touchTick++ })
             CharSizeBar(charScale, { charScale = it; touchTick++ }, Modifier.width(stageW))
         }
         // 네임플레이트(없으면 이름) → Lv + 계급 그림 (완료 화면과 같은 배치) + 형제 선택
         val infoBlock: @Composable () -> Unit = {
-            if (s.plate.isNotBlank()) NamePlate(s.plate, s.name, 300.dp, 32.sp)
-            else Text(s.name, fontSize = 44.sp, fontWeight = FontWeight.Bold)
+            ScaleBox(lay.plate) {
+                if (s.plate.isNotBlank()) NamePlate(s.plate, s.name, 300.dp, 32.sp)
+                else Text(s.name, fontSize = 44.sp, fontWeight = FontWeight.Bold)
+            }
             Spacer(Modifier.height(6.dp))
-            RankHeader(s.level)
+            ScaleBox(lay.rank) { RankHeader(s.level) }
             if (s.grade.isNotBlank()) Text(s.grade, fontSize = 18.sp, color = gameMuted())
             latest[s.id]?.let { Text("오늘 마지막: ${EventType.label(it.type)} ${Repo.timeText(it.clientTime)}", color = gameMuted()) }
             // 형제가 있으면 "같이 왔어요" 선택
@@ -340,18 +346,25 @@ fun KioskScreen(onReset: () -> Unit, preview: Boolean = false) {
             val lastType = latest[s.id]?.type
             Row(Modifier.width(btnW), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 // 등원·하원은 효과음 없이 이름 음성(TTS)만 나와요 (sound = null)
-                BigButton("등원", if (lastType == EventType.IN) theme.primary.copy(alpha = 0.4f) else theme.primary, Modifier.weight(1f)) { attend(s, EventType.IN) }
-                BigButton("하원", if (lastType == EventType.IN) theme.secondary else theme.secondary.copy(alpha = 0.4f), Modifier.weight(1f)) { attend(s, EventType.OUT) }
+                BigButton("등원", if (lastType == EventType.IN) theme.primary.copy(alpha = 0.4f) else theme.primary, Modifier.weight(1f), lay.btn) { attend(s, EventType.IN) }
+                BigButton("하원", if (lastType == EventType.IN) theme.secondary else theme.secondary.copy(alpha = 0.4f), Modifier.weight(1f), lay.btn) { attend(s, EventType.OUT) }
             }
             Spacer(Modifier.height(8.dp))
-            // 내 보석 · 플레이트 · 가방(드레스룸) · 뽑기 → 보관함이 그 탭으로 열려요
-            Row(Modifier.width(btnW), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // 내 보석 · 플레이트 · 가방(드레스룸) · 뽑기 → 보관함이 그 탭으로 열려요 (2×2 로 넓게 놓아서 글씨가 안 잘림)
+            val subH = (56f * lay.sub).dp
+            val subFont = (16f * lay.sub).sp
+            val subIcon = (24f * lay.sub).dp
+            Column(Modifier.width(btnW), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(Triple("내 보석", null, 0), Triple("플레이트", null, 1), Triple("가방", "chest", 3), Triple("뽑기", "gift", 2))
-                    .forEach { (label, icon, tab) ->
-                        val open = { collectionTab = tab; collectionId = s.id }
-                        val m = Modifier.weight(1f).height(56.dp)
-                        if (icon != null) GameButton(label, onClick = open, modifier = m, fontSize = 16.sp, leading = { PixelIcon(icon, 24.dp) })
-                        else GameButton(label, onClick = open, modifier = m, fontSize = 16.sp)
+                    .chunked(2).forEach { pair ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            pair.forEach { (label, icon, tab) ->
+                                val open = { collectionTab = tab; collectionId = s.id }
+                                val m = Modifier.weight(1f).height(subH)
+                                if (icon != null) GameButton(label, onClick = open, modifier = m, fontSize = subFont, leading = { PixelIcon(icon, subIcon) })
+                                else GameButton(label, onClick = open, modifier = m, fontSize = subFont)
+                            }
+                        }
                     }
             }
             GameTextButton("취소", 20.sp) { selected = null; withSibs = emptySet() }
@@ -391,13 +404,17 @@ fun KioskScreen(onReset: () -> Unit, preview: Boolean = false) {
                         lay = lay,
                         onChange = { draft = it },
                         onSave = {
-                            Repo.saveUiLayout(lay); draft = null
+                            Repo.saveUiLayout(lay, landscape); draft = null
                             android.widget.Toast.makeText(ctx, "저장했어요 ✔ 모든 기기에 적용돼요", android.widget.Toast.LENGTH_SHORT).show()
                         },
                         onDefault = { draft = PopupLayout() },
                         onDone = { selected = null; withSibs = emptySet() },
-                        note = if (preview) "이 폰 화면 기준이에요. 위치·팝업 크기는 단말기에서 맞추는 게 정확해요." else "",
-                        modifier = Modifier.align(Alignment.BottomCenter),
+                        note = (if (preview) "이 폰 화면 기준이에요. 위치·팝업 크기는 단말기에서 맞추는 게 정확해요. " else "") + "가로·세로 설정은 따로 저장돼요. 기기를 돌려서 각각 맞춰 주세요.",
+                        modeLabel = if (landscape) "가로" else "세로",
+                        top = panelTop,
+                        onToggleSide = { panelTop = !panelTop },
+                        maxH = (scrH * 0.45f).dp,
+                        modifier = Modifier.align(if (panelTop) Alignment.TopCenter else Alignment.BottomCenter),
                     )
                 }
             }
@@ -490,8 +507,8 @@ private fun StudentCard(s: Student, last: AttendEvent?, onClick: () -> Unit) {
 }
 
 @Composable
-private fun BigButton(text: String, color: Color, modifier: Modifier, onClick: () -> Unit) {
-    GameButton(text, onClick, modifier.height(110.dp), color = color, fontSize = 34.sp, sound = null)
+private fun BigButton(text: String, color: Color, modifier: Modifier, scale: Float = 1f, onClick: () -> Unit) {
+    GameButton(text, onClick, modifier.height((110f * scale).dp), color = color, fontSize = (34f * scale).sp, sound = null)
 }
 
 /** "홍길동 등원" 음성 안내 */
@@ -620,7 +637,22 @@ private fun PadPanel(modifier: Modifier, emptyNotice: Boolean, onSubmit: (String
 }
 
 
-/** 관리자가 출결 팝업을 직접 보면서 크기·위치를 바꾸는 패널 (조절 중에만 팝업 아래에 뜸) */
+/** 안에 넣은 것을 scale 배로 키우거나 줄이고, 차지하는 자리도 같이 바꿔 줌 (이름표·계급 같은 칸별 크기 조절용) */
+@Composable
+private fun ScaleBox(scale: Float, content: @Composable () -> Unit) {
+    Box(
+        Modifier.layout { measurable, constraints ->
+            val p = measurable.measure(constraints)
+            val w = (p.width * scale).roundToInt()
+            val h = (p.height * scale).roundToInt()
+            layout(w, h) {
+                p.placeRelativeWithLayer((w - p.width) / 2, (h - p.height) / 2) { scaleX = scale; scaleY = scale }
+            }
+        },
+    ) { content() }
+}
+
+/** 관리자가 출결 팝업을 직접 보면서 칸별 크기·위치를 바꾸는 패널 (조절 중에만 뜸. 아래 버튼을 가리면 [위로]로 옮김) */
 @Composable
 private fun PopupAdjustPanel(
     lay: PopupLayout,
@@ -629,26 +661,38 @@ private fun PopupAdjustPanel(
     onDefault: () -> Unit,
     onDone: () -> Unit,
     note: String,
+    modeLabel: String,
+    top: Boolean,
+    onToggleSide: () -> Unit,
+    maxH: androidx.compose.ui.unit.Dp,
     modifier: Modifier = Modifier,
 ) {
     var open by remember { mutableStateOf(true) }
     Column(
         modifier.fillMaxWidth().widthIn(max = 480.dp).padding(8.dp)
-            .background(Color(0xF01F2937), RoundedCornerShape(14.dp)).padding(12.dp),
+            .background(Color(0xE61F2937), RoundedCornerShape(14.dp)).padding(12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            androidx.compose.material3.Text("팝업 배치 조절", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            androidx.compose.material3.Text("팝업 조절 · $modeLabel 화면", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
             Spacer(Modifier.weight(1f))
+            androidx.compose.material3.TextButton(onClick = onToggleSide) { androidx.compose.material3.Text(if (top) "아래로" else "위로", color = Color.White) }
             androidx.compose.material3.TextButton(onClick = { open = !open }) { androidx.compose.material3.Text(if (open) "접기" else "펼치기", color = Color.White) }
             androidx.compose.material3.TextButton(onClick = onDone) { androidx.compose.material3.Text("끝내기", color = Color(0xFFFCA5A5)) }
         }
         if (open) {
-            if (note.isNotBlank()) androidx.compose.material3.Text(note, color = Color(0xFFFDE68A), fontSize = 12.sp)
-            AdjustRow("팝업 전체 크기", lay.pop, UiSize.POP_MIN..UiSize.POP_MAX, "${(lay.pop * 100f).toInt()}%") { onChange(lay.copy(pop = it)) }
-            AdjustRow("팝업 좌우 위치", lay.x, -UiSize.X_RANGE..UiSize.X_RANGE, "${lay.x.toInt()}") { onChange(lay.copy(x = it)) }
-            AdjustRow("팝업 상하 위치", lay.y, -UiSize.Y_RANGE..UiSize.Y_RANGE, "${lay.y.toInt()}") { onChange(lay.copy(y = it)) }
-            AdjustRow("캐릭터 박스", lay.box, UiSize.MIN..UiSize.MAX, "${(lay.box * 100f).toInt()}%") { onChange(lay.copy(box = it)) }
-            AdjustRow("캐릭터 크기", lay.char, UiSize.MIN..UiSize.MAX, "${(lay.char * 100f).toInt()}%") { onChange(lay.copy(char = it)) }
+            Column(Modifier.heightIn(max = maxH).verticalScroll(rememberScrollState())) {
+                if (note.isNotBlank()) androidx.compose.material3.Text(note, color = Color(0xFFFDE68A), fontSize = 12.sp)
+                fun pct(v: Float) = "${(v * 100f).toInt()}%"
+                AdjustRow("팝업 전체 크기", lay.pop, UiSize.POP_MIN..UiSize.POP_MAX, pct(lay.pop)) { onChange(lay.copy(pop = it)) }
+                AdjustRow("팝업 좌우 위치", lay.x, -UiSize.X_RANGE..UiSize.X_RANGE, "${lay.x.toInt()}") { onChange(lay.copy(x = it)) }
+                AdjustRow("팝업 상하 위치", lay.y, -UiSize.Y_RANGE..UiSize.Y_RANGE, "${lay.y.toInt()}") { onChange(lay.copy(y = it)) }
+                AdjustRow("캐릭터 박스", lay.box, UiSize.MIN..UiSize.MAX, pct(lay.box)) { onChange(lay.copy(box = it)) }
+                AdjustRow("캐릭터 크기", lay.char, UiSize.MIN..UiSize.CHAR_MAX, pct(lay.char)) { onChange(lay.copy(char = it)) }
+                AdjustRow("네임플레이트", lay.plate, UiSize.ELEM_MIN..UiSize.ELEM_MAX, pct(lay.plate)) { onChange(lay.copy(plate = it)) }
+                AdjustRow("계급·레벨", lay.rank, UiSize.ELEM_MIN..UiSize.ELEM_MAX, pct(lay.rank)) { onChange(lay.copy(rank = it)) }
+                AdjustRow("등원/하원 버튼", lay.btn, UiSize.ELEM_MIN..UiSize.ELEM_MAX, pct(lay.btn)) { onChange(lay.copy(btn = it)) }
+                AdjustRow("보관함 버튼", lay.sub, UiSize.ELEM_MIN..UiSize.ELEM_MAX, pct(lay.sub)) { onChange(lay.copy(sub = it)) }
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
                 androidx.compose.material3.Button(onClick = onSave) { androidx.compose.material3.Text("저장 (모든 기기)") }
                 androidx.compose.material3.OutlinedButton(onClick = onDefault) { androidx.compose.material3.Text("기본값", color = Color.White) }
@@ -660,8 +704,8 @@ private fun PopupAdjustPanel(
 @Composable
 private fun AdjustRow(label: String, value: Float, range: ClosedFloatingPointRange<Float>, shown: String, onChange: (Float) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        androidx.compose.material3.Text(label, color = Color.White, fontSize = 13.sp, modifier = Modifier.width(96.dp))
+        androidx.compose.material3.Text(label, color = Color.White, fontSize = 13.sp, modifier = Modifier.width(100.dp))
         androidx.compose.material3.Slider(value = value.coerceIn(range.start, range.endInclusive), onValueChange = onChange, valueRange = range, modifier = Modifier.weight(1f))
-        androidx.compose.material3.Text(shown, color = Color.White, fontSize = 13.sp, modifier = Modifier.width(48.dp))
+        androidx.compose.material3.Text(shown, color = Color.White, fontSize = 13.sp, modifier = Modifier.width(52.dp))
     }
 }

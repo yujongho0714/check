@@ -241,8 +241,8 @@ fun CollectionDialog(s: Student, startTab: Int = 0, onClose: () -> Unit) {
                 // 기본은 이 기기 화면에 딱 맞게 자동 계산: 창 가로의 약 30% / 캐릭터 높이는 창 높이에서 이름표·계급 자리를 뺀 만큼. 막대는 그 배율
                 val scrW = cfg.screenWidthDp.toFloat()
                 val scrH = cfg.screenHeightDp.toFloat()
-                val leftW = minOf(scrW * 0.94f * 0.30f * UiSize.box * charScale, scrW * 0.5f).dp
-                val charH = (minOf(leftW.value * 0.9f, maxOf(scrH * 0.9f - 250f, 100f) * charScale) * UiSize.char).dp
+                val leftW = minOf(scrW * 0.94f * 0.30f * UiSize.box(scrW > scrH) * charScale, scrW * 0.5f).dp
+                val charH = (minOf(leftW.value * 0.9f, maxOf(scrH * 0.9f - 250f, 100f) * charScale) * UiSize.char(scrW > scrH)).dp
                 Row(Modifier.fillMaxSize()) {
                 // ── 왼쪽 고정: 내 캐릭터(크게) → 네임플레이트 → 레벨·계급 (크기 조절 가능) ──
                 Column(

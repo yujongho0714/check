@@ -13,6 +13,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -65,6 +69,43 @@ fun MyCharacter(
     DressCharacter(student.dressEquip, height, modifier, dir, action, onAttackDone)
 }
 
+/** 캐릭터 무대 배경: 태권도 도장 (벽 + 흐린 태극 문양 + 나무 걸레받이 + 파랑 매트 바닥). 무대 크기에 맞춰 그림 */
+fun Modifier.dojoBackdrop(): Modifier = this.drawBehind {
+    val w = size.width
+    val h = size.height
+    val floorTop = h * 0.58f
+    // 벽 + 세로 나무 판 줄
+    drawRect(Brush.verticalGradient(listOf(Color(0xFFFBF0D4), Color(0xFFEEDDB0)), 0f, floorTop), size = Size(w, floorTop))
+    val plank = w / 10f
+    for (i in 1 until 10) drawRect(Color(0x14000000), topLeft = Offset(plank * i, 0f), size = Size(2f, floorTop))
+    // 태극 문양 (흐리게)
+    val cx = w / 2f
+    val cy = floorTop * 0.48f
+    val r = floorTop * 0.30f
+    drawArc(Color(0x66D7263D), 180f, 180f, true, Offset(cx - r, cy - r), Size(2f * r, 2f * r))
+    drawArc(Color(0x662457A6), 0f, 180f, true, Offset(cx - r, cy - r), Size(2f * r, 2f * r))
+    drawCircle(Color(0x66D7263D), r / 2f, Offset(cx + r / 2f, cy))
+    drawCircle(Color(0x662457A6), r / 2f, Offset(cx - r / 2f, cy))
+    // 나무 걸레받이
+    drawRect(Color(0xFF8A5A2B), topLeft = Offset(0f, floorTop - h * 0.03f), size = Size(w, h * 0.03f))
+    // 바닥 매트 (파랑 체크)
+    val tile = maxOf(h * 0.14f, 8f)
+    var row = 0
+    var y = floorTop
+    while (y < h) {
+        var x = 0f
+        var col = 0
+        while (x < w) {
+            drawRect(if ((row + col) % 2 == 0) Color(0xFF4A8FD9) else Color(0xFF3B7DC6), topLeft = Offset(x, y), size = Size(tile + 1f, tile + 1f))
+            x += tile
+            col++
+        }
+        y += tile
+        row++
+    }
+    drawRect(Color(0x33FFFFFF), topLeft = Offset(0f, floorTop), size = Size(w, 3f))
+}
+
 /** 누르는 순간 onDown, 손을 떼면 onUp 을 부름 (안에 있는 버튼의 클릭은 그대로 두고 지켜보기만 함) */
 private fun Modifier.holdPress(onDown: () -> Unit, onUp: () -> Unit): Modifier = pointerInput(Unit) {
     awaitPointerEventScope {
@@ -89,6 +130,7 @@ fun MyCharacterStage(
     stageWidth: Dp = 300.dp,
     stageHeight: Dp? = null,
     charHeight: Dp? = null,
+    zoom: Float = 1f,   // 걷는 범위는 charHeight 기준 그대로, 실제 그려지는 캐릭터만 이 배율로 크게 (칸 가운데 기준, 무대 밖은 잘림)
     onTouch: () -> Unit = {},
 ) {
     val theme = LocalGameTheme.current
@@ -169,7 +211,7 @@ fun MyCharacterStage(
         Box(
             Modifier.width(stageWidth).height(stageH)
                 .clip(RoundedCornerShape(16.dp))
-                .background(Color(0x22808080))
+                .dojoBackdrop()
                 .pointerInput(maxX, maxY, charWpx, charHpx) {
                     detectTapGestures { o ->
                         touch()
@@ -183,9 +225,14 @@ fun MyCharacterStage(
                     }
                 },
         ) {
-            Box(Modifier.offset { IntOffset(pos.x.roundToInt(), pos.y.roundToInt()) }) {
+            val bigHpx = charHpx * zoom
+            val bigWpx = bigHpx * ratio
+            Box(
+                Modifier.wrapContentSize(Alignment.TopStart, unbounded = true)
+                    .offset { IntOffset((pos.x + (charWpx - bigWpx) / 2f).roundToInt(), (pos.y + (charHpx - bigHpx) / 2f).roundToInt()) },
+            ) {
                 DressCharacter(
-                    equip = student.dressEquip, height = charH,
+                    equip = student.dressEquip, height = charH * zoom,
                     dir = dir, action = action,
                     onAttackDone = { attacking = false },
                 )
