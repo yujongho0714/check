@@ -79,8 +79,10 @@ fun AppRoot() {
     DisposableEffect(loggedIn) {
         val reg = if (loggedIn) AssetPack.startSync(ctx) else null
         val lootReg = if (loggedIn) Repo.startLootSync() else null // 보석·네임플레이트 확률
+        val gemRarityReg = if (loggedIn) Repo.startGemRaritySync() else null // 보석별 등급
+        val dogamReg = if (loggedIn) Repo.startDogamSync() else null // 도감
         val prizeReg = if (loggedIn) Repo.startPrizeSync() else null // 상품 목록·확률
-        onDispose { reg?.remove(); lootReg?.remove(); prizeReg?.remove() }
+        onDispose { reg?.remove(); lootReg?.remove(); gemRarityReg?.remove(); dogamReg?.remove(); prizeReg?.remove() }
     }
 
     UpdatePrompt() // 앱을 켜면 새 버전 확인 → "업데이트할까요?"

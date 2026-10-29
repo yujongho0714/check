@@ -22,6 +22,11 @@ import java.util.Locale
  *  config/messages      : 문자 문구 / notices/{날짜} : 그날 안내
  *  config/holidays      : days{ "2026-12-31": "도장 휴관" }
  *  config/loot          : gemChance(%), plateChance(%)  ← 보석·네임플레이트 얻을 확률
+ *                         dressChance(%) 출석 옷 드롭, rarityWeights{normal,rare,epic,unique,legendary} 등급별 비율,
+ *                         gachaPrice 뽑기 1회 골드, dupRefund 중복 환급 골드
+ *  config/dogam          : sets[ {id, name, gems["001",…](1~5개), goldIn, goldOut} ]  ← 도감 (보석 세트 추가 골드)
+ *  config/gemRarity     : r{ "001": "rare", … }  ← 보석별 등급 (없으면 노말)
+ *                         on["001", …]  ← 관리자가 사용 지정한 보석 (칸이 없으면 396종 전부 사용)
  *  prizes/{id}          : name, chance(%), message, stock(없으면 무제한), photo(base64)  ← 상품(마이쮸 등)
  *  wins/{id}            : studentId, name, prizeId, prizeName, day, clientTime, paid(false=지급 대기)  ← 당첨 기록
  *  payouts/{winId}      : winId, studentId, name, prizeName, winTime, paidAt, payDay  ← 지급내역 (지급 누를 때 기록)
@@ -36,6 +41,8 @@ object Repo {
     fun statusDoc(which: String) = db.collection("status").document(which)
     fun holidaysDoc() = db.collection("config").document("holidays")
     fun lootDoc() = db.collection("config").document("loot")
+    fun gemRarityDoc() = db.collection("config").document("gemRarity")
+    fun dogamDoc() = db.collection("config").document("dogam")
     fun prizes() = db.collection("prizes")
     fun wins() = db.collection("wins")
 
@@ -88,6 +95,12 @@ object Repo {
             gems = strList(d.get("gems")),
             plates = strList(d.get("plates")),
             plate = d.getString("plate") ?: "",
+            gold = (d.getLong("gold") ?: 0L).toInt(),
+            gem = d.getString("gem") ?: "",
+            dress = strList(d.get("dress")),
+            dressEquip = (d.get("dressEquip") as? Map<*, *>)
+                ?.mapNotNull { e -> val k = e.key as? String; val v = e.value as? String; if (k != null && v != null) k to v else null }
+                ?.toMap() ?: emptyMap(),
         )
         // 나이가 있으면 올해 학년을 계산해서 보여줌 (저장된 grade 글자는 옛 값일 수 있음)
         if (base.age > 0 && base.ageYear > 0) return base.copy(grade = GradeCalc.labelOf(base.curAge))
@@ -182,9 +195,26 @@ object Repo {
         if (p.fields.isEmpty() || s.id.isBlank()) return base
         val gem = Loot.rollGem(s.gems)
         val plate = Loot.rollPlate(s.plates)
-        val prize = Prizes.roll(s.id)
         val f = HashMap<String, Any>(p.fields)
-        if (gem != null) f["gems"] = FieldValue.arrayUnion(gem)
+        if (gem != null) {
+            f["gems"] = FieldValue.arrayUnion(gem)
+            if (s.gem.isBlank()) f["gem"] = gem   // 처음 얻은 보석은 자동 장착
+        }
+        // 장착한 보석(처음 얻은 보석이면 방금 자동 장착된 것)의 골드 지급 — 등원/하원마다 한 번 (위 early return 덕분에 같은 날 중복 지급 없음)
+        val equippedGem = s.gem.ifBlank { gem ?: "" }
+        val gold = Loot.goldFor(equippedGem)
+        // 옷 드롭: 새 옷이면 추가, 이미 가진 옷이면 환급 골드 (뽑기와 같은 규칙)
+        val dressKey = Loot.rollDress()
+        val dressDup = dressKey != null && dressKey in s.dress
+        val dressRefund = if (dressDup) Loot.dupRefund.coerceAtLeast(0) else 0
+        if (dressKey != null && !dressDup) f["dress"] = FieldValue.arrayUnion(dressKey)
+        // 도감: 방금 얻은 보석까지 포함해서, 전부 모은 도감의 등원/하원 추가 골드
+        val dogamGold = Dogam.bonusFor(type, s.gems + listOfNotNull(gem))
+        val totalGold = gold + dressRefund + dogamGold
+        if (totalGold > 0) f["gold"] = FieldValue.increment(totalGold.toLong())
+        // 상품 추첨: 일반 상품 → 안 맞았고 장착 보석이 레전드리면 레전드리 보너스 상품 한 번 더
+        val prize = Prizes.roll(s.id)
+            ?: if (equippedGem.isNotBlank() && Loot.rarityOf(equippedGem) == Rarity.LEGENDARY) Prizes.rollLegendary(s.id) else null
         if (plate != null) {
             f["plates"] = FieldValue.arrayUnion(plate)
             if (s.plate.isBlank()) f["plate"] = plate
@@ -192,7 +222,8 @@ object Repo {
         students().document(s.id).update(f)
         if (prize != null) { Prizes.consume(prize.id); Prizes.markWon(s.id); runCatching { recordWin(s, prize) } }
         return base.copy(
-            gemId = gem, plateId = plate,
+            gemId = gem, plateId = plate, gold = gold, dogamGold = dogamGold,
+            dressKey = dressKey, dressDup = dressDup, dressRefund = dressRefund,
             prize = prize?.let { PrizeWin(it.id, it.name, it.message, it.photo) },
             equipped = if (s.plate.isBlank() && plate != null) plate else s.plate,
         )
@@ -356,6 +387,13 @@ object Repo {
         // getDouble 은 정수(10)로 저장돼 있어도 읽혀요. 값이 없을 때만 기본값
         Loot.gemChance = (snap.getDouble("gemChance") ?: Loot.DEFAULT_GEM_CHANCE).coerceIn(0.0, 100.0)
         Loot.plateChance = (snap.getDouble("plateChance") ?: Loot.DEFAULT_PLATE_CHANCE).coerceIn(0.0, 100.0)
+        Loot.dressChance = (snap.getDouble("dressChance") ?: Loot.DEFAULT_DRESS_CHANCE).coerceIn(0.0, 100.0)
+        Loot.gachaPrice = (snap.getLong("gachaPrice") ?: Loot.DEFAULT_GACHA_PRICE.toLong()).toInt().coerceAtLeast(0)
+        Loot.dupRefund = (snap.getLong("dupRefund") ?: Loot.DEFAULT_DUP_REFUND.toLong()).toInt().coerceAtLeast(0)
+        Prizes.legendaryChance = (snap.getDouble("legendPrizeChance") ?: 0.0).coerceIn(0.0, 100.0)
+        Prizes.legendaryIds = (snap.get("legendPrizeIds") as? List<*>)?.mapNotNull { it as? String }?.toSet() ?: emptySet()
+        val w = snap.get("rarityWeights") as? Map<*, *>
+        Loot.rarityWeights = Rarity.values().associateWith { r -> ((w?.get(r.code) as? Number)?.toDouble() ?: r.defaultWeight).coerceAtLeast(0.0) }
         val fromCache = snap.metadata.isFromCache
         Loot.syncNote = (if (fromCache) "기기에 저장된 값 사용 중 (서버 확인 전) · " else "서버 값 적용됨 · ") + timeText(System.currentTimeMillis())
     }
@@ -365,6 +403,8 @@ object Repo {
      * 출결번호를 입력하는 순간 + 관리자 화면의 [서버에서 다시 받기] 에서 부름. 인터넷이 없으면 조용히 무시.
      */
     fun refreshLootNow() {
+        gemRarityDoc().get(com.google.firebase.firestore.Source.SERVER)
+            .addOnSuccessListener { applyGemRarity(it) }
         lootDoc().get(com.google.firebase.firestore.Source.SERVER)
             .addOnSuccessListener { applyLoot(it) }
             .addOnFailureListener { Loot.syncNote = "⚠ 서버에서 못 받았어요 (인터넷 확인) · 지금은 기기 값 사용" }
@@ -374,6 +414,153 @@ object Repo {
 
     fun saveLootConfig(gem: Double, plate: Double) {
         lootDoc().set(mapOf("gemChance" to gem.coerceIn(0.0, 100.0), "plateChance" to plate.coerceIn(0.0, 100.0)), SetOptions.merge())
+    }
+
+    // ---------- 드레스업: 등급·뽑기·골드 ----------
+    /** 보석별 등급을 지켜보다가 Loot 에 반영 (로그인하면 시작, 모든 기기 공통) */
+    fun startGemRaritySync(): ListenerRegistration = gemRarityDoc().addSnapshotListener { snap, err ->
+        if (err != null || snap == null) return@addSnapshotListener
+        applyGemRarity(snap)
+    }
+
+    private fun applyGemRarity(snap: DocumentSnapshot) {
+        val m = snap.get("r") as? Map<*, *>
+        Loot.gemRarity = m?.mapNotNull { e ->
+            val id = e.key as? String ?: return@mapNotNull null
+            val r = Rarity.ofOrNull(e.value as? String) ?: return@mapNotNull null
+            id to r
+        }?.toMap() ?: emptyMap()
+        // on 칸이 있으면 그 보석만 사용, 없으면(지정한 적 없음) 전부 사용
+        val on = snap.get("on") as? List<*>
+        Loot.gemEnabled = on?.mapNotNull { it as? String }?.toSet()
+    }
+
+    // ───────────── 도감 (config/dogam) ─────────────
+    fun startDogamSync(): ListenerRegistration = dogamDoc().addSnapshotListener { snap, err ->
+        if (err != null || snap == null) return@addSnapshotListener
+        val arr = snap.get("sets") as? List<*>
+        Dogam.sets = arr?.mapNotNull { e ->
+            val m = e as? Map<*, *> ?: return@mapNotNull null
+            val id = m["id"] as? String ?: return@mapNotNull null
+            val gems = (m["gems"] as? List<*>)?.mapNotNull { it as? String }.orEmpty().take(Dogam.MAX_GEMS)
+            DogamSet(
+                id, (m["name"] as? String).orEmpty(), gems,
+                ((m["goldIn"] as? Number)?.toInt() ?: 0).coerceAtLeast(0),
+                ((m["goldOut"] as? Number)?.toInt() ?: 0).coerceAtLeast(0),
+            )
+        }.orEmpty()
+    }
+
+    /** 관리자: 도감 목록 전체 저장 (추가·수정·삭제 모두 이걸로) */
+    fun saveDogam(list: List<DogamSet>) {
+        Dogam.sets = list   // 이 기기에는 바로 반영
+        dogamDoc().set(mapOf("sets" to list.map {
+            mapOf("id" to it.id, "name" to it.name, "gems" to it.gems, "goldIn" to it.goldIn.toLong(), "goldOut" to it.goldOut.toLong())
+        }))
+    }
+
+    /** 관리자: 고른 보석들의 사용을 한꺼번에 켜기(on=true) / 끄기(on=false) */
+    fun saveGemEnabled(ids: Collection<String>, on: Boolean) {
+        if (ids.isEmpty()) return
+        val cur = Loot.gemEnabled
+        if (cur == null) {
+            if (on) return   // 지정한 적이 없으면 이미 전부 사용중
+            // 처음 지정: 전부 - 끌 보석 = 사용할 보석 목록으로 저장
+            gemRarityDoc().set(mapOf("on" to (Loot.allGems.toSet() - ids.toSet()).sorted()), SetOptions.merge())
+        } else {
+            val v = if (on) FieldValue.arrayUnion(*ids.toTypedArray()) else FieldValue.arrayRemove(*ids.toTypedArray())
+            gemRarityDoc().set(mapOf<String, Any>("on" to v), SetOptions.merge())
+        }
+    }
+
+    /** 관리자: "이 보석들만 사용" (나머지는 전부 끔) */
+    fun saveGemEnabledOnly(ids: Collection<String>) {
+        gemRarityDoc().set(mapOf("on" to ids.toSet().sorted()), SetOptions.merge())
+    }
+
+    /** 관리자: 지정 풀기 → 다시 396종 전부 사용 */
+    fun clearGemEnabled() {
+        gemRarityDoc().set(mapOf<String, Any>("on" to FieldValue.delete()), SetOptions.merge())
+    }
+
+    /** 관리자: 고른 보석들을 한 번에 같은 등급으로 */
+    fun saveGemRarity(ids: Collection<String>, rarity: Rarity) {
+        if (ids.isEmpty()) return
+        gemRarityDoc().set(mapOf("r" to ids.associateWith { rarity.code }), SetOptions.merge())
+    }
+
+    /** 관리자: 등급별 획득 비율 */
+    fun saveRarityWeights(w: Map<Rarity, Double>) {
+        lootDoc().set(mapOf("rarityWeights" to w.entries.associate { it.key.code to it.value.coerceAtLeast(0.0) }), SetOptions.merge())
+    }
+
+    /** 관리자: 레전드리 보석 장착자가 받는 보너스 상품 (확률 %, 상품 id 목록). 확률 0 이면 꺼짐 */
+    fun saveLegendaryPrize(chance: Double, prizeIds: Collection<String>) {
+        lootDoc().set(mapOf(
+            "legendPrizeChance" to chance.coerceIn(0.0, 100.0),
+            "legendPrizeIds" to prizeIds.toSet().sorted(),
+        ), SetOptions.merge())
+    }
+
+    /** 관리자: 뽑기 가격 / 중복 환급 / 출석 옷 드롭 확률 */
+    fun saveGachaConfig(price: Int, refund: Int, dressChance: Double) {
+        lootDoc().set(mapOf(
+            "gachaPrice" to price.coerceAtLeast(0),
+            "dupRefund" to refund.coerceAtLeast(0),
+            "dressChance" to dressChance.coerceIn(0.0, 100.0),
+        ), SetOptions.merge())
+    }
+
+    /** 장착 보석 바꾸기 ("" 이면 해제) */
+    fun setGem(id: String, gemId: String) {
+        students().document(id).update(mapOf("gem" to gemId))
+    }
+
+    /** 골드 더하기/빼기 (여러 기기에서 동시에 해도 안전하게 서버에서 계산) */
+    fun addGold(id: String, delta: Int) {
+        if (delta != 0) students().document(id).update(mapOf<String, Any>("gold" to FieldValue.increment(delta.toLong())))
+    }
+
+    /** 뽑기/드롭 결과 반영: 새 옷 추가 + 골드 변화(뽑기 비용은 -, 환급은 +) */
+    fun grantDress(id: String, newKeys: List<String>, goldDelta: Int) {
+        val f = HashMap<String, Any>()
+        if (newKeys.isNotEmpty()) f["dress"] = FieldValue.arrayUnion(*newKeys.toTypedArray())
+        if (goldDelta != 0) f["gold"] = FieldValue.increment(goldDelta.toLong())
+        if (f.isNotEmpty()) students().document(id).update(f)
+    }
+
+    /**
+     * 뽑기 (10단계). 서버에 저장된 골드·옷 기준으로 한 번에 처리해요 (여러 기기에서 눌러도 골드가 마이너스가 안 됨).
+     * count > 0 : 그 횟수만큼 / count <= 0 : "전부 뽑기" = 가진 골드로 가능한 만큼 (최대 100번)
+     * 끝나면 onDone(결과, null), 못 뽑으면 onDone(null, 이유 글)
+     */
+    fun pullDress(id: String, count: Int, price: Int, refund: Int, onDone: (Dress.PullResult?, String?) -> Unit) {
+        val ref = students().document(id)
+        db.runTransaction { tx ->
+            val d = tx.get(ref)
+            val gold = (d.getLong("gold") ?: 0L).toInt()
+            val owned = strList(d.get("dress"))
+            val n = if (count > 0) count else if (price > 0) (gold / price).coerceAtMost(100) else 100
+            if (n <= 0 || gold < n * price) return@runTransaction null
+            val r = Dress.pull(owned, n, refund)
+            val f = HashMap<String, Any>()
+            if (r.newKeys.isNotEmpty()) f["dress"] = FieldValue.arrayUnion(*r.newKeys.toTypedArray())
+            val delta = r.refund - n * price
+            if (delta != 0) f["gold"] = FieldValue.increment(delta.toLong())
+            if (f.isNotEmpty()) tx.update(ref, f)
+            r
+        }.addOnSuccessListener { r -> if (r == null) onDone(null, "골드가 모자라요") else onDone(r, null) }
+         .addOnFailureListener { onDone(null, "인터넷을 확인하고 다시 눌러 주세요") }
+    }
+
+    /** 입은 옷 전체를 한 번에 바꾸기 (모두 벗기 = 빈 map, 랜덤 코디 등) */
+    fun setDressEquipAll(id: String, equip: Map<String, String>) {
+        students().document(id).update(mapOf<String, Any>("dressEquip" to equip))
+    }
+
+    /** 옷 입기/벗기 (key 가 "" 이면 벗기) */
+    fun setDressEquip(id: String, cat: String, key: String) {
+        students().document(id).update(mapOf<String, Any>("dressEquip.$cat" to (if (key.isBlank()) FieldValue.delete() else key)))
     }
 
     // ---------- 상품(마이쮸 등) ----------

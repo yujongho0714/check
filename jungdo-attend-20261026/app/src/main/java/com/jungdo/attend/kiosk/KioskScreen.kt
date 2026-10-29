@@ -66,8 +66,12 @@ import com.jungdo.attend.data.Rank
 import com.jungdo.attend.data.rememberCustomHolidays
 import com.jungdo.attend.ui.AwardRow
 import com.jungdo.attend.ui.CollectionDialog
+import com.jungdo.attend.ui.DressRow
+import com.jungdo.attend.ui.GoldRow
 import com.jungdo.attend.ui.LootRow
 import com.jungdo.attend.ui.PrizeRow
+import com.jungdo.attend.ui.MyCharacter
+import com.jungdo.attend.ui.MyCharacterStage
 import com.jungdo.attend.ui.NamePlate
 import com.jungdo.attend.ui.RankHeader
 import com.jungdo.attend.ui.RankImage
@@ -100,6 +104,7 @@ import com.jungdo.attend.ui.game.gamePageBackground
 import androidx.compose.ui.platform.LocalConfiguration
 import kotlinx.coroutines.delay
 import java.util.Locale
+import com.jungdo.attend.ui.game.PixelText
 
 /** 이름 첫 글자의 초성 (쌍자음은 기본 자음으로) */
 private val CHO = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ"
@@ -135,7 +140,9 @@ fun KioskScreen(onReset: () -> Unit) {
     var dup by remember { mutableStateOf<Pair<Student, String>?>(null) }
     var done by remember { mutableStateOf<Pair<String, String>?>(null) }
     var doneAwards by remember { mutableStateOf<List<AwardResult>>(emptyList()) }
+    var doneStudents by remember { mutableStateOf<List<Student>>(emptyList()) }   // 완료 화면에 캐릭터를 보여 줄 원생들
     var collectionId by remember { mutableStateOf<String?>(null) }   // 보관함을 열어 본 원생
+    var touchTick by remember { mutableStateOf(0) }                  // 캐릭터를 조작할 때마다 올라감 (자동 닫힘 시간 다시 시작)
     var showPin by remember { mutableStateOf(false) }
     var showAdmin by remember { mutableStateOf(false) }
     var padChoices by remember { mutableStateOf<List<Student>?>(null) }
@@ -153,7 +160,7 @@ fun KioskScreen(onReset: () -> Unit) {
             delay(60_000)
         }
     }
-    LaunchedEffect(done) { if (done != null) { delay(if (doneAwards.any { it.prize != null }) 10_000 else if (doneAwards.any { it.gemId != null || it.plateId != null }) 6_000 else 3_500); done = null } }
+    LaunchedEffect(done) { if (done != null) { delay(if (doneAwards.any { it.prize != null }) 10_000 else if (doneAwards.any { it.gemId != null || it.plateId != null || it.dressKey != null }) 6_000 else 3_500); done = null } }
 
     if (showAdmin) {
         AdminScreen(students = allStudents, todayEvents = events, onClose = { showAdmin = false }, onReset = onReset)
@@ -177,6 +184,7 @@ fun KioskScreen(onReset: () -> Unit) {
         val names = group.joinToString(", ") { it.name }
         selected = null; dup = null; withSibs = emptySet()
         doneAwards = awards
+        doneStudents = group
         done = names to type
         if (prefs.ttsOn) tts?.speak("$names ${EventType.label(type)}", TextToSpeech.QUEUE_FLUSH, null, "att")
     }
@@ -210,7 +218,7 @@ fun KioskScreen(onReset: () -> Unit) {
                 )
                 Spacer(Modifier.weight(1f))
                 val ok = server?.running == true && isOnline(server?.lastSeen, now)
-                Text(if (ok) "● 문자 연결" else "● 문자폰 꺼짐", color = if (ok) Color(0xFF86EFAC) else Color(0xFFFCA5A5), fontSize = 16.sp)
+                PixelText(if (ok) "{dot_on} 문자 연결" else "{dot_off} 문자폰 꺼짐", color = if (ok) Color(0xFF86EFAC) else Color(0xFFFCA5A5), fontSize = 16.sp)
                 Spacer(Modifier.width(20.dp))
                 Text(Repo.timeText(now), color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold, fontFamily = gameNumFont())
             }
@@ -235,8 +243,14 @@ fun KioskScreen(onReset: () -> Unit) {
                     if (doneAwards.isEmpty()) Text(name, fontSize = 48.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     // 계급 · 이름 (계급 그림은 항상 이름 왼쪽) · 경험치
                     doneAwards.forEach { a ->
-                        Box(Modifier.padding(top = 16.dp)) { AwardRow(a) }
+                        // 내 캐릭터 (이름이 같은 원생을 찾아서 지금 입은 옷 그대로)
+                        doneStudents.firstOrNull { it.name == a.name }?.let { st ->
+                            Box(Modifier.padding(top = 12.dp)) { MyCharacter(allStudents.firstOrNull { it.id == st.id } ?: st, 110.dp) }
+                        }
+                        Box(Modifier.padding(top = 8.dp)) { AwardRow(a) }
+                        Box(Modifier.padding(top = 10.dp)) { GoldRow(a) }
                         Box(Modifier.padding(top = 10.dp)) { LootRow(a) }
+                        Box(Modifier.padding(top = 10.dp)) { DressRow(a) }
                         Box(Modifier.padding(top = 10.dp)) { PrizeRow(a) }
                     }
                 }
@@ -247,10 +261,13 @@ fun KioskScreen(onReset: () -> Unit) {
     // ── 등원/하원 선택 팝업 ──
     selected?.let { s0 ->
         val s = allStudents.firstOrNull { it.id == s0.id } ?: s0   // 보관함에서 바꾼 네임플레이트가 바로 보이게
-        LaunchedEffect(s0, withSibs, collectionId) { if (collectionId == null) { delay(15_000); selected = null; withSibs = emptySet() } } // 15초 동안 안 누르면 자동 닫힘
+        LaunchedEffect(s0, withSibs, collectionId, touchTick) { if (collectionId == null) { delay(15_000); selected = null; withSibs = emptySet() } } // 15초 동안 안 누르면 자동 닫힘
         Dialog(onDismissRequest = { selected = null; withSibs = emptySet() }) {
             GamePanel(Modifier.widthIn(min = 340.dp)) {
                 run {
+                    // 내 캐릭터 (걷기·공격 조작 가능, 조작하는 동안은 창이 안 닫힘)
+                    MyCharacterStage(s, onTouch = { touchTick++ })
+                    Spacer(Modifier.height(12.dp))
                     // 네임플레이트(없으면 이름) → Lv + 계급 그림 (완료 화면과 같은 배치)
                     if (s.plate.isNotBlank()) NamePlate(s.plate, s.name, 300.dp, 32.sp)
                     else Text(s.name, fontSize = 44.sp, fontWeight = FontWeight.Bold)

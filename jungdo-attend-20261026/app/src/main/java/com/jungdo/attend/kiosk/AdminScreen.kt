@@ -55,6 +55,8 @@ import com.jungdo.attend.ui.game.LocalGameTheme
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.CompositionLocalProvider
 import com.jungdo.attend.ui.BadRed
+import com.jungdo.attend.ui.DogamTab
+import com.jungdo.attend.ui.GemRarityTab
 import com.jungdo.attend.ui.LootSettings
 import com.jungdo.attend.ui.PrizeSettings
 import com.jungdo.attend.ui.MessageSettings
@@ -64,12 +66,13 @@ import com.jungdo.attend.ui.OkGreen
 import com.jungdo.attend.ui.Pill
 import com.jungdo.attend.ui.SectionTitle
 import com.jungdo.attend.ui.StatusChip
+import com.jungdo.attend.ui.game.PixelText
 
 /** 키오스크 관리자 화면: 원생 관리 / 일괄 등록 / 오늘 기록 / 문자·안내 / 설정 */
 @Composable
 fun AdminScreen(students: List<Student>, todayEvents: List<AttendEvent>, onClose: () -> Unit, onReset: () -> Unit) {
     var tab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("원생 관리", "일괄 등록", "오늘 기록", "문자·안내", "설정")
+    val tabs = listOf("원생 관리", "일괄 등록", "오늘 기록", "문자·안내", "보석 등급", "도감", "설정")
     BackHandler { onClose() }
 
     val gt = LocalGameTheme.current
@@ -81,7 +84,7 @@ fun AdminScreen(students: List<Student>, todayEvents: List<AttendEvent>, onClose
         Row(Modifier.fillMaxWidth().background(barColor).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("관리자", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.weight(1f))
-            TextButton(onClick = onClose) { Text("출석 화면으로 ✕", color = Color.White, fontSize = 18.sp) }
+            TextButton(onClick = onClose) { PixelText("출석 화면으로 ✕", color = Color.White, fontSize = 18.sp) }
         }
         ScrollableTabRow(
             selectedTabIndex = tab, edgePadding = 8.dp,
@@ -103,6 +106,8 @@ fun AdminScreen(students: List<Student>, todayEvents: List<AttendEvent>, onClose
                         Spacer(Modifier.height(24.dp))
                         PrizeSettings()
                     }
+                    4 -> GemRarityTab()
+                    5 -> DogamTab()
                     else -> SettingsTab(onReset)
                 }
             }

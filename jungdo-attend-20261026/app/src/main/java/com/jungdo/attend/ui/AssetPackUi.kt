@@ -22,8 +22,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jungdo.attend.data.AssetPack
 import kotlinx.coroutines.launch
+import com.jungdo.attend.ui.game.PixelText
 
-/** 계급 · 보석 · 네임플레이트 · UI 테마 그림을 zip 으로 올리는 곳 (관리자 설정 / 관장님 폰 설정 둘 다에 들어가요) */
+/** 계급 · 보석 · 네임플레이트 · UI 테마 · 드레스업 옷 그림을 zip 으로 올리는 곳 (관리자 설정 / 관장님 폰 설정 둘 다에 들어가요) */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AssetPackSettings() {
@@ -48,14 +49,14 @@ fun AssetPackSettings() {
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SectionTitle("그림 올리기 (계급 · 보석 · 네임플레이트 · UI)")
+        SectionTitle("그림 올리기 (계급 · 보석 · 네임플레이트 · UI · 옷)")
         Text(
             "그림 zip 파일을 고르면 이 앱에 적용되고, 같은 계정으로 로그인한 다른 기기(공기계)도 자동으로 받아가요. 한 번에 여러 개 골라도 돼요.",
             color = Muted, fontSize = 13.sp,
         )
         Text(
             if (stats.empty) "지금: 올린 그림 없음 (앱 기본)"
-            else "지금: 계급 ${stats.rank}장 · 보석 ${stats.gem}장 · 네임플레이트 ${stats.plate}장 · 테마 ${stats.themes.size}개",
+            else "지금: 계급 ${stats.rank}장 · 보석 ${stats.gem}장 · 네임플레이트 ${stats.plate}장 · 옷 그림 ${stats.dress}장 · 테마 ${stats.themes.size}개",
             fontSize = 14.sp,
         )
 
@@ -82,7 +83,7 @@ fun AssetPackSettings() {
             }
         }
 
-        if (msg.isNotBlank()) Text(msg, color = if (msg.startsWith("실패") || msg.contains("⚠️")) BadRed else OkGreen, fontSize = 14.sp)
+        if (msg.isNotBlank()) PixelText(msg, color = if (msg.startsWith("실패") || msg.contains("⚠️")) BadRed else OkGreen, fontSize = 14.sp)
     }
 
     if (confirmClear) {

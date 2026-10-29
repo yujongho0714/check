@@ -17,6 +17,11 @@ data class AwardResult(
     val plateId: String? = null,   // 이번에 얻은 네임플레이트
     val equipped: String = "",     // 지금 쓰고 있는 네임플레이트 (이름 뒤에 깔아 줌)
     val prize: PrizeWin? = null,   // 이번에 당첨된 상품
+    val gold: Int = 0,             // 이번에 받은 골드 (장착한 보석 능력)
+    val dressKey: String? = null,  // 이번에 나온 옷 ("coat:012"). 이미 가진 옷이어도 나온 옷은 여기 들어감
+    val dressDup: Boolean = false, // 그 옷이 이미 가진 옷이라 골드로 환급됐는지
+    val dressRefund: Int = 0,      // 중복이라 돌려받은 골드
+    val dogamGold: Int = 0,        // 활성화된 도감으로 받은 추가 골드 (gold 와 별도)
 ) {
     val levelBefore: Int get() = Rank.levelOf(expBefore)
     val level: Int get() = Rank.levelOf(expAfter)

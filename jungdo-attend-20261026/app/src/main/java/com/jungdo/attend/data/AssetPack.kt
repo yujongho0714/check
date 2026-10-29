@@ -33,16 +33,17 @@ import java.util.zip.ZipOutputStream
 
 /*
  * ───────────────────────────────────────────────────────────────
- *  이미지 팩 (계급 · 보석 · 네임플레이트 · UI 테마)
+ *  이미지 팩 (계급 · 보석 · 네임플레이트 · UI 테마 · 드레스업 옷)
  *
  *  - 그림은 앱 안에 넣지 않고, 앱 화면에서 zip 으로 올려요.
  *  - 올린 그림은 이 기기의 filesDir/assetpack/ 에 저장돼요. (앱 기본 assets 보다 먼저 찾아요)
  *  - 올리면 같은 도장 계정(Firestore)에도 저장돼서, 다른 기기(공기계)가 자동으로 받아가요.
- *  - zip 안 폴더 이름: rank / gem / plate / theme  (그 앞에 다른 폴더가 있어도 돼요)
+ *  - zip 안 폴더 이름: rank / gem / plate / theme / dressup  (그 앞에 다른 폴더가 있어도 돼요)
+ *  - dressup 폴더: dress.json, base.webp, coat/ armor/ helmet/ hair/ shield/ weapon/ shoes/ cape/ (앱 기본 옷 그림보다 먼저 써요)
  * ───────────────────────────────────────────────────────────────
  */
 object AssetPack {
-    private val ROOTS = setOf("rank", "gem", "plate", "theme")
+    private val ROOTS = setOf("rank", "gem", "plate", "theme", "dressup")
     private val EXT = setOf("png", "webp", "jpg", "jpeg", "json", "txt")
     private const val MAX_TOTAL = 150L * 1024 * 1024
     private const val MAX_ENTRIES = 20000
@@ -98,14 +99,15 @@ object AssetPack {
     }
 
     // ───────────── 지금 상태 ─────────────
-    class Stats(val rank: Int, val gem: Int, val plate: Int, val themes: List<String>) {
-        val empty get() = rank == 0 && gem == 0 && plate == 0 && themes.isEmpty()
+    class Stats(val rank: Int, val gem: Int, val plate: Int, val themes: List<String>, val dress: Int = 0) {
+        val empty get() = rank == 0 && gem == 0 && plate == 0 && themes.isEmpty() && dress == 0
     }
 
     fun stats(ctx: Context): Stats {
         fun n(d: String) = File(dir(ctx), d).listFiles()?.count { it.isFile } ?: 0
         val th = File(dir(ctx), "theme").listFiles()?.filter { it.isDirectory }?.map { it.name }.orEmpty().sorted()
-        return Stats(n("rank"), n("gem"), n("plate"), th)
+        val dress = File(dir(ctx), "dressup").walkTopDown().count { it.isFile && it.extension.lowercase() == "webp" }
+        return Stats(n("rank"), n("gem"), n("plate"), th, dress)
     }
 
     // ───────────── zip 올리기 (이 기기에 풀고 → 계정에 저장) ─────────────
@@ -122,7 +124,7 @@ object AssetPack {
                     ins.use { extract(it, dir(ctx), c) }
                     files += c.files; skipped += c.skipped
                 }
-                if (files == 0) return@withContext "인식된 그림이 없어요. zip 안에 rank / gem / plate / theme 폴더가 있어야 해요. (건너뜀 $skipped)"
+                if (files == 0) return@withContext "인식된 그림이 없어요. zip 안에 rank / gem / plate / theme / dressup 폴더가 있어야 해요. (건너뜀 $skipped)"
                 bump()
                 say("계정에 저장하는 중… (다른 기기가 받아가요)")
                 val ok = push(ctx, say)
@@ -183,6 +185,7 @@ object AssetPack {
     private fun bump() {
         runCatching { com.jungdo.attend.ui.RankThemes.clear() }
         runCatching { com.jungdo.attend.ui.clearAssetCache() }
+        runCatching { com.jungdo.attend.ui.DressAssets.clear() }
         version += 1
     }
 

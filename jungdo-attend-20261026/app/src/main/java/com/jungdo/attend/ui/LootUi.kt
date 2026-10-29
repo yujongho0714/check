@@ -7,6 +7,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -74,6 +75,8 @@ import com.jungdo.attend.data.Loot
 import com.jungdo.attend.data.Repo
 import com.jungdo.attend.data.Student
 import kotlinx.coroutines.delay
+import com.jungdo.attend.ui.game.PixelText
+import com.jungdo.attend.ui.game.PixelIcon
 
 private val assetCache = LruCache<String, ImageBitmap>(160)
 
@@ -126,6 +129,29 @@ fun NamePlate(plateId: String, name: String, width: Dp, fontSize: TextUnit, lock
     }
 }
 
+/** 키오스크 완료 화면: 이번에 받은 골드 (장착한 보석 능력) */
+@Composable
+fun GoldRow(a: AwardResult) {
+    val total = a.gold + a.dogamGold
+    if (total <= 0) return
+    val pop = remember(a) { Animatable(0.3f) }
+    LaunchedEffect(a) {
+        delay(600)
+        pop.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow))
+    }
+    Row(
+        Modifier.graphicsLayer { scaleX = pop.value; scaleY = pop.value; alpha = ((pop.value - 0.3f) / 0.7f).coerceIn(0f, 1f) },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        PixelIcon("coin", 44.dp)
+        Column {
+            Text("+$total 골드", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFDE68A))
+            if (a.dogamGold > 0) PixelText("📖 도감 보너스 +${a.dogamGold}", fontSize = 15.sp, color = Color(0xFF86EFAC))
+        }
+    }
+}
+
 /** 키오스크 완료 화면: 이번에 얻은 보석 / 네임플레이트 */
 @Composable
 fun LootRow(a: AwardResult) {
@@ -156,39 +182,114 @@ fun LootRow(a: AwardResult) {
     }
 }
 
+/** 키오스크 완료 화면: 출석 때 나온 옷 (새 옷이면 "옷 획득!", 이미 가진 옷이면 환급 골드) */
+@Composable
+fun DressRow(a: AwardResult) {
+    val key = a.dressKey ?: return
+    val pack = rememberDressPack()
+    val pop = remember(a) { Animatable(0.3f) }
+    LaunchedEffect(a) {
+        delay(1200)
+        pop.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow))
+    }
+    val name = pack?.item(key)?.name?.takeIf { it.isNotBlank() } ?: "${com.jungdo.attend.data.Dress.noOf(key)}번"
+    Row(
+        Modifier.graphicsLayer { scaleX = pop.value; scaleY = pop.value; alpha = ((pop.value - 0.3f) / 0.7f).coerceIn(0f, 1f) },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        // 그 옷만 입은 캐릭터
+        DressCharacter(mapOf(com.jungdo.attend.data.Dress.catOf(key) to key), 96.dp)
+        Column {
+            Text(if (a.dressDup) "이미 있는 옷!" else "새 옷 획득!", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = if (a.dressDup) Color(0xFFE5E7EB) else Color(0xFF86EFAC))
+            Text("${com.jungdo.attend.data.Dress.catLabel(com.jungdo.attend.data.Dress.catOf(key))} · $name", fontSize = 16.sp, color = Color.White)
+            if (a.dressDup && a.dressRefund > 0) PixelText("🪙 +${a.dressRefund} 골드로 돌려받았어요", fontSize = 15.sp, color = Color(0xFFFDE68A))
+        }
+    }
+}
+
 /**
  * 내 보관함: 모은 보석 보기 + 네임플레이트 고르기 (본인이 출결번호를 누른 뒤에 열림)
  * 네임플레이트를 누르면 바로 바뀌고, 쓰고 있는 걸 다시 누르면 벗음.
+ * (9단계) 맨 위에 내 캐릭터 + 골드, 보석은 등급 색 테두리 · 누르면 장착/해제 (장착한 보석 1개만 골드를 줌)
  */
 @Composable
 fun CollectionDialog(s: Student, onClose: () -> Unit) {
     var tab by remember { mutableStateOf(0) }
     // 아무도 안 건드리면 90초 뒤 닫힘 (누를 때마다 다시 셈)
-    LaunchedEffect(tab, s.plate) { delay(90_000); onClose() }
+    LaunchedEffect(tab, s.plate, s.gem, s.gold, s.dress.size, s.dressEquip) { delay(90_000); onClose() }
     val gemSet = remember(s.gems) { s.gems.toSet() }
     val plateSet = remember(s.plates) { s.plates.toSet() }
-    val gemList = remember(gemSet) { Loot.allGems.sortedBy { it !in gemSet } }
+    // 보석 목록: 가진 것 + 사용중인 미보유(까만 그림자). 장착 → 가진 것(높은 등급 먼저) → 못 가진 것
+    val gemEnabled = Loot.gemEnabled
+    val gemRarity = Loot.gemRarity
+    val gemList = remember(gemSet, s.gem, gemEnabled, gemRarity) {
+        Loot.allGems.filter { it in gemSet || Loot.isGemOn(it) }
+            .sortedWith(compareBy<String>({ it != s.gem }, { it !in gemSet }, { -Loot.rarityOf(it).ordinal }, { it }))
+    }
     val plateList = remember(plateSet) { Loot.allPlates.sortedBy { it !in plateSet } }
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         GamePanel(Modifier.fillMaxWidth(0.94f).fillMaxHeight(0.9f), padding = 20.dp, horizontalAlignment = Alignment.Start) {
             run {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("${s.name}의 보관함", fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                    MyCharacter(s, 84.dp)
+                    Spacer(Modifier.width(10.dp))
+                    Column {
+                        Text("${s.name}의 보관함", fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                        PixelText("💰 ${s.gold} 골드", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        DogamBadge(s)
+                    }
                     Spacer(Modifier.weight(1f))
                     GameTextButton("닫기", 20.sp) { onClose() }
                 }
                 Spacer(Modifier.size(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    GamePill("보석 ${s.gems.size}/${Loot.GEM_COUNT}", tab == 0, 20.sp) { tab = 0 }
+                    GamePill("보석 ${s.gems.size}/${maxOf(Loot.enabledCount, s.gems.size)}", tab == 0, 20.sp) { tab = 0 }
                     GamePill("네임플레이트 ${s.plates.size}/${Loot.PLATE_COUNT}", tab == 1, 20.sp) { tab = 1 }
+                    GamePill("🎁 뽑기", tab == 2, 20.sp) { tab = 2 }
+                    GamePill("👗 드레스룸", tab == 3, 20.sp) { tab = 3 }
+                    GamePill("📖 도감", tab == 4, 20.sp) { tab = 4 }
                 }
                 Spacer(Modifier.size(8.dp))
                 if (tab == 0) {
-                    Text("등원·하원을 누르면 보석을 얻을 수 있어요 (운이 좋으면!)", color = gameMuted(), fontSize = 14.sp)
-                    LazyVerticalGrid(GridCells.Adaptive(92.dp), Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        items(gemList) { id -> GameSlot(Modifier.padding(2.dp)) { GemImage(id, 60.dp, locked = id !in gemSet) } }
+                    // 지금 장착한 보석과 그 능력
+                    val eq = s.gem
+                    if (eq.isNotBlank()) {
+                        val r = Loot.rarityOf(eq)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            GemImage(eq, 36.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text("장착 중 · ${r.label} · 등원/하원마다 ${r.goldMin}~${r.goldMax}골드", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(r.argb))
+                        }
+                    } else {
+                        Text("보석을 장착하면 등원·하원 때 골드를 받아요. 가진 보석을 눌러 보세요!", color = gameMuted(), fontSize = 14.sp)
                     }
-                } else {
+                    Text("장착한 보석 1개만 힘을 써요 (누르면 장착, 다시 누르면 해제)", color = gameMuted(), fontSize = 13.sp)
+                    LazyVerticalGrid(GridCells.Adaptive(92.dp), Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        items(gemList) { id ->
+                            val own = id in gemSet
+                            val on = s.gem == id
+                            val r = Loot.rarityOf(id)
+                            val rc = if (own) Color(r.argb) else Color(0x33808080)
+                            val shape = RoundedCornerShape(12.dp)
+                            Column(
+                                Modifier.clip(shape)
+                                    .border(if (on) 4.dp else 2.dp, rc, shape)
+                                    .then(if (on) Modifier.background(rc.copy(alpha = 0.22f)) else Modifier)
+                                    .then(if (own) Modifier.clickable { Repo.setGem(s.id, if (on) "" else id) } else Modifier)
+                                    .padding(vertical = 4.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                GameSlot(Modifier.padding(2.dp)) { GemImage(id, 60.dp, locked = !own) }
+                                if (own) Text(
+                                    if (on) "장착중" else r.label, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                    color = if (on) Color.White else rc,
+                                    modifier = if (on) Modifier.clip(RoundedCornerShape(6.dp)).background(OkGreen).padding(horizontal = 6.dp, vertical = 1.dp) else Modifier,
+                                ) else Text("?", fontSize = 12.sp, color = gameMuted())
+                            }
+                        }
+                    }
+                } else if (tab == 1) {
                     Text("가진 네임플레이트를 누르면 바뀌어요 (쓰는 걸 다시 누르면 벗어요)", color = gameMuted(), fontSize = 14.sp)
                     LazyVerticalGrid(GridCells.Adaptive(190.dp), Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(plateList) { id ->
@@ -202,11 +303,17 @@ fun CollectionDialog(s: Student, onClose: () -> Unit) {
                                 contentAlignment = Alignment.TopEnd,
                             ) {
                                 NamePlate(id, s.name, 180.dp, 22.sp, locked = !own)
-                                if (on) Text("✔ 사용 중", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White,
+                                if (on) PixelText("✔ 사용 중", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White,
                                     modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(OkGreen).padding(horizontal = 6.dp, vertical = 2.dp))
                             }
                         }
                     }
+                } else if (tab == 2) {
+                    GachaPanel(s, Modifier.weight(1f).fillMaxWidth())   // 10단계: 뽑기
+                } else if (tab == 3) {
+                    DressRoomPanel(s, Modifier.weight(1f).fillMaxWidth())   // 11단계: 드레스룸
+                } else {
+                    DogamPanel(s, Modifier.weight(1f).fillMaxWidth())   // 도감
                 }
             }
         }
@@ -232,7 +339,7 @@ fun LootSettings() {
         Text("등원·하원을 누를 때마다 이 확률로 뽑아요 (0 ~ 100%, 소수점 가능). 하루에 등원 한 번·하원 한 번만 뽑아요.\n" +
             "※ 같은 아이로 같은 날 다시 눌러 보면 이미 뽑았기 때문에 아무것도 안 나와요. 확인할 땐 다른 아이로 눌러 보세요. 이미 가진 보석·네임플레이트는 다시 안 나와요.", color = Muted, fontSize = 13.sp)
         Text("지금 이 기기에 적용된 값: 보석 ${pctText(Loot.gemChance)}% · 네임플레이트 ${pctText(Loot.plateChance)}%", fontWeight = FontWeight.Bold, color = Navy, fontSize = 14.sp)
-        Text(Loot.syncNote, color = if (Loot.syncNote.startsWith("⚠")) BadRed else Muted, fontSize = 12.sp)
+        PixelText(Loot.syncNote, color = if (Loot.syncNote.startsWith("⚠")) BadRed else Muted, fontSize = 12.sp)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(gem, { gem = it.filter { c -> c.isDigit() || c == '.' }; msg = "" }, label = { Text("보석 확률 %") }, singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f))
@@ -252,7 +359,8 @@ fun LootSettings() {
                 msg = "저장됐어요 ✔ (지금 적용: 보석 ${pctText(g)}%, 네임플레이트 ${pctText(p)}%)"
             }) { Text("확률 저장") }
             OutlinedButton(onClick = { Repo.refreshLootNow(); msg = "서버에서 다시 받는 중…" }) { Text("서버에서 다시 받기") }
-            if (msg.isNotBlank()) Text(msg, color = OkGreen, fontSize = 13.sp)
+            if (msg.isNotBlank()) PixelText(msg, color = OkGreen, fontSize = 13.sp)
         }
+        DressSettings()   // 드레스업: 등급 비율 · 뽑기/옷 드롭 · 레전드리 보너스 상품
     }
 }

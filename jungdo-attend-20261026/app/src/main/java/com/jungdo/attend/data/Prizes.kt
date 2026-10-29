@@ -61,6 +61,20 @@ object Prizes {
         return hits.randomOrNull()
     }
 
+    /**
+     * 레전드리 보너스 상품 — 장착한 보석이 레전드리일 때만, 일반 상품 추첨에서 안 맞았으면 한 번 더 굴림.
+     * legendaryChance(%) 에 맞으면 legendaryIds 로 지정된 상품 중 재고 있는 것 하나. 서버(config/loot) 값은 Repo.applyLoot 가 채움.
+     * 관리자가 아직 안 정했으면(확률 0 또는 상품 없음) 아무 일도 안 일어남.
+     */
+    var legendaryChance by mutableStateOf(0.0)
+    var legendaryIds by mutableStateOf<Set<String>>(emptySet())
+
+    fun rollLegendary(studentId: String = ""): Prize? {
+        if (ONE_WIN_PER_STUDENT && hasWon(studentId)) return null
+        if (legendaryChance <= 0.0 || Math.random() * 100.0 >= legendaryChance) return null
+        return list.filter { it.id in legendaryIds && (it.stock == null || it.stock > 0) }.randomOrNull()
+    }
+
     /** 당첨 직후 화면에서 바로 재고를 하나 줄임 (같이 온 형제가 연달아 뽑을 때 재고 넘침 방지) */
     fun consume(id: String) {
         list = list.map { if (it.id == id && it.stock != null) it.copy(stock = (it.stock - 1).coerceAtLeast(0)) else it }

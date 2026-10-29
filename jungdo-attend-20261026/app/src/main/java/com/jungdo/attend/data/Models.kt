@@ -28,6 +28,10 @@ data class Student(
     val gems: List<String> = emptyList(),       // 모은 보석 번호 ("001" … "396")
     val plates: List<String> = emptyList(),     // 모은 네임플레이트 번호 ("01" … "47")
     val plate: String = "",                     // 지금 쓰고 있는 네임플레이트 (비어 있으면 안 씀)
+    val gold: Int = 0,                          // 골드 (장착 보석이 등원·하원 때 줌, 뽑기에 씀)
+    val gem: String = "",                       // 장착한 보석 번호 (비어 있으면 골드 없음)
+    val dress: List<String> = emptyList(),      // 모은 드레스업 옷 ("coat:012" …)
+    val dressEquip: Map<String, String> = emptyMap(), // 입은 옷: 부위 → 옷 키 (예: "coat" to "coat:012")
 ) {
     /** 계급 레벨 (1 ~ 866) */
     val level: Int get() = Rank.levelOf(exp)
