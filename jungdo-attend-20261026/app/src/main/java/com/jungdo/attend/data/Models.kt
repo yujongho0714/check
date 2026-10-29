@@ -27,6 +27,7 @@ data class Student(
     val outDay: String = "",                    // 하원 경험치를 마지막으로 받은 날
     val retryIn: String = "",                   // (임시) 등원 보상을 다시 받아간 날
     val retryOut: String = "",                  // (임시) 하원 보상을 다시 받아간 날
+    val prizeDay: String = "",                  // 상품(마이쮸 등)에 마지막으로 당첨된 날 — 같은 날 등원·하원 중복 당첨 방지
     val gems: List<String> = emptyList(),       // 모은 보석 번호 ("001" … "396")
     val plates: List<String> = emptyList(),     // 모은 네임플레이트 번호 ("01" … "47")
     val plate: String = "",                     // 지금 쓰고 있는 네임플레이트 (비어 있으면 안 씀)

@@ -38,20 +38,20 @@ object Prizes {
     /** 다른 상품(except) 을 뺀 확률 합계 (%) */
     fun totalChance(except: String? = null): Double = list.filter { it.id != except }.sumOf { it.chance }
 
-    /** 이미 상품에 당첨된 적 있는 원생 id 모음 (wins 기록 + 방금 당첨된 것). Repo.startPrizeSync 가 서버 값으로 계속 갱신 */
-    var winnerIds: Set<String> = emptySet()
+    /** 원생 id → 마지막으로 상품에 당첨된 날(yyyy-MM-dd). wins 기록 + 방금 당첨된 것. Repo.startPrizeSync 가 서버 값으로 계속 갱신 */
+    var winnerDays: Map<String, String> = emptyMap()
 
-    /** true 면 한 번 당첨된 원생은 다시 상품 추첨에서 제외 (등원에 당첨 → 하원에 또 당첨 방지) */
+    /** true 면 "오늘" 당첨된 원생은 오늘 다시 상품 추첨에서 제외 (등원에 당첨 → 하원에 또 당첨 방지). 다음 날이 되면 저절로 풀려서 따로 초기화할 필요 없음 */
     const val ONE_WIN_PER_STUDENT = true
 
-    fun hasWon(studentId: String): Boolean = studentId.isNotBlank() && studentId in winnerIds
+    fun hasWon(studentId: String): Boolean = studentId.isNotBlank() && winnerDays[studentId] == Repo.today()
 
-    fun markWon(studentId: String) { if (studentId.isNotBlank()) winnerIds = winnerIds + studentId }
+    fun markWon(studentId: String) { if (studentId.isNotBlank()) winnerDays = winnerDays + (studentId to Repo.today()) }
 
     /**
      * 상품 추첨 — 상품마다 자기 확률(chance %)로 따로 굴림. 다른 상품의 확률·순서에 영향받지 않음.
      * 재고 0 인 상품은 후보에서 빠지고, 여러 상품이 동시에 맞으면 그중 하나를 무작위로 (한 번에 최대 1개).
-     * 이미 당첨된 적 있는 원생(studentId)은 아예 추첨 안 함.
+     * 오늘 이미 당첨된 원생(studentId)은 오늘 추첨 안 함 (내일부터 다시 추첨).
      */
     fun roll(studentId: String = ""): Prize? {
         if (ONE_WIN_PER_STUDENT && hasWon(studentId)) return null

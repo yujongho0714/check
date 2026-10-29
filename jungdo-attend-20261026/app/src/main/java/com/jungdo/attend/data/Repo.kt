@@ -94,6 +94,7 @@ object Repo {
             outDay = d.getString("outDay") ?: "",
             retryIn = d.getString("retryIn") ?: "",
             retryOut = d.getString("retryOut") ?: "",
+            prizeDay = d.getString("prizeDay") ?: "",
             gems = strList(d.get("gems")),
             plates = strList(d.get("plates")),
             plate = d.getString("plate") ?: "",
@@ -227,8 +228,10 @@ object Repo {
         val totalGold = gold + dressRefund + dogamGold
         if (totalGold > 0) f["gold"] = FieldValue.increment(totalGold.toLong())
         // 상품 추첨: 일반 상품 → 안 맞았고 장착 보석이 레전드리면 레전드리 보너스 상품 한 번 더
-        val prize = Prizes.roll(s.id)
-            ?: if (equippedGem.isNotBlank() && Loot.rarityOf(equippedGem) == Rarity.LEGENDARY) Prizes.rollLegendary(s.id) else null
+        // 오늘 이미 상품에 당첨된 원생(등원에서 당첨 → 하원)은 오늘 상품 추첨 안 함. 원생 기록(prizeDay)에 직접 남겨서 확실하게 막음
+        val prize = if (s.prizeDay == today()) null else (Prizes.roll(s.id)
+            ?: if (equippedGem.isNotBlank() && Loot.rarityOf(equippedGem) == Rarity.LEGENDARY) Prizes.rollLegendary(s.id) else null)
+        if (prize != null) f["prizeDay"] = today()
         if (plate != null) {
             f["plates"] = FieldValue.arrayUnion(plate)
             if (s.plate.isBlank()) f["plate"] = plate
@@ -593,10 +596,16 @@ object Repo {
             if (snap == null) return@addSnapshotListener
             Prizes.list = snap.documents.map(::toPrize).sortedBy { it.name }
         }
-        // 이미 당첨된 적 있는 원생 (지급 여부와 관계없이 wins 에 기록이 있으면 제외)
+        // 오늘 이미 당첨된 원생 (지급 여부와 관계없이 wins 에 오늘 날짜 기록이 있으면 오늘만 제외 — 날이 바뀌면 자동으로 다시 추첨)
         val r2 = wins().addSnapshotListener { snap, _ ->
             if (snap == null) return@addSnapshotListener
-            Prizes.winnerIds = Prizes.winnerIds + snap.documents.mapNotNull { it.getString("studentId") }.toSet()
+            val m = HashMap<String, String>()
+            snap.documents.forEach { d ->
+                val sid = d.getString("studentId") ?: return@forEach
+                val day = d.getString("day") ?: return@forEach
+                if (day > (m[sid] ?: "")) m[sid] = day
+            }
+            Prizes.winnerDays = Prizes.winnerDays + m
         }
         return ListenerRegistration { r1.remove(); r2.remove() }
     }
