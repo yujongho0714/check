@@ -292,11 +292,11 @@ private fun LogRow(e: AttendEvent, now: Long) {
     Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(12.dp),
         modifier = Modifier.clickable { open = !open }) {
         Column(Modifier.fillMaxWidth().padding(12.dp)) {
+            val confirmed = e.dlvNeed > 0 && e.dlvOk >= e.dlvNeed
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(Repo.timeText(e.clientTime), modifier = Modifier.width(80.dp), color = Muted)
                 Text(e.name, fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.width(80.dp))
                 Text(EventType.label(e.type), modifier = Modifier.width(44.dp))
-                val confirmed = e.dlvNeed > 0 && e.dlvOk >= e.dlvNeed
                 if (e.status == Status.SENT) {
                     // 초록 '발송완료'는 상대 폰 도착이 확인된 뒤에만. 그 전엔 '접수·확인중', 3분 넘게 확인 안 되면 '도착 미확인'
                     // 통신사 도착 신호가 안 오는 폰이 많아서, 문자를 내보냈으면 '전송됨'. 통신사가 '실패'라고 알려준 것만 실패로 표시
