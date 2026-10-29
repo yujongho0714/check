@@ -71,7 +71,7 @@ import com.jungdo.attend.ui.game.PixelText
 
 /** 키오스크 관리자 화면: 원생 관리 / 일괄 등록 / 오늘 기록 / 문자·안내 / 설정 */
 @Composable
-fun AdminScreen(students: List<Student>, todayEvents: List<AttendEvent>, onClose: () -> Unit, onReset: () -> Unit) {
+fun AdminScreen(students: List<Student>, todayEvents: List<AttendEvent>, onClose: () -> Unit, onReset: () -> Unit, onAdjustPopup: () -> Unit = {}) {
     var tab by remember { mutableIntStateOf(0) }
     val tabs = listOf("원생 관리", "일괄 등록", "오늘 기록", "문자·안내", "보석 등급", "도감", "설정")
     BackHandler { onClose() }
@@ -109,7 +109,7 @@ fun AdminScreen(students: List<Student>, todayEvents: List<AttendEvent>, onClose
                     }
                     4 -> GemRarityTab()
                     5 -> DogamTab()
-                    else -> SettingsTab(onReset)
+                    else -> SettingsTab(onReset, onAdjustPopup)
                 }
             }
         }
@@ -198,7 +198,7 @@ private fun TodayTab(events: List<AttendEvent>) {
 
 // ───────────────────────── 설정 ─────────────────────────
 @Composable
-private fun SettingsTab(onReset: () -> Unit) {
+private fun SettingsTab(onReset: () -> Unit, onAdjustPopup: () -> Unit) {
     val ctx = LocalContext.current
     val prefs = remember { Prefs(ctx) }
     var newPin by remember { mutableStateOf("") }
@@ -224,6 +224,11 @@ private fun SettingsTab(onReset: () -> Unit) {
 
         HorizontalDivider()
         GameFxSettings()
+
+        HorizontalDivider()
+        SectionTitle("출결 팝업(등원·하원 화면) 배치")
+        Text("실제 팝업을 띄워 놓고 크기·위치를 직접 보면서 조절해요. 이 단말기 화면에 맞게 저장되고, 눌러 봐도 출결은 기록되지 않아요.", color = Muted, fontSize = 13.sp)
+        Button(onClick = onAdjustPopup, enabled = true) { Text("팝업 보면서 조절하기", fontSize = 18.sp) }
 
         HorizontalDivider()
         UiSizeSettings()

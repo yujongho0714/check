@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -76,6 +77,7 @@ import com.jungdo.attend.data.rememberCustomHolidays
 import com.jungdo.attend.call.Phone
 import com.jungdo.attend.ui.AssetPackSettings
 import com.jungdo.attend.ui.UiSizeSettings
+import com.jungdo.attend.kiosk.KioskScreen
 import com.jungdo.attend.ui.BadRed
 import com.jungdo.attend.ui.DogamTab
 import com.jungdo.attend.ui.GemRarityTab
@@ -117,7 +119,7 @@ fun ServerScreen(onReset: () -> Unit) {
     val recent by com.jungdo.attend.data.rememberInboxRange(Repo.shiftDay(Repo.today(), -30), Repo.today())
     val openMsgs = recent.count { !it.handled }
     val pendingWins by com.jungdo.attend.data.rememberPendingWins()
-    val tabs = listOf("오늘 출결", "월간 출석부", if (openMsgs > 0) "받은 문자 ($openMsgs)" else "받은 문자", "단체 문자", "퇴관 위험", "결석 통계", "명단·형제", if (pendingWins.isNotEmpty()) "당첨·지급 (${pendingWins.size})" else "당첨·지급", "지급내역", "내 정보 보내기", "문자·안내", "상태·기록", "보석 등급", "도감", "설정")
+    val tabs = listOf("오늘 출결", "월간 출석부", if (openMsgs > 0) "받은 문자 ($openMsgs)" else "받은 문자", "단체 문자", "퇴관 위험", "결석 통계", "명단·형제", if (pendingWins.isNotEmpty()) "당첨·지급 (${pendingWins.size})" else "당첨·지급", "지급내역", "내 정보 보내기", "문자·안내", "상태·기록", "보석 등급", "도감", "키오스크 화면", "설정")
     Column(Modifier.fillMaxSize().background(PageBg)) {
         Row(Modifier.fillMaxWidth().background(Navy).padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("정도 출결 · 관장님 폰", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
@@ -143,7 +145,38 @@ fun ServerScreen(onReset: () -> Unit) {
             11 -> StatusAndLog()
             12 -> GemRarityTab()
             13 -> DogamTab()
+            14 -> KioskPreviewTab()
             else -> ServerSettings(onReset)
+        }
+    }
+}
+
+/**
+ * 관장님 폰에서 출석 단말기(기기 A) 화면을 그대로 보는 미리보기 + 바로 크기 조절.
+ * 미리보기라서 이름·등원·하원을 눌러도 출결 기록·보상·문자·"키오스크 연결됨" 신호가 전혀 안 생김. 크기는 저장하면 단말기에도 바로 적용.
+ */
+@Composable
+private fun KioskPreviewTab() {
+    var showSize by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize()) {
+        Text(
+            "미리보기예요 · 눌러 봐도 출결은 기록 안 돼요 · 이름을 누르면 팝업이 뜨고 배치를 조절할 수 있어요",
+            color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+            modifier = Modifier.fillMaxWidth().background(Color(0xFF7C3AED)).padding(horizontal = 16.dp, vertical = 6.dp),
+        )
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            KioskScreen(onReset = {}, preview = true)
+            Button(onClick = { showSize = !showSize }, modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp)) {
+                Text(if (showSize) "크기 조절 닫기" else "크기 조절")
+            }
+            if (showSize) {
+                Card(
+                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().fillMaxHeight(0.5f).padding(bottom = 64.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                ) {
+                    Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) { UiSizeSettings() }
+                }
+            }
         }
     }
 }

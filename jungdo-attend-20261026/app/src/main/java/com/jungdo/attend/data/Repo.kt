@@ -605,12 +605,27 @@ object Repo {
         if (snap == null) return@addSnapshotListener
         UiSize.box = (snap.getDouble("boxScale") ?: 1.0).toFloat().coerceIn(UiSize.MIN, UiSize.MAX)
         UiSize.char = (snap.getDouble("charScale") ?: 1.0).toFloat().coerceIn(UiSize.MIN, UiSize.MAX)
+        UiSize.popScale = (snap.getDouble("popScale") ?: 1.0).toFloat().coerceIn(UiSize.POP_MIN, UiSize.POP_MAX)
+        UiSize.popX = (snap.getDouble("popX") ?: 0.0).toFloat().coerceIn(-UiSize.X_RANGE, UiSize.X_RANGE)
+        UiSize.popY = (snap.getDouble("popY") ?: 0.0).toFloat().coerceIn(-UiSize.Y_RANGE, UiSize.Y_RANGE)
     }
 
     fun saveUiSize(box: Float, char: Float) {
         val b = box.coerceIn(UiSize.MIN, UiSize.MAX); val c = char.coerceIn(UiSize.MIN, UiSize.MAX)
         UiSize.box = b; UiSize.char = c   // 이 기기는 바로 적용
         uiDoc().set(mapOf("boxScale" to b.toDouble(), "charScale" to c.toDouble()), SetOptions.merge())
+    }
+
+    /** 출결 팝업 배치(크기·위치) 저장 — 이 기기는 바로 적용, 다른 기기는 서버 동기화로 */
+    fun saveUiLayout(l: PopupLayout) {
+        val b = l.box.coerceIn(UiSize.MIN, UiSize.MAX); val c = l.char.coerceIn(UiSize.MIN, UiSize.MAX)
+        val p = l.pop.coerceIn(UiSize.POP_MIN, UiSize.POP_MAX)
+        val x = l.x.coerceIn(-UiSize.X_RANGE, UiSize.X_RANGE); val y = l.y.coerceIn(-UiSize.Y_RANGE, UiSize.Y_RANGE)
+        UiSize.box = b; UiSize.char = c; UiSize.popScale = p; UiSize.popX = x; UiSize.popY = y
+        uiDoc().set(mapOf(
+            "boxScale" to b.toDouble(), "charScale" to c.toDouble(),
+            "popScale" to p.toDouble(), "popX" to x.toDouble(), "popY" to y.toDouble(),
+        ), SetOptions.merge())
     }
 
     /** 서버의 상품 목록을 지켜보다가 Prizes 에 반영 (로그인하면 시작, 모든 기기 공통) */
