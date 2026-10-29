@@ -84,8 +84,8 @@ fun GemRarityTab() {
     val countText = remember { mutableStateOf(Rarity.values().associateWith { "" }) }
     var confirmAuto by remember { mutableStateOf(false) }
     val total = totalText.toIntOrNull() ?: 0
-    val counts = Rarity.values().associateWith { countText.value[it]?.toIntOrNull() ?: 0 }
-    val countSum = counts.values.sum()
+    val autoCounts = Rarity.values().associateWith { countText.value[it]?.toIntOrNull() ?: 0 }
+    val countSum = autoCounts.values.sum()
     val autoOk = total in 1..Loot.GEM_COUNT && countSum == total
 
     val rarityMap = Loot.gemRarity
@@ -253,8 +253,8 @@ fun GemRarityTab() {
         AlertDialog(
             onDismissRequest = { confirmAuto = false },
             title = { Text("랜덤으로 배정할까요?") },
-            text = { Text("지금 정해 둔 등급·사용 지정이 모두 바뀌어요.\n" + Rarity.values().joinToString(" · ") { "${it.label} ${counts[it]}" } + " (총 $total 개)\n뽑히지 않은 ${Loot.GEM_COUNT - total}개는 사용이 꺼져요. 이미 가진 아이의 보석은 그대로예요.") },
-            confirmButton = { Button(onClick = { Repo.autoAssignGems(counts); selected = emptySet(); msg = "총 ${total}개를 랜덤으로 배정했어요 ✔"; confirmAuto = false }) { Text("배정하고 저장") } },
+            text = { Text("지금 정해 둔 등급·사용 지정이 모두 바뀌어요.\n" + Rarity.values().joinToString(" · ") { "${it.label} ${autoCounts[it]}" } + " (총 $total 개)\n뽑히지 않은 ${Loot.GEM_COUNT - total}개는 사용이 꺼져요. 이미 가진 아이의 보석은 그대로예요.") },
+            confirmButton = { Button(onClick = { Repo.autoAssignGems(autoCounts); selected = emptySet(); msg = "총 ${total}개를 랜덤으로 배정했어요 ✔"; confirmAuto = false }) { Text("배정하고 저장") } },
             dismissButton = { TextButton(onClick = { confirmAuto = false }) { Text("취소") } },
         )
     }
