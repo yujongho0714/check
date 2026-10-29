@@ -19,6 +19,12 @@ object GemData {
         val c = Prizes.legendaryChance
         val bonus = if (r == Rarity.LEGENDARY && c > 0.0 && Prizes.legendaryIds.isNotEmpty())
             " + 보너스 상품 당첨 기회 (${if (c % 1.0 == 0.0) c.toInt().toString() else c.toString()}%)" else ""
-        return gold + bonus
+        fun n(d: Double) = if (d % 1.0 == 0.0) d.toInt().toString() else d.toString()
+        val skill = when (r) {
+            Rarity.EPIC -> if (Loot.epicGemBonus > 0.0) " + 보석 획득 확률 ${n(Loot.epicGemBonus)}% 상승" else ""
+            Rarity.UNIQUE -> if (Loot.uniqueDressBonus > 0.0) " + 장비(옷) 획득 확률 ${n(Loot.uniqueDressBonus)}% 상승" else ""
+            else -> ""
+        }
+        return gold + skill + bonus
     }
 }

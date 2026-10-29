@@ -28,6 +28,8 @@ object Loot {
     const val DEFAULT_DRESS_CHANCE = 5.0   // 출석 때 옷 한 개 얻을 확률 (%)
     const val DEFAULT_GACHA_PRICE = 3      // 뽑기 1회 골드
     const val DEFAULT_DUP_REFUND = 1       // 중복 옷 1개당 돌려받는 골드
+    const val DEFAULT_EPIC_GEM_BONUS = 20.0     // 에픽 보석 장착 시 보석 획득 확률 상승 (%, 원래 확률의 몇 % 만큼 더)
+    const val DEFAULT_UNIQUE_DRESS_BONUS = 20.0 // 유니크 보석 장착 시 옷(장비) 획득 확률 상승 (%)
 
     /** 보석이 나올 전체 확률 (%) = 등급별 확률의 합. 읽기 전용 (표시용) */
     val gemChance: Double get() = rarityChances.values.sum().coerceIn(0.0, 100.0)
@@ -36,6 +38,9 @@ object Loot {
     var dressChance by mutableDoubleStateOf(DEFAULT_DRESS_CHANCE)
     var gachaPrice by mutableIntStateOf(DEFAULT_GACHA_PRICE)
     var dupRefund by mutableIntStateOf(DEFAULT_DUP_REFUND)
+    /** 장착 보석 능력: 에픽 → 보석 획득 확률 ×(1+값%), 유니크 → 옷(장비) 획득 확률 ×(1+값%). 서버(config/loot) 값으로 갱신 */
+    var epicGemBonus by mutableDoubleStateOf(DEFAULT_EPIC_GEM_BONUS)
+    var uniqueDressBonus by mutableDoubleStateOf(DEFAULT_UNIQUE_DRESS_BONUS)
 
     /** 등급별 획득 확률 (%, 등원/하원 한 번 누를 때 그 등급 보석이 나올 확률). 합이 100을 넘으면 넘는 부분은 무시. 서버(config/loot.rarityChances) 값이 오면 갱신 */
     var rarityChances by mutableStateOf<Map<Rarity, Double>>(Rarity.values().associateWith { it.defaultWeight })
@@ -64,16 +69,27 @@ object Loot {
 
     fun rarityOf(gemId: String): Rarity = gemRarity[gemId] ?: Rarity.NORMAL
 
-    fun rollGem(owned: List<String>): String? = pickGem(owned)
+    /** 지금 장착한 보석이 에픽이면 보석 획득 확률 배율 (아니면 1.0) */
+    fun gemMultFor(equippedGem: String): Double =
+        if (equippedGem.isNotBlank() && rarityOf(equippedGem) == Rarity.EPIC) 1.0 + epicGemBonus.coerceAtLeast(0.0) / 100.0 else 1.0
+
+    /** 지금 장착한 보석이 유니크면 옷(장비) 획득 확률 배율 (아니면 1.0) */
+    fun dressMultFor(equippedGem: String): Double =
+        if (equippedGem.isNotBlank() && rarityOf(equippedGem) == Rarity.UNIQUE) 1.0 + uniqueDressBonus.coerceAtLeast(0.0) / 100.0 else 1.0
+
+    fun rollGem(owned: List<String>, mult: Double = 1.0, addPct: Double = 0.0): String? = pickGem(owned, mult, addPct)
 
     /** 한 번만 굴려서 등급별 구간으로 나눔. 뽑힌 등급에 미보유 보석이 없으면 꽝 (다른 등급으로 이월 안 함) */
-    fun pickGem(owned: List<String>): String? {
+    fun pickGem(owned: List<String>, mult: Double = 1.0, addPct: Double = 0.0): String? {
         val have = owned.toSet()
         val pool = allGems.filter { it !in have && isGemOn(it) }.groupBy { rarityOf(it) }
         val r = Math.random() * 100.0
         var acc = 0.0
+        // 도감 보너스(addPct, 퍼센트 포인트)는 전체 보석 확률에 더하고, 등급별로는 원래 비율대로 나눠 올림 → 그 위에 장착 보석 배율(mult)
+        val sum = gemChance
+        val scale = (if (sum > 0.0) (sum + addPct.coerceAtLeast(0.0)) / sum else 1.0) * mult.coerceAtLeast(0.0)
         for (rar in Rarity.values()) {
-            val c = (rarityChances[rar] ?: 0.0).coerceAtLeast(0.0)
+            val c = (rarityChances[rar] ?: 0.0).coerceAtLeast(0.0) * scale
             if (c <= 0.0) continue
             val lo = acc
             acc += c
@@ -92,7 +108,8 @@ object Loot {
     }
 
     /** 출석 때 옷 드롭: dressChance(%) 확률로 800종 중 하나 (전부 같은 확률, 이미 가진 옷도 나올 수 있음 → 환급) */
-    fun rollDress(): String? = if (hit(dressChance)) Dress.pickOne() else null
+    fun rollDress(mult: Double = 1.0, addPct: Double = 0.0): String? =
+        if (hit(((dressChance + addPct.coerceAtLeast(0.0)) * mult.coerceAtLeast(0.0)).coerceAtMost(100.0))) Dress.pickOne() else null
 
     fun rollPlate(owned: List<String>): String? {
         if (!hit(plateChance)) return null

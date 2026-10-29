@@ -50,6 +50,12 @@ fun DressSettings() {
     var wMsg by remember { mutableStateOf("") }
     val wSum = Rarity.values().sumOf { wText[it]?.toDoubleOrNull() ?: 0.0 }
 
+    // ── 장착 보석 능력 (에픽 · 유니크) ──
+    var epicB by remember { mutableStateOf(pct(Loot.epicGemBonus)) }
+    var uniqueB by remember { mutableStateOf(pct(Loot.uniqueDressBonus)) }
+    LaunchedEffect(Loot.epicGemBonus, Loot.uniqueDressBonus) { epicB = pct(Loot.epicGemBonus); uniqueB = pct(Loot.uniqueDressBonus) }
+    var bMsg by remember { mutableStateOf("") }
+
     // ── 뽑기 · 옷 드롭 ──
     var price by remember { mutableStateOf(Loot.gachaPrice.toString()) }
     var refund by remember { mutableStateOf(Loot.dupRefund.toString()) }
@@ -93,6 +99,26 @@ fun DressSettings() {
             OutlinedButton(onClick = { Rarity.values().forEach { wText[it] = pct(it.defaultWeight) }; wMsg = "기본값을 채웠어요. [확률 저장]을 눌러야 적용돼요." }) { Text("기본값") }
         }
         if (wMsg.isNotBlank()) PixelText(wMsg, color = if (wMsg.startsWith("⚠")) BadRed else OkGreen, fontSize = 13.sp)
+
+        SectionTitle("장착 보석 능력 (에픽 · 유니크)")
+        Text(
+            "에픽 보석을 장착하면 보석 획득 확률이, 유니크 보석을 장착하면 옷(장비) 획득 확률이 올라가요. 숫자는 원래 확률에서 몇 % 더 늘릴지예요 (예: 원래 10%에서 20 → 12%). 0 이면 능력 없음.",
+            color = Muted, fontSize = 13.sp,
+        )
+        OutlinedTextField(epicB, { epicB = cleanNum(it); bMsg = "" }, label = { Text("에픽: 보석 획득 확률 상승 %") }, singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(uniqueB, { uniqueB = cleanNum(it); bMsg = "" }, label = { Text("유니크: 옷(장비) 획득 확률 상승 %") }, singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Button(onClick = {
+                val e = (epicB.toDoubleOrNull() ?: Loot.epicGemBonus).coerceIn(0.0, 1000.0)
+                val u = (uniqueB.toDoubleOrNull() ?: Loot.uniqueDressBonus).coerceIn(0.0, 1000.0)
+                Repo.saveGemSkillBonus(e, u)
+                epicB = pct(e); uniqueB = pct(u)
+                bMsg = "저장됐어요 ✔"
+            }) { Text("능력 저장") }
+        }
+        if (bMsg.isNotBlank()) PixelText(bMsg, color = OkGreen, fontSize = 13.sp)
 
         SectionTitle("뽑기 · 옷 드롭")
         Text("옷 뽑기 화면과 출석 옷 드롭은 이후 단계에서 붙어요. 지금은 값만 저장해 둬요.", color = Muted, fontSize = 13.sp)

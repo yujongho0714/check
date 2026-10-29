@@ -24,6 +24,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -83,6 +84,8 @@ fun GemRarityTab() {
     var totalText by remember { mutableStateOf("") }
     val countText = remember { mutableStateOf(Rarity.values().associateWith { "" }) }
     var confirmAuto by remember { mutableStateOf(false) }
+    var withDogam by remember { mutableStateOf(true) }
+    var confirmDogam by remember { mutableStateOf(false) }
     val total = totalText.toIntOrNull() ?: 0
     val autoCounts = Rarity.values().associateWith { countText.value[it]?.toIntOrNull() ?: 0 }
     val countSum = autoCounts.values.sum()
@@ -136,6 +139,10 @@ fun GemRarityTab() {
                     },
                     fontWeight = FontWeight.Bold, color = if (autoOk) OkGreen else BadRed, fontSize = 14.sp,
                 )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(checked = withDogam, onCheckedChange = { withDogam = it })
+                    Text("도감도 등급별로 자동으로 만들기 (지금 도감은 모두 지워져요)", fontSize = 13.sp, modifier = Modifier.padding(start = 8.dp))
+                }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(enabled = total in 1..Loot.GEM_COUNT, onClick = {
                         // 기본 비율(노말 60 · 레어 25 · 에픽 10 · 유니크 4 · 레전드리 1)로 총 개수를 나눠서 채움
@@ -148,6 +155,7 @@ fun GemRarityTab() {
                         countText.value = rs.associateWith { base[it].toString() }
                     }) { Text("기본 비율로 채우기") }
                     Button(enabled = autoOk, onClick = { confirmAuto = true }) { Text("랜덤으로 배정하고 저장") }
+                    OutlinedButton(onClick = { confirmDogam = true }) { Text("지금 보석으로 도감만 다시 만들기") }
                 }
 
                 HorizontalDivider()
@@ -253,9 +261,19 @@ fun GemRarityTab() {
         AlertDialog(
             onDismissRequest = { confirmAuto = false },
             title = { Text("랜덤으로 배정할까요?") },
-            text = { Text("지금 정해 둔 등급·사용 지정이 모두 바뀌어요.\n" + Rarity.values().joinToString(" · ") { "${it.label} ${autoCounts[it]}" } + " (총 $total 개)\n뽑히지 않은 ${Loot.GEM_COUNT - total}개는 사용이 꺼져요. 이미 가진 아이의 보석은 그대로예요.") },
-            confirmButton = { Button(onClick = { Repo.autoAssignGems(autoCounts); selected = emptySet(); msg = "총 ${total}개를 랜덤으로 배정했어요 ✔"; confirmAuto = false }) { Text("배정하고 저장") } },
+            text = { Text("지금 정해 둔 등급·사용 지정이 모두 바뀌어요.\n" + Rarity.values().joinToString(" · ") { "${it.label} ${autoCounts[it]}" } + " (총 $total 개)\n뽑히지 않은 ${Loot.GEM_COUNT - total}개는 사용이 꺼져요. 이미 가진 아이의 보석은 그대로예요." + if (withDogam) "\n도감도 등급별로 2개씩 짝지어 새로 만들어요 (지금 도감은 모두 지워져요)." else "") },
+            confirmButton = { Button(onClick = { Repo.autoAssignGems(autoCounts, withDogam); selected = emptySet(); msg = "총 ${total}개를 랜덤으로 배정했어요 ✔"; confirmAuto = false }) { Text("배정하고 저장") } },
             dismissButton = { TextButton(onClick = { confirmAuto = false }) { Text("취소") } },
+        )
+    }
+
+    if (confirmDogam) {
+        AlertDialog(
+            onDismissRequest = { confirmDogam = false },
+            title = { Text("도감을 새로 만들까요?") },
+            text = { Text("지금 사용중인 보석을 등급별로 무작위 2개씩 짝지어 도감을 만들어요. 홀수면 남는 1개는 절반 효과예요. 지금 있는 도감은 모두 지워져요.") },
+            confirmButton = { Button(onClick = { Repo.autoBuildDogamFromCurrent(); msg = "도감을 등급별로 새로 만들었어요 ✔"; confirmDogam = false }) { Text("만들기") } },
+            dismissButton = { TextButton(onClick = { confirmDogam = false }) { Text("취소") } },
         )
     }
 
