@@ -15,7 +15,7 @@ import java.io.ByteArrayOutputStream
 
 /**
  * 상품 한 가지 (Firestore: prizes/{id})
- *  - chance : 당첨 확률 (%) — 등원/하원 한 번 누를 때마다 이 확률로 당첨. 한 번만 굴려 상품별 구간으로 나누므로 합이 100% 를 넘기지 않게 설정
+ *  - chance : 당첨 확률 (%) — 등원/하원 한 번 누를 때마다 상품마다 따로 이 확률로 당첨 (다른 상품과 합치지 않음)
  *  - stock  : 남은 재고. null 이면 무제한. 0 이 되면 더 이상 당첨 안 됨
  *  - photo  : 작게 줄인 사진 (JPEG 을 글자로 바꾼 base64)
  */
@@ -56,24 +56,20 @@ object Prizes {
     var legendaryIds by mutableStateOf<Set<String>>(emptySet())
 
     /**
-     * 상품 추첨 — 한 번만 굴려서 상품별 구간으로 나눔 (서로 겹치지 않음).
-     * 예) 마이쮸 5%, 레크쿠폰 1% → 0~5 마이쮸 / 5~6 레크쿠폰 / 그 외 꽝. 상품별 당첨 확률은 적힌 % 그대로, 전체 당첨 확률은 합계(6%).
-     * legendary=true(레전드리 보석 장착)면 그 뒤에 레전드리 보너스 구간(legendaryChance %)이 이어져서 합계에 더해짐.
-     * 재고 0 인 상품은 자기 구간만 꽝이 되고 다른 상품의 확률은 그대로. 확률 합이 100% 를 넘으면 넘는 부분은 무시.
+     * 상품 추첨 — 상품마다 따로 굴림 (서로 영향 없음).
+     * 예) 마이쮸 5%, 레크쿠폰 1% → 마이쮸는 95% 꽝, 레크쿠폰은 99% 꽝. 각 상품의 당첨 확률은 적힌 % 그대로.
+     * 한 번 누를 때 상품은 최대 1개만 줌: 우연히 둘 이상 동시에 걸리면 확률이 더 낮은(귀한) 상품을 줌.
+     * 재고 0 인 상품은 그 상품만 안 나옴. 확률 합이 100% 를 넘어도 상관없음.
+     * legendary=true(레전드리 보석 장착)면 일반 상품에 하나도 안 걸렸을 때 레전드리 보너스(legendaryChance %)를 한 번 더 굴림.
      * 오늘 이미 당첨된 원생(studentId)은 오늘 추첨 안 함 (내일부터 다시 추첨).
      */
     fun roll(studentId: String = "", legendary: Boolean = false): Prize? {
         if (ONE_WIN_PER_STUDENT && hasWon(studentId)) return null
-        val r = Math.random() * 100.0
-        var acc = 0.0
-        for (p in list) {
-            if (p.chance <= 0.0) continue
-            val lo = acc
-            acc += p.chance
-            if (p.stock != null && p.stock <= 0) continue
-            if (r >= lo && r < acc) return p
+        val hits = list.filter { p ->
+            p.chance > 0.0 && (p.stock == null || p.stock > 0) && Math.random() * 100.0 < p.chance
         }
-        if (legendary && legendaryChance > 0.0 && r >= acc && r < acc + legendaryChance) {
+        if (hits.isNotEmpty()) return hits.minByOrNull { it.chance }
+        if (legendary && legendaryChance > 0.0 && Math.random() * 100.0 < legendaryChance) {
             return list.filter { it.id in legendaryIds && (it.stock == null || it.stock > 0) }.randomOrNull()
         }
         return null

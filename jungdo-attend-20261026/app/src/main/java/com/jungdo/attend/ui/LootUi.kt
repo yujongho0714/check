@@ -75,6 +75,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.jungdo.attend.data.AssetPack
 import com.jungdo.attend.data.AwardResult
+import com.jungdo.attend.data.GemData
 import com.jungdo.attend.data.Loot
 import com.jungdo.attend.data.Repo
 import com.jungdo.attend.data.Student
@@ -234,6 +235,7 @@ fun CollectionDialog(s: Student, startTab: Int = 0, onClose: () -> Unit) {
             .sortedWith(compareBy<String>({ it != s.gem }, { it !in gemSet }, { -Loot.rarityOf(it).ordinal }, { it }))
     }
     val plateList = remember(plateSet) { Loot.allPlates.sortedBy { it !in plateSet } }
+    var infoGem by remember { mutableStateOf<String?>(null) }   // 마지막으로 누른 보석 → 이름·효과 설명
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         GamePanel(Modifier.fillMaxWidth(0.94f).fillMaxHeight(0.9f), padding = 20.dp, horizontalAlignment = Alignment.Start) {
             run {
@@ -294,6 +296,11 @@ fun CollectionDialog(s: Student, startTab: Int = 0, onClose: () -> Unit) {
                         Text("보석을 장착하면 등원·하원 때 골드를 받아요. 가진 보석을 눌러 보세요!", color = gameMuted(), fontSize = 14.sp)
                     }
                     Text("장착한 보석 1개만 힘을 써요 (누르면 장착, 다시 누르면 해제)", color = gameMuted(), fontSize = 13.sp)
+                    infoGem?.takeIf { it in gemSet }?.let { g ->
+                        val gr = Loot.rarityOf(g)
+                        Text("${GemData.name(g)} · ${gr.label}", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(gr.argb))
+                        Text("능력: ${GemData.skill(g)} · ${GemData.effect(g)}", color = gameMuted(), fontSize = 13.sp)
+                    }
                     LazyVerticalGrid(GridCells.Adaptive(92.dp), Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         items(gemList) { id ->
                             val own = id in gemSet
@@ -305,7 +312,7 @@ fun CollectionDialog(s: Student, startTab: Int = 0, onClose: () -> Unit) {
                                 Modifier.clip(shape)
                                     .border(if (on) 4.dp else 2.dp, rc, shape)
                                     .then(if (on) Modifier.background(rc.copy(alpha = 0.22f)) else Modifier)
-                                    .then(if (own) Modifier.clickable { Repo.setGem(s.id, if (on) "" else id) } else Modifier)
+                                    .then(if (own) Modifier.clickable { infoGem = id; Repo.setGem(s.id, if (on) "" else id) } else Modifier)
                                     .padding(vertical = 4.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                             ) {
@@ -315,6 +322,7 @@ fun CollectionDialog(s: Student, startTab: Int = 0, onClose: () -> Unit) {
                                     color = if (on) Color.White else rc,
                                     modifier = if (on) Modifier.clip(RoundedCornerShape(6.dp)).background(OkGreen).padding(horizontal = 6.dp, vertical = 1.dp) else Modifier,
                                 ) else Text("?", fontSize = 12.sp, color = gameMuted())
+                                if (own) Text(GemData.name(id), fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = gameMuted())
                             }
                         }
                     }

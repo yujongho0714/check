@@ -132,15 +132,10 @@ fun PrizeSettings() {
     val list = Prizes.list
     var editing by remember { mutableStateOf<Prize?>(null) }
     var deleting by remember { mutableStateOf<Prize?>(null) }
-    val total = list.sumOf { it.chance }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SectionTitle("상품 (마이쮸 등) · 당첨 확률")
-        Text("등원·하원을 누를 때마다 보석 뽑기와 함께 상품도 한 번 뽑아요 (하루에 등원 한 번·하원 한 번). 상품은 한 번에 최대 1개만 당첨되고, 확률 합이 100% 를 넘으면 안 돼요. 어디에도 안 걸리면 꽝이에요.", color = Muted, fontSize = 13.sp)
-        Text(
-            "확률 합계 ${prizePct(total)}% · 꽝 ${prizePct((100.0 - total).coerceAtLeast(0.0))}%",
-            color = if (total > 100.0 + 1e-9) BadRed else Navy, fontWeight = FontWeight.Bold,
-        )
+        Text("등원·하원을 누를 때마다 보석 뽑기와 함께 상품도 한 번 뽑아요 (하루에 등원 한 번·하원 한 번). 상품마다 따로 뽑아서, 적은 확률이 그 상품의 당첨 확률 그대로예요 (마이쮸 5%면 95%는 꽝). 한 번에 상품은 최대 1개만 줘요.", color = Muted, fontSize = 13.sp)
         Button(onClick = { editing = Prize() }) { Text("+ 상품 추가") }
         if (list.isEmpty()) Text("등록된 상품이 없어요. 상품을 추가하면 뽑기에 들어가요.", color = Muted)
         list.forEach { p ->
@@ -206,8 +201,7 @@ private fun PrizeEditDialog(p: Prize, onClose: () -> Unit, onDelete: () -> Unit)
                 OutlinedTextField(name, { name = it; err = "" }, label = { Text("상품 이름 (예: 마이쮸)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(chance, { chance = it.filter { c -> c.isDigit() || c == '.' }; err = "" }, label = { Text("당첨 확률 %") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
-                val others = Prizes.totalChance(except = p.id)
-                Text("다른 상품 합계 ${prizePct(others)}% → 이 상품은 최대 ${prizePct((100.0 - others).coerceAtLeast(0.0))}% 까지", color = Muted, fontSize = 13.sp)
+                Text("다른 상품과 상관없이 이 상품만의 확률이에요 (예: 5 → 95% 꽝)", color = Muted, fontSize = 13.sp)
                 OutlinedTextField(message, { message = it }, label = { Text("당첨 문구 (키오스크 화면에 나와요)") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(stock, { stock = it.filter(Char::isDigit); err = "" }, label = { Text("재고 개수 (비우면 무제한)") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
@@ -225,8 +219,6 @@ private fun PrizeEditDialog(p: Prize, onClose: () -> Unit, onDelete: () -> Unit)
                     err = "당첨 확률은 0보다 크고 100 이하로 적어 주세요."
                 } else if (stock.isNotBlank() && st == null) {
                     err = "재고는 숫자로 적어 주세요."
-                } else if (Prizes.totalChance(except = p.id) + c > 100.0 + 1e-9) {
-                    err = "확률 합이 100% 를 넘어요. 이 상품은 ${prizePct((100.0 - Prizes.totalChance(except = p.id)).coerceAtLeast(0.0))}% 까지만 가능해요."
                 } else {
                     Repo.savePrize(p.copy(name = name, chance = c, message = message, stock = st, photo = photo))
                     onClose()

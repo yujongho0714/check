@@ -514,6 +514,23 @@ object Repo {
         gemRarityDoc().set(mapOf("r" to ids.associateWith { rarity.code }), SetOptions.merge())
     }
 
+    /**
+     * 관리자: 자동 배정 — 396종 중 등급별 개수(counts)만큼 무작위로 뽑아서 그 등급으로 정하고, 뽑힌 보석만 사용으로 켬 (나머지는 끔).
+     * 이미 가진 원생의 보석은 그대로 (꺼진 보석도 가지고 있으면 보관함에 보임). 같은 보석이 두 등급에 겹치지 않음.
+     */
+    fun autoAssignGems(counts: Map<Rarity, Int>) {
+        val pool = Loot.allGems.shuffled()
+        val r = HashMap<String, String>()
+        val chosen = ArrayList<String>()
+        var i = 0
+        Rarity.values().forEach { rar ->
+            repeat((counts[rar] ?: 0).coerceAtLeast(0)) {
+                if (i < pool.size) { val id = pool[i++]; r[id] = rar.code; chosen.add(id) }
+            }
+        }
+        gemRarityDoc().set(mapOf("r" to r, "on" to chosen.sorted()), SetOptions.merge())
+    }
+
     /** 관리자: 등급별 획득 비율 */
     fun saveRarityChances(w: Map<Rarity, Double>) {
         lootDoc().set(mapOf("rarityChances" to w.entries.associate { it.key.code to it.value.coerceIn(0.0, 100.0) }), SetOptions.merge())

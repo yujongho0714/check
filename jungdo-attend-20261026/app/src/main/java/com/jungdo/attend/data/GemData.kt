@@ -11,4 +11,14 @@ object GemData {
     fun name(id: String): String = info(id).name
     fun skill(id: String): String = info(id).skill
     val namedCount: Int get() = all.size
+
+    /** 보석 효과 설명 (등급에 따라 정해진 실제 효과): 장착하면 등원·하원 때마다 받는 골드, 레전드리는 보너스 상품 기회 */
+    fun effect(id: String): String {
+        val r = Loot.rarityOf(id)
+        val gold = "장착하면 등원·하원 때마다 골드 ${r.goldMin}~${r.goldMax}개"
+        val c = Prizes.legendaryChance
+        val bonus = if (r == Rarity.LEGENDARY && c > 0.0 && Prizes.legendaryIds.isNotEmpty())
+            " + 보너스 상품 당첨 기회 (${if (c % 1.0 == 0.0) c.toInt().toString() else c.toString()}%)" else ""
+        return gold + bonus
+    }
 }
