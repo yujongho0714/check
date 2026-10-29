@@ -33,6 +33,7 @@ fun AssetPackSettings() {
     var busy by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf("") }
     var confirmClear by remember { mutableStateOf(false) }
+    var showGallery by remember { mutableStateOf(false) }
 
     val ver = AssetPack.version // 그림이 바뀌면 아래 값들을 다시 읽어요
     val stats = remember(ver) { AssetPack.stats(ctx) }
@@ -64,6 +65,8 @@ fun AssetPackSettings() {
             picker.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream"))
         }) { Text("그림 zip 올리기") }
 
+        OutlinedButton(enabled = !busy && !stats.empty, onClick = { showGallery = true }) { Text("올린 그림 전체 보기 · 골라서 지우기") }
+
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(enabled = !busy, onClick = {
                 busy = true; msg = "확인하는 중…"
@@ -85,6 +88,8 @@ fun AssetPackSettings() {
 
         if (msg.isNotBlank()) PixelText(msg, color = if (msg.startsWith("실패") || msg.contains("⚠️")) BadRed else OkGreen, fontSize = 14.sp)
     }
+
+    if (showGallery) AssetGalleryDialog { showGallery = false }
 
     if (confirmClear) {
         AlertDialog(

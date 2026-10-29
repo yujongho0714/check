@@ -147,6 +147,46 @@ object AssetPack {
         }
     }
 
+    // ───────────── 올린 그림 보기 / 골라서 지우기 ─────────────
+    private val IMG = setOf("png", "webp", "jpg", "jpeg")
+
+    /** 이 기기에 올라가 있는 그림 파일들 (root: rank / gem / plate / theme / dressup). 경로는 "gem/xxx.webp" 처럼 */
+    fun imageFiles(ctx: Context, root: String): List<String> {
+        val d = dir(ctx)
+        return File(d, root).walkTopDown()
+            .filter { it.isFile && it.extension.lowercase() in IMG }
+            .map { it.relativeTo(d).path.replace('\\', '/') }
+            .sorted().toList()
+    }
+
+    /** 고른 그림만 지우고 계정에도 반영해요 (다른 기기도 따라서 지워져요). 앱 기본 그림은 그대로 남아요 */
+    suspend fun deleteFiles(ctx: Context, paths: Collection<String>): String = mutex.withLock {
+        withContext(Dispatchers.IO) {
+            try {
+                runCatching { doPull(ctx, force = false, say = {}) }
+                val base = dir(ctx).canonicalPath + File.separator
+                var n = 0
+                paths.forEach { rel ->
+                    val f = File(dir(ctx), rel)
+                    if (!f.canonicalPath.startsWith(base)) return@forEach
+                    if (f.isFile && f.delete()) {
+                        n++
+                        var p = f.parentFile
+                        while (p != null && p.canonicalPath != dir(ctx).canonicalPath && p.isDirectory && p.list().isNullOrEmpty()) {
+                            p.delete(); p = p.parentFile
+                        }
+                    }
+                }
+                bump()
+                if (n == 0) return@withContext "지울 그림이 없어요"
+                val ok = push(ctx) {}
+                "${n}장 지웠어요 ✔" + if (ok) "" else "\n⚠️ 이 기기에서는 지웠지만 계정 저장은 실패했어요. 인터넷을 확인하고 [다른 기기와 맞추기]를 눌러 주세요."
+            } catch (e: Exception) {
+                "실패: ${e.message ?: e.javaClass.simpleName}"
+            }
+        }
+    }
+
     /** 올린 그림을 모두 지우고 앱 기본으로 (계정에서도 지워서 다른 기기도 기본으로 돌아가요) */
     suspend fun clearAll(ctx: Context): String = mutex.withLock {
         withContext(Dispatchers.IO) {

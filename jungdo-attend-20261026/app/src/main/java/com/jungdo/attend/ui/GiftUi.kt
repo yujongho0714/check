@@ -85,6 +85,7 @@ fun GiftTab(students: List<Student>) {
     var query by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf("") }
+    var confirmCancelAll by remember { mutableStateOf(false) }
 
     val active = remember(students) { students.filter { it.isActive }.sortedBy { it.name } }
     val n = countText.toIntOrNull() ?: 0
@@ -168,7 +169,11 @@ fun GiftTab(students: List<Student>) {
         // ── 아직 안 받은 선물 ──
         HorizontalDivider()
         val waiting = active.filter { it.gifts.isNotEmpty() }
-        Text("아직 안 받은 선물 (${waiting.size}명)", fontWeight = FontWeight.Bold)
+        val allWaiting = students.filter { it.gifts.isNotEmpty() }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("아직 안 받은 선물 (${waiting.size}명)", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            OutlinedButton(enabled = allWaiting.isNotEmpty(), onClick = { confirmCancelAll = true }) { Text("전체 취소", color = BadRed) }
+        }
         if (waiting.isEmpty()) Text("모두 받았어요", color = Muted, fontSize = 13.sp)
         waiting.forEach { s ->
             Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
@@ -182,6 +187,24 @@ fun GiftTab(students: List<Student>) {
             }
         }
         Spacer(Modifier.height(24.dp))
+    }
+
+    if (confirmCancelAll) {
+        val all = students.filter { it.gifts.isNotEmpty() }
+        val cnt = all.sumOf { it.gifts.size }
+        AlertDialog(
+            onDismissRequest = { confirmCancelAll = false },
+            title = { Text("안 받은 선물을 전부 취소할까요?") },
+            text = { Text("${all.size}명에게 남아 있는 선물 ${cnt}건이 모두 취소돼요. 이미 받아간 선물은 그대로예요.") },
+            confirmButton = {
+                Button(onClick = {
+                    Repo.cancelAllGifts(all)
+                    msg = "선물 ${cnt}건을 전부 취소했어요"
+                    confirmCancelAll = false
+                }) { Text("전체 취소") }
+            },
+            dismissButton = { TextButton(onClick = { confirmCancelAll = false }) { Text("아니요") } },
+        )
     }
 
     if (confirm) {

@@ -325,6 +325,15 @@ object Repo {
         students().document(studentId).update(mapOf<String, Any>("gifts" to FieldValue.arrayRemove(raw)))
     }
 
+    /** 아직 안 받은 선물을 모두 취소 (선물이 남아 있는 원생 전부) */
+    fun cancelAllGifts(students: List<Student>) {
+        students.filter { it.gifts.isNotEmpty() }.chunked(400).forEach { chunk ->
+            val batch = db.batch()
+            chunk.forEach { batch.update(students().document(it.id), mapOf<String, Any>("gifts" to emptyList<String>())) }
+            batch.commit()
+        }
+    }
+
     /** 키오스크에서 본인이 네임플레이트 바꾸기 ("" 이면 안 씀) */
     fun setPlate(id: String, plateId: String) {
         students().document(id).update(mapOf("plate" to plateId))
