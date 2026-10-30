@@ -39,6 +39,7 @@ fun StudentEditDialog(s: Student, all: List<Student>, onDismiss: () -> Unit) {
     var name by remember { mutableStateOf(s.name) }
     var grade by remember { mutableStateOf(s.grade) }
     var age by remember { mutableStateOf(if (s.curAge > 0) s.curAge.toString() else "") }
+    var gender by remember { mutableStateOf(s.gender) }
     var status by remember { mutableStateOf(s.status) }
     var reason by remember { mutableStateOf(s.statusReason) }
     var demo by remember { mutableStateOf(s.demo) }
@@ -75,6 +76,10 @@ fun StudentEditDialog(s: Student, all: List<Student>, onDismiss: () -> Unit) {
                 val ageNow = age.toIntOrNull() ?: 0
                 if (ageNow > 0) Text("올해 ${GradeCalc.labelOf(ageNow)} → 내년 ${GradeCalc.labelOf(ageNow + 1)}", color = Muted, fontSize = 12.sp)
                 else Text("나이를 넣으면 해마다 학년이 저절로 올라가요. 유치부(7세 이하)는 나이를 꼭 넣어 주세요. 8세=1학년, 14세=중1, 17세=고1, 20세=성인.", color = Muted, fontSize = 12.sp)
+                Text("성별 (장비 성별이 다르면 팔 수 있어요)")
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("남", "여").forEach { g -> Pill(g, gender == g, 15.sp) { gender = if (gender == g) "" else g } }
+                }
                 Text("상태")
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf(StudentStatus.ACTIVE, StudentStatus.LEAVE, StudentStatus.LEFT).forEach { st ->
@@ -121,8 +126,9 @@ fun StudentEditDialog(s: Student, all: List<Student>, onDismiss: () -> Unit) {
                 )
                 // 나이가 있으면 나이로 학년을 정하고(해마다 자동 진급), 없으면 적은 학년 글자를 그대로 둠
                 val ageNum = age.toIntOrNull() ?: 0
-                val updated = if (ageNum > 0) edited.withAge(ageNum) else GradeCalc.applyLabel(edited, grade)
+                val updated = (if (ageNum > 0) edited.withAge(ageNum) else GradeCalc.applyLabel(edited, grade)).copy(gender = gender)
                 Repo.saveStudent(updated)
+                if (s.id.isNotBlank() && gender != s.gender) Repo.setGender(s.id, gender)
                 if (s.id.isNotBlank()) expText.toIntOrNull()?.let { e -> if (e != s.exp) Repo.setExp(s.id, e) }
                 if (updated.id.isNotBlank() && sibNames.isNotEmpty()) {
                     val sibs = all.filter { it.name in sibNames && it.id != s.id && it.status != StudentStatus.LEFT }

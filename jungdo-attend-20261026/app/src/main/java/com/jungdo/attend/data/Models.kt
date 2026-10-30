@@ -17,6 +17,7 @@ data class Student(
     val order: Int = 0,                         // 현황표 순서
     val attendNo: String = "",                  // 출결번호 (보통 학부모 번호 끝 4자리, 형제는 같음)
     val school: String = "",
+    val gender: String = "",                    // 성별 "남" / "여" (비어 있으면 모름 → 장비 성별 비교 안 함)
     val fee: Int = 0,                           // 수강료
     val age: Int = 0,                           // 나이 (ageYear 해에 정한 나이. 0 이면 자동 진급 안 함)
     val ageYear: Int = 0,                       // 나이를 정한 해 (예: 2026)

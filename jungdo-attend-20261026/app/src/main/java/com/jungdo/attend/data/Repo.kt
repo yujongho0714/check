@@ -84,6 +84,7 @@ object Repo {
             order = (d.getLong("order") ?: 0L).toInt(),
             attendNo = d.getString("attendNo") ?: "",
             school = d.getString("school") ?: "",
+            gender = d.getString("gender") ?: "",
             fee = (d.getLong("fee") ?: 0L).toInt(),
             age = (d.getLong("age") ?: 0L).toInt(),
             ageYear = (d.getLong("ageYear") ?: 0L).toInt(),
@@ -184,7 +185,7 @@ object Repo {
     fun saveStudent(s: Student) {
         val joined = s.joinedMonth.ifBlank { Days.thisMonth() }
         val data = studentData(s.copy(joinedMonth = joined))
-        if (s.id.isBlank()) students().add(data) else students().document(s.id).set(data, SetOptions.merge())
+        if (s.id.isBlank()) students().add(if (s.gender.isNotBlank()) data + ("gender" to s.gender) else data) else students().document(s.id).set(data, SetOptions.merge())
     }
 
     /**
@@ -686,6 +687,44 @@ object Repo {
             r
         }.addOnSuccessListener { r -> if (r == null) onDone(null, "골드가 모자라요") else onDone(r, null) }
          .addOnFailureListener { onDone(null, "인터넷을 확인하고 다시 눌러 주세요") }
+    }
+
+    /** 성별 저장 ("남" / "여" / "" ). 명단 저장(studentData)이 덮어쓰지 않도록 따로 저장 */
+    fun setGender(id: String, gender: String) {
+        if (id.isNotBlank()) students().document(id).update(mapOf<String, Any>("gender" to gender))
+    }
+
+    /** 성별 명단(GenderRoster)을 원생 전체에 한 번에 넣기. 이미 성별이 있는 원생은 건드리지 않음. 넣은 사람 수를 돌려줌 */
+    fun applyRosterGenders(list: List<Student>): Int {
+        val todo = list.filter { it.id.isNotBlank() && it.gender.isBlank() }.mapNotNull { s -> GenderRoster.of(s).takeIf { it.isNotBlank() }?.let { s.id to it } }
+        todo.chunked(400).forEach { chunk ->
+            val batch = db.batch()
+            chunk.forEach { (id, g) -> batch.update(students().document(id), mapOf<String, Any>("gender" to g)) }
+            batch.commit()
+        }
+        return todo.size
+    }
+
+    /**
+     * 장비 팔기: 골라 준 옷을 가진 목록에서 지우고 1벌당 Dress.SELL_GOLD 골드를 받음. 입고 있는 옷은 안 팔림.
+     * 서버에 저장된 값 기준으로 처리해서 여러 기기에서 눌러도 골드가 두 번 늘지 않음.
+     * 끝나면 onDone(판 개수, 받은 골드) — 판 게 없으면 (0, 0)
+     */
+    fun sellDress(id: String, keys: List<String>, onDone: (Int, Int) -> Unit) {
+        val ref = students().document(id)
+        db.runTransaction { tx ->
+            val d = tx.get(ref)
+            val owned = strList(d.get("dress")).toHashSet()
+            val worn = (d.get("dressEquip") as? Map<*, *>)?.values?.mapNotNull { it as? String }?.toHashSet() ?: hashSetOf()
+            val sold = keys.distinct().filter { it in owned && it !in worn }
+            if (sold.isEmpty()) return@runTransaction 0
+            tx.update(ref, mapOf<String, Any>(
+                "dress" to FieldValue.arrayRemove(*sold.toTypedArray()),
+                "gold" to FieldValue.increment((sold.size * Dress.SELL_GOLD).toLong()),
+            ))
+            sold.size
+        }.addOnSuccessListener { n -> onDone(n ?: 0, (n ?: 0) * Dress.SELL_GOLD) }
+         .addOnFailureListener { onDone(-1, 0) }
     }
 
     /** 입은 옷 전체를 한 번에 바꾸기 (모두 벗기 = 빈 map, 랜덤 코디 등) */

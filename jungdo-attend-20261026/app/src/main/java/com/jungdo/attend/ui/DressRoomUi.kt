@@ -17,7 +17,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,6 +47,8 @@ import com.jungdo.attend.ui.game.PixelText
  *  - 위(또는 가로 화면에선 왼쪽): 내 캐릭터 + 방향(앞·뒤·오른쪽·왼쪽) + 서기·걷기·공격 미리보기
  *  - 부위 탭 8개 → 그 부위에서 **가진 옷만** 목록으로 → 누르면 입기, 입고 있는 걸 다시 누르면 벗기
  *  - [랜덤 코디] = 가진 옷 안에서 부위마다 하나씩 / [모두 벗기]
+ *  - 장비 팔기: 입고 있지 않은 옷은 1벌당 Dress.SELL_GOLD 골드에 팔 수 있음. 원생 성별(남/여)과 다른 성별 옷은
+ *    "성별 다름" 표시가 붙고, [성별 다른 장비 모두 팔기] 로 한 번에 팔 수 있음 (성별은 옷 이름으로 판단 → Dress.genderOfName)
  *  - 입고 벗는 건 누르는 즉시 서버(students/{id}.dressEquip)에 저장돼서 어느 기기에서나 같은 모습
  */
 @Composable
@@ -64,6 +68,14 @@ fun DressRoomPanel(s: Student, modifier: Modifier = Modifier) {
     val worn = s.dressEquip[cat]
 
     fun nameOf(key: String) = pack?.item(key)?.name?.takeIf { it.isNotBlank() } ?: "${Dress.noOf(key)}번"
+    fun wrongSex(key: String) = Dress.mismatch(s.gender, nameOf(key))
+
+    // 팔기 확인 창 (팔 옷 목록) · 결과 글
+    var sellKeys by remember { mutableStateOf<List<String>?>(null) }
+    var sellMsg by remember { mutableStateOf("") }
+    val wornKeys = s.dressEquip.values.toSet()
+    // 성별이 달라서 팔 수 있는 옷 (입고 있는 건 빼고, 모든 부위)
+    val wrongAll = s.dress.distinct().filter { wrongSex(it) && it !in wornKeys }
 
     val preview: @Composable () -> Unit = {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -108,10 +120,20 @@ fun DressRoomPanel(s: Student, modifier: Modifier = Modifier) {
                 }
             }
             Spacer(Modifier.height(6.dp))
+            if (wrongAll.isNotEmpty()) {
+                GameButton(
+                    "성별 다른 장비 모두 팔기 (${wrongAll.size}벌 · ${wrongAll.size * Dress.SELL_GOLD}골드)", onClick = { sellKeys = wrongAll },
+                    modifier = Modifier.fillMaxWidth().height(44.dp), color = theme.secondary, fontSize = 15.sp, sound = null,
+                )
+                Spacer(Modifier.height(6.dp))
+            }
+            if (sellMsg.isNotBlank()) {
+                PixelText(sellMsg, color = gameMuted(), fontSize = 13.sp, modifier = Modifier.padding(bottom = 4.dp))
+            }
             if (list.isEmpty()) {
                 PixelText("아직 ${Dress.catLabel(cat)} 옷이 없어요. 🎁 뽑기에서 모아 보세요!", color = gameMuted(), fontSize = 15.sp, modifier = Modifier.padding(8.dp))
             } else {
-                Text("옷을 누르면 입어요 (입은 옷을 다시 누르면 벗어요)", color = gameMuted(), fontSize = 13.sp)
+                Text("옷을 누르면 입어요 (입은 옷을 다시 누르면 벗어요) · 안 입는 옷은 ${Dress.SELL_GOLD}골드에 팔 수 있어요", color = gameMuted(), fontSize = 13.sp)
                 LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     items(list) { key ->
                         val on = worn == key
@@ -124,6 +146,12 @@ fun DressRoomPanel(s: Student, modifier: Modifier = Modifier) {
                         ) {
                             Text("${Dress.noOf(key)}", fontSize = 13.sp, color = gameMuted(), modifier = Modifier.width(34.dp))
                             Text(nameOf(key), fontSize = 17.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal, maxLines = 1, modifier = Modifier.weight(1f))
+                            if (!on && wrongSex(key)) Text("성별 다름", fontSize = 11.sp, color = Color(0xFFB45309), modifier = Modifier.padding(end = 6.dp))
+                            if (!on) Text(
+                                "팔기 +${Dress.SELL_GOLD}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White,
+                                modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(Color(0xFFB45309))
+                                    .clickable { sellKeys = listOf(key) }.padding(horizontal = 8.dp, vertical = 4.dp),
+                            )
                             if (on) PixelText("✔ 입는 중", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White,
                                 modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(OkGreen).padding(horizontal = 6.dp, vertical = 2.dp))
                         }
@@ -131,6 +159,32 @@ fun DressRoomPanel(s: Student, modifier: Modifier = Modifier) {
                 }
             }
         }
+    }
+
+    sellKeys?.let { keys ->
+        AlertDialog(
+            onDismissRequest = { sellKeys = null },
+            title = { Text("장비 팔기") },
+            text = {
+                Text(
+                    (if (keys.size == 1) "「${nameOf(keys[0])}」" else "${keys.size}벌") +
+                        "을 팔고 ${keys.size * Dress.SELL_GOLD}골드를 받을까요?\n판 옷은 사라지고 되돌릴 수 없어요. (뽑기에서 다시 나올 수는 있어요)",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    sellKeys = null
+                    Repo.sellDress(s.id, keys) { n, gold ->
+                        sellMsg = when {
+                            n < 0 -> "인터넷을 확인하고 다시 눌러 주세요"
+                            n == 0 -> "팔 수 있는 옷이 없어요 (입고 있는 옷은 못 팔아요)"
+                            else -> "${n}벌을 팔아서 ${gold}골드를 받았어요!"
+                        }
+                    }
+                }) { Text("팔기") }
+            },
+            dismissButton = { TextButton(onClick = { sellKeys = null }) { Text("취소") } },
+        )
     }
 
     if (land) {

@@ -12,6 +12,33 @@ object Dress {
     val CATS = listOf("coat", "armor", "helmet", "hair", "shield", "weapon", "shoes", "cape")
     const val PER_CAT = 100
 
+    /** 장비를 팔면 받는 골드 (1벌당) */
+    const val SELL_GOLD = 1
+
+    /**
+     * 옷 이름으로 보는 장비 성별 ("여" / "남" / 모르면 "")
+     *  1) 이름에 따로 떨어진 "여" / "남" 표시가 있으면 그대로 (예: "여 푸른 드레스", "[여]저고리", "여성용")
+     *  2) 없으면 여자 옷 낱말(드레스·치마·저고리 …)이 들어 있는지로 판단
+     *  → 이름에 표시도 낱말도 없으면 "" (남녀 공용으로 보고, 성별이 달라서 파는 대상에 안 넣음)
+     *  여자 옷 낱말을 늘리고 싶으면 FEMALE_WORDS 에 한 줄만 더하면 돼요.
+     */
+    val FEMALE_WORDS = listOf("드레스", "치마", "저고리", "원피스", "스커트")
+    private val MARK_F = Regex("(^|[\\s\\[\\(\\-_/])여(자|성|아)?($|[\\s\\]\\)\\-_/])|^여(자|성|아)")
+    private val MARK_M = Regex("(^|[\\s\\[\\(\\-_/])남(자|성|아)?($|[\\s\\]\\)\\-_/])|^남(자|성|아)")
+
+    fun genderOfName(name: String): String = when {
+        MARK_F.containsMatchIn(name) -> "여"
+        MARK_M.containsMatchIn(name) -> "남"
+        FEMALE_WORDS.any { name.contains(it) } -> "여"
+        else -> ""
+    }
+
+    /** 이 옷이 그 원생(성별 studentGender)과 성별이 다른지. 둘 중 하나라도 모르면 false */
+    fun mismatch(studentGender: String, itemName: String): Boolean {
+        val g = genderOfName(itemName)
+        return studentGender.isNotBlank() && g.isNotBlank() && g != studentGender
+    }
+
     fun catLabel(cat: String) = when (cat) {
         "coat" -> "갑옷"; "armor" -> "겉옷"; "helmet" -> "투구"; "hair" -> "헤어"
         "shield" -> "방패"; "weapon" -> "무기"; "shoes" -> "신발"; "cape" -> "망토"

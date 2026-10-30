@@ -36,6 +36,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jungdo.attend.data.GenderRoster
+import com.jungdo.attend.data.Repo
 import com.jungdo.attend.data.Student
 import com.jungdo.attend.data.StudentStatus
 import com.jungdo.attend.importer.ContactRow
@@ -77,6 +79,7 @@ fun RosterTab(students: List<Student>) {
     var table by remember { mutableStateOf<List<ContactRow>?>(null) }
     var error by remember { mutableStateOf("") }
     var applied by remember { mutableStateOf("") }
+    var genderMsg by remember { mutableStateOf("") }
     var editing by remember { mutableStateOf<Student?>(null) }
     var query by remember { mutableStateOf("") }
     var showLeft by remember { mutableStateOf(false) }
@@ -161,6 +164,17 @@ fun RosterTab(students: List<Student>) {
                 Text("재원 ${students.count { it.isActive }} · 휴관 ${students.count { it.status == StudentStatus.LEAVE }} · 퇴관 ${students.count { it.status == StudentStatus.LEFT }}", color = Muted, modifier = Modifier.weight(1f))
                 Pill(if (showLeft) "퇴관자 숨기기" else "퇴관자 보기", showLeft, 13.sp) { showLeft = !showLeft }
             }
+            // 성별 명단(GenderRoster)을 성별이 비어 있는 원생에게 한 번에 넣기
+            val noGender = students.filter { it.gender.isBlank() && GenderRoster.of(it).isNotBlank() }
+            val noGenderLeft = students.count { it.gender.isBlank() && it.status != StudentStatus.LEFT && GenderRoster.of(it).isBlank() }
+            if (noGender.isNotEmpty() || noGenderLeft > 0) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                Text(
+                    "성별 없음 ${students.count { it.gender.isBlank() && it.status != StudentStatus.LEFT }}명" + if (noGenderLeft > 0) " (명단에 없는 ${noGenderLeft}명은 이름을 눌러 직접 선택)" else "",
+                    color = Muted, fontSize = 13.sp, modifier = Modifier.weight(1f),
+                )
+                if (noGender.isNotEmpty()) OutlinedButton(onClick = { genderMsg = "성별 ${Repo.applyRosterGenders(students)}명 넣었어요 ✔" }) { Text("성별 명단 넣기 (${noGender.size}명)") }
+            }
+            if (genderMsg.isNotBlank()) Text(genderMsg, color = OkGreen, fontWeight = FontWeight.Bold)
             val needAge = students.filter { it.isActive && GradeCalc.needsAge(it) }
             if (needAge.isNotEmpty()) Text(
                 "⚠ 나이가 없어서 학년이 자동으로 안 올라가는 원생 ${needAge.size}명 (${needAge.take(6).joinToString(", ") { it.name }}${if (needAge.size > 6) " …" else ""}). 이름을 눌러 나이를 넣어 주세요.",
