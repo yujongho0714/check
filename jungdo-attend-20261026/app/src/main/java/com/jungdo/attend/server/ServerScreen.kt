@@ -217,7 +217,16 @@ private fun StatusAndLog() {
         owner.lifecycle.addObserver(obs)
         onDispose { owner.lifecycle.removeObserver(obs) }
     }
-    val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { refresh() }
+    val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { res ->
+        refresh()
+        // 안드로이드가 창을 안 띄우고 바로 거절한 경우(예전에 거부했거나 '제한된 설정') → 앱 설정 화면으로 보내서 직접 허용
+        if (res.values.any { !it }) {
+            android.widget.Toast.makeText(ctx, "권한 → 해당 항목을 '허용'으로 바꿔 주세요. 회색이면 오른쪽 위 ⋮ → '제한된 설정 허용' 먼저", android.widget.Toast.LENGTH_LONG).show()
+            runCatching {
+                ctx.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${ctx.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+        }
+    }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // ── 서버 켜기/끄기 ──
@@ -250,7 +259,7 @@ private fun StatusAndLog() {
                     CheckRow("문자 받기 권한 (학부모 문자 오면 사유 입력 창)", recvOk) {
                         permLauncher.launch(arrayOf(Manifest.permission.RECEIVE_SMS))
                     }
-                    CheckRow("문자함 확인 권한 (보낸 문자가 문자함에 있으면 '전송됨'으로 표시)", readOk) {
+                    CheckRow("(선택) 문자함 확인 권한 (보낸 문자가 문자함에 있으면 '전송됨'으로 표시)", readOk) {
                         permLauncher.launch(arrayOf(Manifest.permission.READ_SMS))
                     }
                     CheckRow("알림 표시 권한", notiOk) {

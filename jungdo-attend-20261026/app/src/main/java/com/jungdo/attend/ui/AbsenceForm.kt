@@ -103,7 +103,7 @@ fun AbsenceForm(
         val keys = pre.map { it.siblingKey }.filter { it.isNotBlank() }.toSet()
         (pre + active.filter { it.siblingKey in keys }).distinctBy { it.id }
     }
-    val searched = if (query.isBlank()) emptyList() else active.filter { it.name.contains(query.trim()) && it !in family }.take(8)
+    val searched = if (query.isBlank()) emptyList() else active.filter { nameMatches(it.name, query) && it !in family }.sortedBy { it.name }.take(30)
     val shown = (family + active.filter { it.id in selected && it !in family } + searched).distinctBy { it.id }
     val inToday = todayEvents.filter { it.type == EventType.IN }.map { it.studentId }.toSet()
 
@@ -143,7 +143,13 @@ fun AbsenceForm(
                 if (s.id in inToday) Text("  오늘 등원함", color = OkGreen, fontSize = 13.sp)
             }
         }
-        OutlinedTextField(query, { query = it }, label = { Text("다른 아이 이름 검색해서 추가") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        // 초성 버튼: 누르면 그 초성으로 시작하는 아이들이 위 목록에 나옴 (다시 누르면 지움)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            CHO_KEYS.forEach { ch ->
+                Pill(ch.toString(), query == ch.toString(), 17.sp) { query = if (query == ch.toString()) "" else ch.toString() }
+            }
+        }
+        OutlinedTextField(query, { query = it }, label = { Text("이름 또는 초성 검색 (예: 김시우, ㄱㅅㅇ, ㅅㅇ)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
 
         Text("날짜", fontWeight = FontWeight.Bold)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -244,4 +250,29 @@ fun AbsenceForm(
             OutlinedButton(onClick = onDone, modifier = Modifier.weight(1f).height(52.dp)) { Text("결석 아님 · 닫기") }
         }
     }
+}
+
+
+private val CHO_KEYS = "ㄱㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅌㅍㅎ".toList()
+private const val CHO_ALL = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ"
+
+/** 글자 → 초성 (쌍자음은 기본 자음으로) */
+private fun cho(c: Char): Char {
+    val ch = if (c in '가'..'힣') CHO_ALL[(c - '가') / 588] else c
+    return when (ch) { 'ㄲ' -> 'ㄱ'; 'ㄸ' -> 'ㄷ'; 'ㅃ' -> 'ㅂ'; 'ㅆ' -> 'ㅅ'; 'ㅉ' -> 'ㅈ'; else -> ch }
+}
+
+/**
+ * 이름 검색: 보통 글자는 이름에 들어 있으면 찾음.
+ * 초성만 쓰면(ㄱㅅㅇ) 이름 초성이 그걸로 시작하거나, 성을 뺀 이름 초성(ㅅㅇ → 시우)이 그걸로 시작하면 찾음.
+ */
+private fun nameMatches(name: String, q: String): Boolean {
+    val t = q.trim().replace(" ", "")
+    if (t.isEmpty()) return false
+    if (t.all { it in 'ㄱ'..'ㅎ' }) {
+        val want = t.map(::cho).joinToString("")
+        val init = name.map(::cho).joinToString("")
+        return init.startsWith(want) || init.drop(1).startsWith(want)
+    }
+    return name.contains(t)
 }

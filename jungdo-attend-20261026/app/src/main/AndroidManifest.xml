@@ -13,6 +13,8 @@
     <!-- 기기 B(문자 서버)에서만 실제로 사용 -->
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <!-- (선택) 보낸 문자함 확인: 문자가 실제로 문자함에 들어갔으면 '전송됨' 표시 -->
+    <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
