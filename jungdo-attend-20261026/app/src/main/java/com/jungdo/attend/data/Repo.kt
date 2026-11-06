@@ -211,43 +211,11 @@ object Repo {
         if ((p.fields.isEmpty() && !retry) || s.id.isBlank()) return base
         val gem = Loot.rollGem(s.gems, Loot.gemMultFor(s.gem), Dogam.gemBonusFor(s.gems))   // 에픽 보석 장착 중이면 보석 획득 확률 상승
         val plate = Loot.rollPlate(s.plates)
-        // ── 관장님 선물: 진짜 첫 등원/하원(p.fields 가 비어 있지 않을 때)에만 받고, 받는 순간 같은 저장(arrayRemove)으로 지워서 딱 한 번만 ──
-        val gotGems = ArrayList<String>(); val gotPlates = ArrayList<String>(); val gotDress = ArrayList<String>()
-        val gotPrizes = ArrayList<Prize>(); val consumed = ArrayList<String>(); var giftGold = 0
+        // ── 관장님 선물: 보통은 출결번호를 누르는 순간(claimGifts) 이미 받아 감. 그때 못 받은 게 남아 있으면 진짜 첫 등원/하원 때 받음 ──
         val haveDress = s.dress.toHashSet()
-        if (p.fields.isNotEmpty()) {
-            val haveGems = (s.gems + listOfNotNull(gem)).toHashSet()
-            val havePlates = (s.plates + listOfNotNull(plate)).toHashSet()
-            for (raw in s.gifts) {
-                val g = Gifts.parse(raw)
-                if (g == null) { consumed.add(raw); continue }            // 깨진 글자는 그냥 치움
-                val key = s.id + "/" + g.id
-                if (key in Gifts.claimed) continue                        // 낡은 화면 값으로 두 번 받는 것 방지
-                Gifts.claimed.add(key); consumed.add(raw)
-                when (g.kind) {
-                    Gifts.GEM -> {
-                        val rar = Rarity.ofOrNull(g.arg)
-                        Loot.allGems.filter { it !in haveGems && Loot.isGemOn(it) && (rar == null || Loot.rarityOf(it) == rar) }
-                            .shuffled().take(g.n).forEach { haveGems.add(it); gotGems.add(it) }
-                    }
-                    Gifts.PLATE -> Loot.allPlates.filter { it !in havePlates }.shuffled().take(g.n).forEach { havePlates.add(it); gotPlates.add(it) }
-                    Gifts.DRESS -> for (i in 1..g.n) {
-                        val all = Dress.allKeys.filter { g.arg !in Dress.CATS || Dress.catOf(it) == g.arg }
-                        val fresh = all.filter { it !in haveDress }
-                        val k = (if (fresh.isNotEmpty()) fresh else all).random()
-                        if (haveDress.add(k)) {
-                            gotDress.add(k)
-                        } else {
-                            giftGold += Loot.dupRefund.coerceAtLeast(0)
-                        }
-                    }
-                    Gifts.PRIZE -> {
-                        val pz = Prizes.list.firstOrNull { it.id == g.arg }
-                        if (pz != null) for (i in 1..g.n) gotPrizes.add(pz)
-                    }
-                }
-            }
-        }
+        val take = if (p.fields.isNotEmpty()) takeGifts(s, listOfNotNull(gem), listOfNotNull(plate), haveDress) else GiftTake()
+        val gotGems = take.gems; val gotPlates = take.plates; val gotDress = take.dress
+        val gotPrizes = take.prizes; val consumed = take.consumed; val giftGold = take.gold
         val f = HashMap<String, Any>(p.fields)
         if (retry) f[if (type == EventType.IN) "retryIn" else "retryOut"] = RETRY_DAY
         val newGems = listOfNotNull(gem) + gotGems
@@ -297,6 +265,82 @@ object Repo {
         )
     }
 
+    /** 선물을 풀어 본 결과 */
+    class GiftTake(
+        val gems: List<String> = emptyList(), val plates: List<String> = emptyList(), val dress: List<String> = emptyList(),
+        val prizes: List<Prize> = emptyList(), val gold: Int = 0, val consumed: List<String> = emptyList(),
+    )
+
+    /** 원생에게 쌓인 선물(gifts)을 풀어서 무엇을 받는지 정함 (저장은 부르는 쪽에서). haveDress 에는 받은 옷이 더해짐 */
+    private fun takeGifts(s: Student, extraGems: List<String>, extraPlates: List<String>, haveDress: HashSet<String>): GiftTake {
+        val gotGems = ArrayList<String>(); val gotPlates = ArrayList<String>(); val gotDress = ArrayList<String>()
+        val gotPrizes = ArrayList<Prize>(); val consumed = ArrayList<String>(); var giftGold = 0
+        val haveGems = (s.gems + extraGems).toHashSet()
+        val havePlates = (s.plates + extraPlates).toHashSet()
+        for (raw in s.gifts) {
+            val g = Gifts.parse(raw)
+            if (g == null) { consumed.add(raw); continue }            // 깨진 글자는 그냥 치움
+            val key = s.id + "/" + g.id
+            if (key in Gifts.claimed) continue                        // 낡은 화면 값으로 두 번 받는 것 방지
+            Gifts.claimed.add(key); consumed.add(raw)
+            when (g.kind) {
+                Gifts.GEM -> {
+                    val rar = Rarity.ofOrNull(g.arg)
+                    Loot.allGems.filter { it !in haveGems && Loot.isGemOn(it) && (rar == null || Loot.rarityOf(it) == rar) }
+                        .shuffled().take(g.n).forEach { haveGems.add(it); gotGems.add(it) }
+                }
+                Gifts.PLATE -> Loot.allPlates.filter { it !in havePlates }.shuffled().take(g.n).forEach { havePlates.add(it); gotPlates.add(it) }
+                Gifts.DRESS -> for (i in 1..g.n) {
+                    val all = Dress.allKeys.filter { g.arg !in Dress.CATS || Dress.catOf(it) == g.arg }
+                    if (all.isEmpty()) break
+                    val fresh = all.filter { it !in haveDress }
+                    val k = (if (fresh.isNotEmpty()) fresh else all).random()
+                    if (haveDress.add(k)) gotDress.add(k) else giftGold += Loot.dupRefund.coerceAtLeast(0)
+                }
+                Gifts.PRIZE -> {
+                    val pz = Prizes.list.firstOrNull { it.id == g.arg }
+                    if (pz != null) for (i in 1..g.n) gotPrizes.add(pz)
+                }
+            }
+        }
+        return GiftTake(gotGems, gotPlates, gotDress, gotPrizes, giftGold, consumed)
+    }
+
+    /**
+     * 출결번호만 눌러도 관장님 선물 받기 (등원/하원을 안 눌러도 됨).
+     * 받을 선물이 없으면 null. 받은 선물은 같은 저장(arrayRemove)으로 지워서 딱 한 번만.
+     */
+    fun claimGifts(s: Student): AwardResult? {
+        if (s.id.isBlank() || s.gifts.isEmpty()) return null
+        val take = takeGifts(s, emptyList(), emptyList(), s.dress.toHashSet())
+        if (take.consumed.isEmpty()) return null
+        val f = HashMap<String, Any>()
+        if (take.gems.isNotEmpty()) {
+            f["gems"] = FieldValue.arrayUnion(*take.gems.toTypedArray())
+            if (s.gem.isBlank()) f["gem"] = take.gems.first()     // 처음 얻은 보석은 자동 장착
+        }
+        if (take.plates.isNotEmpty()) {
+            f["plates"] = FieldValue.arrayUnion(*take.plates.toTypedArray())
+            if (s.plate.isBlank()) f["plate"] = take.plates.first()
+        }
+        if (take.dress.isNotEmpty()) f["dress"] = FieldValue.arrayUnion(*take.dress.toTypedArray())
+        if (take.gold > 0) f["gold"] = FieldValue.increment(take.gold.toLong())
+        f["gifts"] = FieldValue.arrayRemove(*take.consumed.toTypedArray())
+        students().document(s.id).update(f)
+        take.prizes.forEach { pz ->
+            val cur = Prizes.list.firstOrNull { it.id == pz.id } ?: pz
+            runCatching { recordWin(s, cur) }
+            Prizes.consume(cur.id)
+        }
+        val res = AwardResult(
+            name = s.name, type = "", gained = 0, bonus = 0, streak = 0, expBefore = s.exp, expAfter = s.exp,
+            equipped = if (s.plate.isBlank()) take.plates.firstOrNull() ?: "" else s.plate,
+            giftGems = take.gems, giftPlates = take.plates, giftDress = take.dress, giftGold = take.gold,
+            giftPrizes = take.prizes.map { PrizeWin(it.id, it.name, it.message, it.photo) },
+        )
+        return if (res.hasGift) res else null
+    }
+
     /** 상품 당첨 기록 (지급 대기 = paid false) + 재고가 있는 상품이면 하나 줄임 */
     fun recordWin(s: Student, p: Prize) {
         val now = System.currentTimeMillis()
@@ -312,7 +356,7 @@ object Repo {
         batch.commit()
     }
 
-    /** 관장님 선물 보내기: 고른 원생들의 gifts 칸에 한 줄 추가 (다음 등원/하원 때 한 번 받음) */
+    /** 관장님 선물 보내기: 고른 원생들의 gifts 칸에 한 줄 추가 (다음에 출결번호를 누를 때 한 번 받음) */
     fun sendGifts(targets: List<Student>, raw: String) {
         targets.chunked(400).forEach { chunk ->
             val batch = db.batch()

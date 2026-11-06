@@ -167,7 +167,8 @@ fun KioskScreen(onReset: () -> Unit, preview: Boolean = false) {
     var panelTop by remember { mutableStateOf(false) }             // 조절 패널을 위에 둘지 (아래 버튼을 가리면 위로 옮김)
     LaunchedEffect(selected) { if (selected == null) { adjustMode = false; draft = null } }
     var padChoices by remember { mutableStateOf<List<Student>?>(null) }
-    var typedNo by remember { mutableStateOf("") }   // 마지막으로 입력한 번호 (어느 학부모 번호로 눌렀는지 알아내려고)
+    var typedNo by remember { mutableStateOf("") }
+    var giftAward by remember { mutableStateOf<AwardResult?>(null) }   // 출결번호를 누르자마자 받은 관장님 선물   // 마지막으로 입력한 번호 (어느 학부모 번호로 눌렀는지 알아내려고)
     val tts by rememberTts(ctx)
     val theme = LocalGameTheme.current
 
@@ -216,6 +217,13 @@ fun KioskScreen(onReset: () -> Unit, preview: Boolean = false) {
         if (prefs.ttsOn) tts?.speak("$names ${EventType.label(type)}", TextToSpeech.QUEUE_FLUSH, null, "att")
     }
 
+    // 관장님 선물: 출결번호만 눌러도 바로 받음 (등원/하원을 안 눌러도 됨)
+    fun claimGiftFor(st: Student) {
+        if (adjusting) return
+        val fresh = allStudents.firstOrNull { it.id == st.id } ?: st
+        giftAward = runCatching { Repo.claimGifts(fresh) }.getOrNull()
+    }
+
     // 출결번호 확인: 한 명이면 바로 등원/하원 창, 형제(같은 번호)면 "누구예요?"에서 자기 이름 고르기
     fun submitNo(no: String): Boolean {
         val found = students.filter { it.matchesNo(no) }
@@ -226,7 +234,7 @@ fun KioskScreen(onReset: () -> Unit, preview: Boolean = false) {
         }
         return when {
             found.isEmpty() -> false
-            found.size == 1 -> { withSibs = emptySet(); selected = found.first(); true }
+            found.size == 1 -> { withSibs = emptySet(); selected = found.first(); claimGiftFor(found.first()); true }
             else -> { padChoices = found; true }
         }
     }
@@ -441,13 +449,32 @@ fun KioskScreen(onReset: () -> Unit, preview: Boolean = false) {
                     list.forEach { st ->
                         GameButton(
                             st.name,
-                            onClick = { padChoices = null; withSibs = emptySet(); selected = st },
+                            onClick = { padChoices = null; withSibs = emptySet(); selected = st; claimGiftFor(st) },
                             modifier = Modifier.widthIn(min = 260.dp).height(84.dp).padding(vertical = 4.dp),
                             fontSize = 32.sp, sound = null,
                             leading = { RankImage(st.level, 52.dp) },
                         )
                     }
                     GameTextButton("취소", 20.sp) { padChoices = null }
+                }
+            }
+        }
+    }
+
+    // ── 관장님 선물 도착 (출결번호를 누르자마자) ──
+    giftAward?.let { a ->
+        LaunchedEffect(a) { delay(if (a.giftPrizes.isNotEmpty()) 10_000 else 7_000); giftAward = null }
+        Dialog(onDismissRequest = { giftAward = null }) {
+            Box(
+                Modifier.clip(RoundedCornerShape(28.dp)).background(Color(0xEE1F2937)).clickable { giftAward = null }.padding(28.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(a.name, fontSize = 30.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    Spacer(Modifier.height(10.dp))
+                    GiftRow(a)
+                    Spacer(Modifier.height(14.dp))
+                    Text("눌러서 닫기", fontSize = 15.sp, color = Color(0xFFD1D5DB))
                 }
             }
         }
