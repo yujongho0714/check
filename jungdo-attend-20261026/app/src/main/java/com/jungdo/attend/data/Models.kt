@@ -38,7 +38,8 @@ data class Student(
     val dressEquip: Map<String, String> = emptyMap(), // 입은 옷: 부위 → 옷 키 (예: "coat" to "coat:012")
     val gifts: List<String> = emptyList(),
     val belt: String = "",                      // 띠 (예: 노랑띠, 1품 5급) — 통합관리에서 자동으로 맞춰짐
-    val jumpGrade: String = "",                 // 줄넘기 급 (9급 … 1급)      // 관장님이 보낸 선물 중 아직 안 받은 것 (Gifts 글자 형식). 다음에 출결번호를 누를 때 한 번 받고 사라짐
+    val jumpGrade: String = "",                 // 줄넘기 급 (9급 … 1급)
+    val beltManual: Boolean = false,            // true 면 관장님이 직접 고친 띠 → 통합관리 연동이 덮어쓰지 않음      // 관장님이 보낸 선물 중 아직 안 받은 것 (Gifts 글자 형식). 다음에 출결번호를 누를 때 한 번 받고 사라짐
 ) {
     /** 계급 레벨 (1 ~ 866) */
     val level: Int get() = Rank.levelOf(exp)

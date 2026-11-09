@@ -116,12 +116,36 @@ object BeltSync {
         @Suppress("UNCHECKED_CAST")
         val pair = res as Pair<Long, JSONObject>
         val stamp = pair.first; val data = pair.second
-        val b = data.optJSONObject("b") ?: JSONObject()
-        val map = HashMap<String, String>()
-        b.keys().forEach { k -> map[k.trim()] = Belts.norm(b.optString(k)) }
+        // 통합관리 목록: [이름 · 학년 · 띠]  (옛 버전은 이름 → 띠)
+        data class E(val n: String, val g: String, val b: String)
+        val list = ArrayList<E>()
+        data.optJSONArray("l")?.let { a -> for (k in 0 until a.length()) a.optJSONObject(k)?.let { o -> list += E(o.optString("n").trim(), o.optString("g").trim(), Belts.norm(o.optString("b"))) } }
+        if (list.isEmpty()) data.optJSONObject("b")?.let { b -> b.keys().forEach { k -> list += E(k.trim(), "", Belts.norm(b.optString(k))) } }
 
         val alive = students.filter { it.status != StudentStatus.LEFT }
-        val changes = alive.mapNotNull { s -> map[s.name.trim()]?.let { nb -> if (nb.isNotBlank() && nb != s.belt) s.id to nb else null } }
+        val byName = list.filter { it.b.isNotBlank() }.groupBy { it.n }
+        val newBelt = HashMap<String, String>()   // 원생 id → 띠 ("" = 모름, 비움)
+        var paired = 0
+        alive.filter { !it.beltManual }.groupBy { it.name.trim() }.forEach { (name, kids) ->
+            val cands = byName[name] ?: return@forEach
+            if (kids.size == 1 && cands.size == 1) { newBelt[kids[0].id] = cands[0].b; return@forEach }
+            // 이름이 같은 아이가 여럿: ① 학년이 딱 맞으면 그걸로
+            val left = cands.toMutableList()
+            val rest = ArrayList<Student>()
+            kids.forEach { s ->
+                val sg = gradeKey(s.grade)
+                val hit = left.filter { sg < 99 && gradeKey(it.g) == sg }
+                if (hit.size == 1) { newBelt[s.id] = hit[0].b; left -= hit[0] } else rest += s
+            }
+            // ② 남은 아이는 나이 어린 아이 ↔ 낮은 띠 순서로 짝지음 (숫자가 같을 때만)
+            if (rest.isNotEmpty()) {
+                if (rest.size == left.size) {
+                    rest.sortedBy { gradeKey(it.grade) }.zip(left.sortedBy { Belts.rank(it.b) }).forEach { (s, e) -> newBelt[s.id] = e.b }
+                    paired += rest.size
+                } else rest.forEach { newBelt[it.id] = "" }   // 모르면 잘못된 띠를 두지 않고 비움
+            }
+        }
+        val changes = alive.mapNotNull { s -> newBelt[s.id]?.let { nb -> if (nb != s.belt) s.id to nb else null } }
         changes.chunked(400).forEach { chunk ->
             val batch = Repo.db.batch()
             chunk.forEach { (id, nb) -> batch.update(Repo.students().document(id), mapOf("belt" to nb)) }
@@ -129,15 +153,32 @@ object BeltSync {
         }
         lastStamp = stamp
         val names = alive.map { it.name.trim() }.toSet()
-        val noBelt = alive.count { it.name.trim() !in map }
-        val extra = map.keys.count { it !in names }
+        val noBelt = alive.count { it.name.trim() !in byName }
+        val extra = byName.keys.count { it !in names }
+        val manual = alive.count { it.beltManual }
         val time = Repo.timeText(System.currentTimeMillis())
         val msg = "$time 맞춤 · 띠 바뀐 원생 ${changes.size}명" +
+            (if (manual > 0) " · 직접 고정 ${manual}명" else "") +
+            (if (paired > 0) " · 이름 같은 아이 ${paired}명은 나이 순으로 맞춤(틀리면 직접 고쳐 주세요)" else "") +
             (if (noBelt > 0) " · 통합관리에 없는 원생 ${noBelt}명" else "") +
             (if (extra > 0) " · 출결에 없는 이름 ${extra}명" else "")
         sp(ctx).edit().putString("beltInfo", msg).apply()
         status.value = msg
         return msg
+    }
+
+    /** 학년 → 나이 순서 숫자 (6세 → 6, 초1/1학년 → 8, 중1 → 14). 모르면 99 */
+    fun gradeKey(raw: String): Int {
+        val g = raw.replace(" ", "")
+        if (g.isBlank()) return 99
+        val n = Regex("(\\d+)").find(g)?.groupValues?.get(1)?.toIntOrNull() ?: return 99
+        return when {
+            g.contains("세") || g.contains("살") -> n
+            g.startsWith("중") -> 13 + n
+            g.startsWith("고") -> 16 + n
+            g.contains("학년") || g.startsWith("초") -> 7 + n
+            else -> 99
+        }
     }
 
     /** PBKDF2-HMAC-SHA256, 32바이트 (비밀번호는 UTF-8 그대로 → 웹과 똑같음) */

@@ -53,6 +53,7 @@ fun StudentEditDialog(s: Student, all: List<Student>, onDismiss: () -> Unit) {
     var expText by remember { mutableStateOf(s.exp.toString()) }
     var confirmDel by remember { mutableStateOf(false) }
     var belt by remember { mutableStateOf(s.belt) }
+    var beltLock by remember { mutableStateOf(s.beltManual) }
     var jump by remember { mutableStateOf(s.jumpGrade) }
 
     AlertDialog(
@@ -92,8 +93,16 @@ fun StudentEditDialog(s: Student, all: List<Student>, onDismiss: () -> Unit) {
                 if (status != StudentStatus.ACTIVE) OutlinedTextField(reason, { reason = it }, label = { Text("${StudentStatus.label(status)} 사유") })
                 if (status == StudentStatus.LEFT) Text("퇴관은 이번 달부터 출석체크·출석부에서 빠지고, 지난달 기록은 그대로 남아요.", color = Muted, fontSize = 12.sp)
                 Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(demo, { demo = it }); Text("시범단") }
-                OutlinedTextField(belt, { belt = it }, label = { Text("띠 (예: 노랑띠, 1품 5급)") }, singleLine = true)
-                Text("띠는 통합관리에서 바뀌면 여기도 저절로 바뀌어요. 직접 고쳐도 다음에 통합관리 내용으로 다시 맞춰져요.", color = Muted, fontSize = 12.sp)
+                Text("띠")
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Belts.COLORS.forEach { c -> Pill(c, Belts.norm(belt) == c, 13.sp) { belt = c; beltLock = true } }
+                }
+                OutlinedTextField(belt, { belt = it; beltLock = true }, label = { Text("품띠는 직접 (예: 1품 5급)") }, singleLine = true)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(beltLock, { beltLock = it })
+                    Text("이 띠로 고정 (통합관리 연동이 안 바꿈)", fontSize = 14.sp)
+                }
+                Text("고정을 끄면 다음 연동 때 통합관리 띠로 다시 맞춰져요.", color = Muted, fontSize = 12.sp)
                 Text("줄넘기 급")
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Pill("없음", jump.isBlank(), 13.sp) { jump = "" }
@@ -138,7 +147,7 @@ fun StudentEditDialog(s: Student, all: List<Student>, onDismiss: () -> Unit) {
                 val ageNum = age.toIntOrNull() ?: 0
                 val updated = (if (ageNum > 0) edited.withAge(ageNum) else GradeCalc.applyLabel(edited, grade)).copy(gender = gender)
                 Repo.saveStudent(updated)
-                if (s.id.isNotBlank() && Belts.norm(belt) != s.belt) Repo.setBelt(s.id, belt)
+                if (s.id.isNotBlank() && (Belts.norm(belt) != s.belt || beltLock != s.beltManual)) Repo.setBelt(s.id, belt, beltLock)
                 if (s.id.isNotBlank() && jump != s.jumpGrade) Repo.setJumpGrade(s.id, jump)
                 if (s.id.isNotBlank() && gender != s.gender) Repo.setGender(s.id, gender)
                 if (s.id.isNotBlank()) expText.toIntOrNull()?.let { e -> if (e != s.exp) Repo.setExp(s.id, e) }
