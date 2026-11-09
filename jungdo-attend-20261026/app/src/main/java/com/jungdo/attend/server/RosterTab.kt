@@ -117,6 +117,7 @@ fun RosterTab(students: List<Student>) {
     val shownStudents = students.filter { (showLeft || it.status != StudentStatus.LEFT) && (query.isBlank() || it.name.contains(query.trim())) }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        item { BeltSyncCard(students) }
         item {
             Card(colors = CardDefaults.cardColors(containerColor = Color.White)) {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -187,6 +188,8 @@ fun RosterTab(students: List<Student>) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(s.name, fontWeight = FontWeight.Bold, fontSize = 17.sp, color = if (s.isActive) Color.Unspecified else Muted)
                     Text("  ${s.grade}${if (s.curAge > 0) " (${s.curAge}세)" else ""}", color = Muted)
+                    if (s.belt.isNotBlank()) { Spacer(Modifier.width(6.dp)); com.jungdo.attend.ui.BeltTag(s.belt) }
+                    if (s.jumpGrade.isNotBlank()) Text("  줄넘기 ${s.jumpGrade}", color = Muted, fontSize = 12.sp)
                     Text("  Lv.${s.level}", color = InBlue, fontSize = 13.sp)
                     if (s.isActive && GradeCalc.needsAge(s)) Text(" 나이?", color = BadRed, fontSize = 12.sp)
                     if (s.demo) Text("  ★시범단", color = InBlue, fontSize = 13.sp)

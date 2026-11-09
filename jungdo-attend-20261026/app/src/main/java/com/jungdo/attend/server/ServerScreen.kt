@@ -117,6 +117,7 @@ fun ServerScreen(onReset: () -> Unit) {
     LaunchedEffect(openWin) { if (openWin != null) tab = 7 } // 당첨 알림을 눌러 들어오면 당첨·지급 탭으로
     val students by rememberStudents()
     rememberCustomHolidays() // 관장님이 추가한 휴일을 앱 전체에 반영
+    BeltAutoSync(students) // 통합관리 띠를 10분마다 받아서 맞춤
     val recent by com.jungdo.attend.data.rememberInboxRange(Repo.shiftDay(Repo.today(), -30), Repo.today())
     val openMsgs = recent.count { !it.handled }
     val pendingWins by com.jungdo.attend.data.rememberPendingWins()

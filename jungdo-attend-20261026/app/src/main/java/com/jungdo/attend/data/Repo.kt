@@ -106,6 +106,8 @@ object Repo {
                 ?.mapNotNull { e -> val k = e.key as? String; val v = e.value as? String; if (k != null && v != null) k to v else null }
                 ?.toMap() ?: emptyMap(),
             gifts = strList(d.get("gifts")),
+            belt = d.getString("belt") ?: "",
+            jumpGrade = d.getString("jumpGrade") ?: "",
         )
         // 나이가 있으면 올해 학년을 계산해서 보여줌 (저장된 grade 글자는 옛 값일 수 있음)
         if (base.age > 0 && base.ageYear > 0) return base.copy(grade = GradeCalc.labelOf(base.curAge))
@@ -182,6 +184,10 @@ object Repo {
     )
 
     // ---------- 원생 ----------
+    /** 띠·줄넘기 급은 명단 저장(studentData)과 따로 저장 → 현황표를 다시 올려도 안 지워짐 */
+    fun setBelt(id: String, belt: String) { if (id.isNotBlank()) students().document(id).set(mapOf("belt" to Belts.norm(belt)), SetOptions.merge()) }
+    fun setJumpGrade(id: String, g: String) { if (id.isNotBlank()) students().document(id).set(mapOf("jumpGrade" to g), SetOptions.merge()) }
+
     fun saveStudent(s: Student) {
         val joined = s.joinedMonth.ifBlank { Days.thisMonth() }
         val data = studentData(s.copy(joinedMonth = joined))

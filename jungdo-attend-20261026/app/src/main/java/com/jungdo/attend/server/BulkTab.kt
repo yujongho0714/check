@@ -44,6 +44,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jungdo.attend.data.Belts
 import com.jungdo.attend.data.Bulk
 import com.jungdo.attend.data.BulkJob
 import com.jungdo.attend.data.BulkStatus
@@ -79,6 +80,9 @@ fun BulkTab(students: List<Student>) {
     var groupId by remember { mutableStateOf<String?>(null) }
     var gradeSel by remember { mutableStateOf<Set<String>>(emptySet()) }   // 학년 필터 (비어 있으면 전체 학년)
     var choSel by remember { mutableStateOf<Set<String>>(emptySet()) }     // 초성 필터 (비어 있으면 전체)
+    var beltSel by remember { mutableStateOf<Set<String>>(emptySet()) }     // 띠 필터
+    var jumpSel by remember { mutableStateOf<Set<String>>(emptySet()) }     // 줄넘기 급 필터
+    var kukSel by remember { mutableStateOf<Set<String>>(emptySet()) }      // 국기원 문자 바로 고르기
     var byGiven by remember { mutableStateOf(false) }                      // 초성 기준: false=성(이름 첫 글자), true=성 뺀 이름
     var saveDlg by remember { mutableStateOf(false) }
     var dlgName by remember { mutableStateOf("") }
@@ -94,8 +98,12 @@ fun BulkTab(students: List<Student>) {
     val (items, noPhone) = remember(text, selected, allPhones, active) { Bulk.buildItems(text.ifBlank { " " }, kids, allPhones) }
     val grades = remember(active) { active.map { it.grade }.filter { it.isNotBlank() }.distinct().sortedBy { gradeRank(it) } }
     // 학년 · 초성 · 검색을 겹쳐서 걸러 보기 (아무것도 안 누르면 전체). 고른 사람은 필터를 바꿔도 계속 남아요
+    val belts = remember(active) { active.map { Belts.norm(it.belt) }.filter { it.isNotBlank() }.distinct().sortedBy { Belts.rank(it) } }
+    val jumps = remember(active) { active.map { it.jumpGrade }.filter { it.isNotBlank() }.distinct().sortedByDescending { it.filter(Char::isDigit).toIntOrNull() ?: 0 } }
     val shownPick = active.filter { s ->
         (gradeSel.isEmpty() || s.grade in gradeSel) &&
+            (beltSel.isEmpty() || Belts.norm(s.belt) in beltSel) &&
+            (jumpSel.isEmpty() || s.jumpGrade in jumpSel) &&
             (choSel.isEmpty() || choOf((if (byGiven) Messages.givenName(s.name) else s.name.trim()).firstOrNull())?.let { it in choSel } == true) &&
             (query.isBlank() || s.name.contains(query.trim()) || s.grade.contains(query.trim()))
     }.sortedWith(compareBy<Student>({ gradeRank(it.grade) }, { it.name }))
@@ -109,6 +117,7 @@ fun BulkTab(students: List<Student>) {
                 groups.forEach { g ->
                     Pill("${g.name} ${g.studentIds.count { id -> active.any { it.id == id } }}명", groupId == g.id, 15.sp) {
                         groupId = g.id; groupName = g.name
+                        kukSel = emptySet()
                         selected = g.studentIds.filter { id -> active.any { it.id == id } }.toSet()
                     }
                 }
@@ -117,17 +126,40 @@ fun BulkTab(students: List<Student>) {
         Text("빠르게 선택", fontWeight = FontWeight.Bold)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Pill("전체 원생", false, 15.sp) { selected = active.map { it.id }.toSet(); groupId = null }
-            Pill("선택 해제", false, 15.sp) { selected = emptySet(); groupId = null }
+            Pill("선택 해제", false, 15.sp) { selected = emptySet(); groupId = null; kukSel = emptySet() }
         }
+        // 국기원 문자: 띠만 누르면 그 띠 아이들이 모두 선택 (여러 개 눌러도 돼요)
+        Text("🥋 국기원 문자", fontWeight = FontWeight.Bold)
+        Text("띠를 누르면 그 띠 아이들이 모두 선택돼요. 여러 개 눌러도 되고, 다시 누르면 빠져요.", color = Muted, fontSize = 12.sp)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Belts.KUKKIWON.forEach { b ->
+                val n = active.count { Belts.norm(it.belt) == b }
+                Pill("$b ${n}명", b in kukSel, 15.sp) {
+                    val next = if (b in kukSel) kukSel - b else kukSel + b
+                    kukSel = next; groupId = null
+                    selected = active.filter { Belts.norm(it.belt) in next }.map { it.id }.toSet()
+                }
+            }
+        }
+        if (active.none { it.belt.isNotBlank() }) Text("⚠ 아직 띠가 들어간 원생이 없어요. [명단·형제] 탭 맨 위 '통합관리 띠 연동'에 비밀번호를 넣어 주세요.", color = OutOrange, fontSize = 12.sp)
         Text("선택됨: ${kids.size}명" + if (kids.isNotEmpty() && kids.size <= 8) " (${kids.joinToString(", ") { it.name }})" else "", fontWeight = FontWeight.Bold, color = Navy)
 
         // 학년 → 초성으로 찾기 (학년만, 초성만, 둘 다 가능 / 여러 개 눌러도 돼요)
         HorizontalDivider()
-        Text("학년 · 초성으로 찾기", fontWeight = FontWeight.Bold)
+        Text("학년 · 띠 · 초성으로 찾기", fontWeight = FontWeight.Bold)
         Text("학년만, 초성만, 둘 다 눌러도 돼요. 아래 목록에서 사람을 고르면 선택에 더해지고, 조건을 바꿔도 이미 고른 사람은 그대로 남아요.", color = Muted, fontSize = 12.sp)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             grades.forEach { g -> Pill(g, g in gradeSel, 15.sp) { gradeSel = if (g in gradeSel) gradeSel - g else gradeSel + g } }
             if (gradeSel.isNotEmpty()) Pill("학년 해제", false, 15.sp) { gradeSel = emptySet() }
+        }
+        if (belts.isNotEmpty()) FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            belts.forEach { b -> Pill(b, b in beltSel, 14.sp) { beltSel = if (b in beltSel) beltSel - b else beltSel + b } }
+            if (beltSel.isNotEmpty()) Pill("띠 해제", false, 14.sp) { beltSel = emptySet() }
+        }
+        if (jumps.isNotEmpty()) FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("줄넘기", color = Muted, fontSize = 13.sp)
+            jumps.forEach { g -> Pill(g, g in jumpSel, 14.sp) { jumpSel = if (g in jumpSel) jumpSel - g else jumpSel + g } }
+            if (jumpSel.isNotEmpty()) Pill("줄넘기 해제", false, 14.sp) { jumpSel = emptySet() }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("초성 기준", color = Muted, fontSize = 13.sp)
@@ -156,6 +188,8 @@ fun BulkTab(students: List<Student>) {
                 Text(s.name, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.width(8.dp))
                 Text(s.grade, color = Muted)
+                if (s.belt.isNotBlank()) { Spacer(Modifier.width(8.dp)); com.jungdo.attend.ui.BeltTag(s.belt) }
+                if (s.jumpGrade.isNotBlank()) Text("  줄넘기 ${s.jumpGrade}", color = Muted, fontSize = 12.sp)
             }
         }
         HorizontalDivider()
@@ -211,7 +245,8 @@ fun BulkTab(students: List<Student>) {
             text = { Text("아이 ${kids.size}명 · 한 곳당 문자 ${Messages.smsCount(items.firstOrNull()?.text ?: "")}통\n\n" + (items.firstOrNull()?.text ?: "")) },
             confirmButton = {
                 Button(onClick = {
-                    val gName = groups.firstOrNull { it.id == groupId }?.name ?: "직접 선택 ${kids.size}명"
+                    val gName = groups.firstOrNull { it.id == groupId }?.name
+                        ?: if (kukSel.isNotEmpty()) "국기원 문자(${kukSel.joinToString("·")})" else "직접 선택 ${kids.size}명"
                     Bulk.create("$gName · ${text.trim().take(15)}", items)
                     confirm = false; text = ""; msg = "보내기 목록에 올렸어요 ✔ 아래 [보낸 기록]에서 진행 상황을 볼 수 있어요"
                 }) { Text("보내기") }

@@ -111,6 +111,7 @@ fun TodayTab(students: List<Student>) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(s.name, fontSize = 19.sp, fontWeight = FontWeight.Bold)
                         Text("  ${s.grade}${if (s.demo) " · 시범단" else ""}", color = Muted)
+                        if (s.belt.isNotBlank()) { Spacer(Modifier.width(6.dp)); com.jungdo.attend.ui.BeltTag(s.belt) }
                         Spacer(Modifier.weight(1f))
                         Text(
                             when { part == null -> "평소 기록 없음"; late -> "${part}부 시작 지남!"; else -> "보통 ${part}부 (${ct.rangeText(part)})" },

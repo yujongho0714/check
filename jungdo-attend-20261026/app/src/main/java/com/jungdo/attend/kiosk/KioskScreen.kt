@@ -332,6 +332,7 @@ fun KioskScreen(onReset: () -> Unit, preview: Boolean = false) {
             Spacer(Modifier.height(6.dp))
             ScaleBox(lay.rank) { RankHeader(s.level) }
             if (s.grade.isNotBlank()) Text(s.grade, fontSize = 18.sp, color = gameMuted())
+            if (s.belt.isNotBlank()) com.jungdo.attend.ui.BeltTag(s.belt, fontSize = 18.sp, color = gameMuted(), barWidth = 34)
             latest[s.id]?.let { Text("오늘 마지막: ${EventType.label(it.type)} ${Repo.timeText(it.clientTime)}", color = gameMuted()) }
             // 형제가 있으면 "같이 왔어요" 선택
             val sibsHere = students.filter {

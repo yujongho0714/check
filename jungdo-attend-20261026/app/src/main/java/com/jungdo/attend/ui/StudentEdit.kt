@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jungdo.attend.data.Days
 import com.jungdo.attend.data.GradeCalc
+import com.jungdo.attend.data.Belts
 import com.jungdo.attend.data.Rank
 import com.jungdo.attend.data.Repo
 import com.jungdo.attend.data.Student
@@ -51,6 +52,8 @@ fun StudentEditDialog(s: Student, all: List<Student>, onDismiss: () -> Unit) {
     var attendNo by remember { mutableStateOf(s.attendNo) }
     var expText by remember { mutableStateOf(s.exp.toString()) }
     var confirmDel by remember { mutableStateOf(false) }
+    var belt by remember { mutableStateOf(s.belt) }
+    var jump by remember { mutableStateOf(s.jumpGrade) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -89,6 +92,13 @@ fun StudentEditDialog(s: Student, all: List<Student>, onDismiss: () -> Unit) {
                 if (status != StudentStatus.ACTIVE) OutlinedTextField(reason, { reason = it }, label = { Text("${StudentStatus.label(status)} 사유") })
                 if (status == StudentStatus.LEFT) Text("퇴관은 이번 달부터 출석체크·출석부에서 빠지고, 지난달 기록은 그대로 남아요.", color = Muted, fontSize = 12.sp)
                 Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(demo, { demo = it }); Text("시범단") }
+                OutlinedTextField(belt, { belt = it }, label = { Text("띠 (예: 노랑띠, 1품 5급)") }, singleLine = true)
+                Text("띠는 통합관리에서 바뀌면 여기도 저절로 바뀌어요. 직접 고쳐도 다음에 통합관리 내용으로 다시 맞춰져요.", color = Muted, fontSize = 12.sp)
+                Text("줄넘기 급")
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Pill("없음", jump.isBlank(), 13.sp) { jump = "" }
+                    Belts.JUMP.forEach { g -> Pill(g, jump == g, 13.sp) { jump = g } }
+                }
                 Text("학부모 연락처 (첫 번째가 대표 번호 · 문자 받는 번호)")
                 (0 until 3).forEach { i ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -128,6 +138,8 @@ fun StudentEditDialog(s: Student, all: List<Student>, onDismiss: () -> Unit) {
                 val ageNum = age.toIntOrNull() ?: 0
                 val updated = (if (ageNum > 0) edited.withAge(ageNum) else GradeCalc.applyLabel(edited, grade)).copy(gender = gender)
                 Repo.saveStudent(updated)
+                if (s.id.isNotBlank() && Belts.norm(belt) != s.belt) Repo.setBelt(s.id, belt)
+                if (s.id.isNotBlank() && jump != s.jumpGrade) Repo.setJumpGrade(s.id, jump)
                 if (s.id.isNotBlank() && gender != s.gender) Repo.setGender(s.id, gender)
                 if (s.id.isNotBlank()) expText.toIntOrNull()?.let { e -> if (e != s.exp) Repo.setExp(s.id, e) }
                 if (updated.id.isNotBlank() && sibNames.isNotEmpty()) {
