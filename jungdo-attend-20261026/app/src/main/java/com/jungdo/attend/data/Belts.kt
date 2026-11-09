@@ -114,7 +114,8 @@ object BeltSync {
         if (res == null) return "통합관리에서 아직 띠를 보내지 않았어요".also { status.value = it }
         if (res == "SAME") return status.value.ifBlank { lastInfo(ctx) }
         @Suppress("UNCHECKED_CAST")
-        val (stamp, data) = res as Pair<Long, JSONObject>
+        val pair = res as Pair<Long, JSONObject>
+        val stamp = pair.first; val data = pair.second
         val b = data.optJSONObject("b") ?: JSONObject()
         val map = HashMap<String, String>()
         b.keys().forEach { k -> map[k.trim()] = Belts.norm(b.optString(k)) }
