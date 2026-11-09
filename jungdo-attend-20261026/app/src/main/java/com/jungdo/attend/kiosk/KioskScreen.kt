@@ -283,6 +283,11 @@ fun KioskScreen(onReset: () -> Unit, preview: Boolean = false) {
                             Box(Modifier.padding(top = 12.dp)) { MyCharacter(allStudents.firstOrNull { it.id == st.id } ?: st, 110.dp) }
                         }
                         Box(Modifier.padding(top = 8.dp)) { AwardRow(a) }
+                        // 내 띠 (몇 품 몇 급인지) · 줄넘기 급
+                        doneStudents.firstOrNull { it.name == a.name }?.let { st ->
+                            val cur = allStudents.firstOrNull { it.id == st.id } ?: st
+                            if (cur.belt.isNotBlank() || cur.jumpGrade.isNotBlank()) Box(Modifier.padding(top = 10.dp)) { com.jungdo.attend.ui.KidBeltBadge(cur.belt, cur.jumpGrade) }
+                        }
                         Box(Modifier.padding(top = 10.dp)) { GoldRow(a) }
                         Box(Modifier.padding(top = 10.dp)) { LootRow(a) }
                         Box(Modifier.padding(top = 10.dp)) { DressRow(a) }
@@ -332,7 +337,7 @@ fun KioskScreen(onReset: () -> Unit, preview: Boolean = false) {
             Spacer(Modifier.height(6.dp))
             ScaleBox(lay.rank) { RankHeader(s.level) }
             if (s.grade.isNotBlank()) Text(s.grade, fontSize = 18.sp, color = gameMuted())
-            if (s.belt.isNotBlank()) com.jungdo.attend.ui.BeltTag(s.belt, fontSize = 18.sp, color = gameMuted(), barWidth = 34)
+            if (s.belt.isNotBlank() || s.jumpGrade.isNotBlank()) { Spacer(Modifier.height(6.dp)); com.jungdo.attend.ui.KidBeltBadge(s.belt, s.jumpGrade, big = false) }
             latest[s.id]?.let { Text("오늘 마지막: ${EventType.label(it.type)} ${Repo.timeText(it.clientTime)}", color = gameMuted()) }
             // 형제가 있으면 "같이 왔어요" 선택
             val sibsHere = students.filter {
