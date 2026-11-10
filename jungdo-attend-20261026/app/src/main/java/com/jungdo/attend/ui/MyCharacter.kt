@@ -65,8 +65,9 @@ fun MyCharacter(
     dir: DressDir = DressDir.FRONT,
     action: DressAction = DressAction.STAND,
     onAttackDone: () -> Unit = {},
+    zoom: Float = 1f,
 ) {
-    DressCharacter(student.dressEquip, height, modifier, dir, action, onAttackDone)
+    DressCharacter(student.dressEquip, height, modifier, dir, action, onAttackDone, zoom)
 }
 
 /** 캐릭터 무대 배경: 태권도 도장 (벽 + 흐린 태극 문양 + 나무 걸레받이 + 파랑 매트 바닥). 무대 크기에 맞춰 그림 */
