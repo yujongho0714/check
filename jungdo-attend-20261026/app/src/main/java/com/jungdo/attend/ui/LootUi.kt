@@ -275,7 +275,7 @@ fun CollectionDialog(s: Student, startTab: Int = 0, onClose: () -> Unit) {
                     Modifier.width(leftW).fillMaxHeight().verticalScroll(rememberScrollState()),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    MyCharacter(s, charH, zoom = 1.8f)
+                    MyCharacter(s, charH, zoom = UiSize.layout(scrW > scrH).inv)
                     Spacer(Modifier.size(8.dp))
                     if (s.plate.isNotBlank()) NamePlate(s.plate, s.name, leftW, 24.sp)
                     else Text(s.name, fontSize = 28.sp, fontWeight = FontWeight.Bold)
