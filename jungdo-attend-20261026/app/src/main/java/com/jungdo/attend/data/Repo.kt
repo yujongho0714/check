@@ -106,6 +106,9 @@ object Repo {
                 ?.mapNotNull { e -> val k = e.key as? String; val v = e.value as? String; if (k != null && v != null) k to v else null }
                 ?.toMap() ?: emptyMap(),
             gifts = strList(d.get("gifts")),
+            mcSkins = strList(d.get("mcSkins")),
+            mcSkin = d.getString("mcSkin") ?: "",
+            myroom = d.getString("myroom") ?: "",
             belt = d.getString("belt") ?: "",
             jumpGrade = d.getString("jumpGrade") ?: "",
             beltManual = d.getBoolean("beltManual") ?: false,
@@ -255,6 +258,9 @@ object Repo {
             if (s.plate.isBlank()) f["plate"] = newPlates.first()
         }
         if (consumed.isNotEmpty()) f["gifts"] = FieldValue.arrayRemove(*consumed.toTypedArray())
+        // 마이룸 가구 드롭 (관리자가 켜 둔 동안만)
+        val furKey = if (p.fields.isNotEmpty()) MyRoom.rollDrop() else null
+        if (furKey != null) f["myroom"] = MyRoom.withFur(s.myroom, furKey).first
         students().document(s.id).update(f)
         if (prize != null) { Prizes.consume(prize.id); Prizes.markWon(s.id); runCatching { recordWin(s, prize) } }
         // 선물 상품: 개수만큼 당첨 기록(지급 대기)을 남김. 오늘의 상품 추첨(prizeDay)에는 영향 없음
@@ -267,7 +273,7 @@ object Repo {
             gemId = gem, plateId = plate, gold = gold, dogamGold = dogamGold,
             giftGems = gotGems, giftPlates = gotPlates, giftDress = gotDress, giftGold = giftGold,
             giftPrizes = gotPrizes.map { PrizeWin(it.id, it.name, it.message, it.photo) },
-            dressKey = dressKey, dressDup = dressDup, dressRefund = dressRefund,
+            dressKey = dressKey, dressDup = dressDup, dressRefund = dressRefund, furKey = furKey,
             prize = prize?.let { PrizeWin(it.id, it.name, it.message, it.photo) },
             equipped = if (s.plate.isBlank() && plate != null) plate else s.plate,
         )
@@ -777,6 +783,125 @@ object Repo {
             sold.size
         }.addOnSuccessListener { n -> onDone(n ?: 0, (n ?: 0) * Dress.SELL_GOLD) }
          .addOnFailureListener { onDone(-1, 0) }
+    }
+
+    // ---------- 마이룸 ----------
+    fun myroomDoc() = db.collection("config").document("myroom")
+    fun myroomAssets() = db.collection("myroomAssets")
+
+    /** 마이룸 켜기/끄기 · 가구 드롭 확률 + 관리자가 추가한 가구·캐릭터를 계속 받아 둠 */
+    fun startMyRoomSync(): List<ListenerRegistration> = listOf(
+        myroomDoc().addSnapshotListener { snap, _ ->
+            if (snap == null) return@addSnapshotListener
+            MyRoom.enabled = snap.getBoolean("on") ?: true
+            MyRoom.dropChance = (snap.getDouble("drop") ?: MyRoom.DEFAULT_DROP).coerceIn(0.0, 100.0)
+        },
+        myroomAssets().addSnapshotListener { qs, _ ->
+            if (qs == null) return@addSnapshotListener
+            MyRoom.custom = qs.documents.mapNotNull { d -> runCatching { org.json.JSONObject(d.getString("j") ?: "") }.getOrNull() }
+        },
+    )
+
+    fun saveMyRoomConfig(on: Boolean, drop: Double) {
+        myroomDoc().set(mapOf("on" to on, "drop" to drop.coerceIn(0.0, 100.0)), SetOptions.merge())
+    }
+
+    /** 방 모습(놓은 가구·친구·조종 캐릭터) 저장. 가방은 서버 값 유지 */
+    fun saveRoom(id: String, layout: String) {
+        val ref = students().document(id)
+        db.runTransaction { tx ->
+            val cur = tx.get(ref).getString("myroom") ?: ""
+            tx.update(ref, mapOf<String, Any>("myroom" to MyRoom.withLayout(cur, layout)))
+            null
+        }
+    }
+
+    /** 가구 뽑기: 골드 확인 → 빼고 가구 넣기. onDone(성공, 이유) */
+    fun pullFur(id: String, k: String, price: Int, onDone: (Boolean, String?) -> Unit) {
+        val ref = students().document(id)
+        db.runTransaction { tx ->
+            val d = tx.get(ref)
+            val gold = (d.getLong("gold") ?: 0L).toInt()
+            if (gold < price) return@runTransaction false
+            val nj = MyRoom.withFur(d.getString("myroom") ?: "", k).first
+            tx.update(ref, mapOf<String, Any>("myroom" to nj, "gold" to FieldValue.increment(-price.toLong())))
+            true
+        }.addOnSuccessListener { ok -> onDone(ok == true, if (ok == true) null else "골드가 모자라요") }
+         .addOnFailureListener { onDone(false, "인터넷을 확인하고 다시 눌러 주세요") }
+    }
+
+    /** 가구 팔기 */
+    fun sellFur(id: String, itemId: Int, gold: Int, onDone: (Boolean) -> Unit) {
+        val ref = students().document(id)
+        db.runTransaction { tx ->
+            val d = tx.get(ref)
+            val nj = MyRoom.withoutFur(d.getString("myroom") ?: "", itemId) ?: return@runTransaction false
+            tx.update(ref, mapOf<String, Any>("myroom" to nj, "gold" to FieldValue.increment(gold.toLong())))
+            true
+        }.addOnSuccessListener { ok -> onDone(ok == true) }.addOnFailureListener { onDone(false) }
+    }
+
+    /** 관리자: 가구·캐릭터 추가 / 지우기 (문서 하나 = 에셋 하나) */
+    fun addMyRoomAsset(json: String, onDone: (Boolean) -> Unit) {
+        val k = runCatching { org.json.JSONObject(json).optString("k") }.getOrNull()?.ifBlank { null } ?: run { onDone(false); return }
+        myroomAssets().document(k).set(mapOf("j" to json, "at" to System.currentTimeMillis()))
+            .addOnSuccessListener { onDone(true) }.addOnFailureListener { onDone(false) }
+    }
+    fun delMyRoomAsset(k: String, onDone: (Boolean) -> Unit) {
+        myroomAssets().document(k).delete().addOnSuccessListener { onDone(true) }.addOnFailureListener { onDone(false) }
+    }
+
+    // ---------- 마크 캐릭터 (뽑기 · 장착 · 판매) ----------
+    /** 마크 캐릭터 뽑기. 서버 골드 기준으로 계산 (pullDress 와 같은 방식) */
+    fun pullMc(id: String, count: Int, price: Int, refund: Int, onDone: (Dress.PullResult?, String?) -> Unit) {
+        val ref = students().document(id)
+        db.runTransaction { tx ->
+            val d = tx.get(ref)
+            val gold = (d.getLong("gold") ?: 0L).toInt()
+            val owned = strList(d.get("mcSkins"))
+            val n = count.coerceAtLeast(1)
+            if (gold < n * price) return@runTransaction null
+            val r = Mc.pull(owned, n, refund)
+            val f = HashMap<String, Any>()
+            if (r.newKeys.isNotEmpty()) f["mcSkins"] = FieldValue.arrayUnion(*r.newKeys.toTypedArray())
+            val delta = r.refund - n * price
+            if (delta != 0) f["gold"] = FieldValue.increment(delta.toLong())
+            if (f.isNotEmpty()) tx.update(ref, f)
+            r
+        }.addOnSuccessListener { r -> if (r == null) onDone(null, "골드가 모자라요") else onDone(r, null) }
+         .addOnFailureListener { onDone(null, "인터넷을 확인하고 다시 눌러 주세요") }
+    }
+
+    /** 마크 캐릭터 장착 ("" 이면 해제 → 드레스업 캐릭터로) */
+    fun setMcSkin(id: String, key: String) {
+        students().document(id).update(mapOf<String, Any>("mcSkin" to key))
+    }
+
+    /** 마크 캐릭터 팔기 (장착 중이면 안 팔림). onDone(받은 골드, 실패면 -1) */
+    fun sellMc(id: String, key: String, onDone: (Int) -> Unit) {
+        val ref = students().document(id)
+        db.runTransaction { tx ->
+            val d = tx.get(ref)
+            val owned = strList(d.get("mcSkins"))
+            if (key !in owned || d.getString("mcSkin") == key) return@runTransaction 0
+            tx.update(ref, mapOf<String, Any>("mcSkins" to FieldValue.arrayRemove(key), "gold" to FieldValue.increment(Mc.SELL_GOLD.toLong())))
+            Mc.SELL_GOLD
+        }.addOnSuccessListener { g -> onDone(g ?: 0) }.addOnFailureListener { onDone(-1) }
+    }
+
+    /** 보석 팔기 (장착 중이면 해제하고 팔기). onDone(받은 골드, 실패면 -1) */
+    fun sellGem(id: String, gemId: String, gold: Int, onDone: (Int) -> Unit) {
+        val ref = students().document(id)
+        db.runTransaction { tx ->
+            val d = tx.get(ref)
+            if (gemId !in strList(d.get("gems"))) return@runTransaction 0
+            val f = HashMap<String, Any>()
+            f["gems"] = FieldValue.arrayRemove(gemId)
+            f["gold"] = FieldValue.increment(gold.toLong())
+            if (d.getString("gem") == gemId) f["gem"] = ""
+            tx.update(ref, f)
+            gold
+        }.addOnSuccessListener { g -> onDone(g ?: 0) }.addOnFailureListener { onDone(-1) }
     }
 
     /** 입은 옷 전체를 한 번에 바꾸기 (모두 벗기 = 빈 map, 랜덤 코디 등) */

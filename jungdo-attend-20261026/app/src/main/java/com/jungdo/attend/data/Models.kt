@@ -37,6 +37,9 @@ data class Student(
     val dress: List<String> = emptyList(),      // 모은 드레스업 옷 ("coat:012" …)
     val dressEquip: Map<String, String> = emptyMap(), // 입은 옷: 부위 → 옷 키 (예: "coat" to "coat:012")
     val gifts: List<String> = emptyList(),
+    val mcSkins: List<String> = emptyList(),    // 모은 마크 캐릭터 스킨 ("000" … "101")
+    val mcSkin: String = "",
+    val myroom: String = "",                    // 마이룸 (JSON 글자: 가구 가방·놓은 가구·친구 캐릭터) → MyRoom                    // 지금 장착한 마크 캐릭터 (비어 있으면 드레스업 캐릭터)
     val belt: String = "",                      // 띠 (예: 노랑띠, 1품 5급) — 통합관리에서 자동으로 맞춰짐
     val jumpGrade: String = "",                 // 줄넘기 급 (9급 … 1급)
     val beltManual: Boolean = false,

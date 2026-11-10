@@ -188,6 +188,28 @@ fun LootRow(a: AwardResult) {
     }
 }
 
+/** 키오스크 완료 화면: 출석 때 나온 마이룸 가구 */
+@Composable
+fun FurRow(a: AwardResult) {
+    val k = a.furKey ?: return
+    val pop = remember(a) { Animatable(0.3f) }
+    LaunchedEffect(a) {
+        delay(1400)
+        pop.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow))
+    }
+    Row(
+        Modifier.graphicsLayer { scaleX = pop.value; scaleY = pop.value; alpha = ((pop.value - 0.3f) / 0.7f).coerceIn(0f, 1f) },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text("🪑", fontSize = 40.sp)
+        Column {
+            Text("가구 획득!", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFDE68A))
+            Text("${com.jungdo.attend.data.MyRoom.nameOf(k)} · 마이룸에 놓아 보세요", fontSize = 16.sp, color = Color.White)
+        }
+    }
+}
+
 /** 키오스크 완료 화면: 출석 때 나온 옷 (새 옷이면 "옷 획득!", 이미 가진 옷이면 환급 골드) */
 @Composable
 fun DressRow(a: AwardResult) {
@@ -236,6 +258,8 @@ fun CollectionDialog(s: Student, startTab: Int = 0, onClose: () -> Unit) {
     }
     val plateList = remember(plateSet) { Loot.allPlates.sortedBy { it !in plateSet } }
     var infoGem by remember { mutableStateOf<String?>(null) }   // 마지막으로 누른 보석 → 이름·효과 설명
+    var showRoom by remember { mutableStateOf(false) }   // 마이룸 창
+    if (showRoom) MyRoomDialog(s) { showRoom = false }
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         GamePanel(Modifier.fillMaxWidth(0.94f).fillMaxHeight(0.9f), padding = 20.dp, horizontalAlignment = Alignment.Start) {
             run {
@@ -280,6 +304,7 @@ fun CollectionDialog(s: Student, startTab: Int = 0, onClose: () -> Unit) {
                     GamePill("🎁 뽑기", tab == 2, 20.sp) { tab = 2 }
                     GamePill("👗 드레스룸", tab == 3, 20.sp) { tab = 3 }
                     GamePill("📖 도감", tab == 4, 20.sp) { tab = 4 }
+                    if (com.jungdo.attend.data.MyRoom.enabled) GamePill("🏠 마이룸", false, 20.sp) { showRoom = true }
                 }
                 Spacer(Modifier.size(8.dp))
                 if (tab == 0) {
@@ -397,5 +422,35 @@ fun LootSettings() {
             if (msg.isNotBlank()) PixelText(msg, color = OkGreen, fontSize = 13.sp)
         }
         DressSettings()   // 드레스업: 등급 비율 · 뽑기/옷 드롭 · 레전드리 보너스 상품
+        MyRoomSettings()  // 마이룸 켜기/끄기 · 가구 드롭 확률 · 가구/캐릭터 추가
     }
+}
+
+/** 관리자: 마이룸 켜기/끄기 · 등원·하원 가구 확률 · 복셀 가구/캐릭터 추가 (마이룸 화면의 🔧 관리자 탭) */
+@Composable
+fun MyRoomSettings() {
+    var on by remember { mutableStateOf(com.jungdo.attend.data.MyRoom.enabled) }
+    var drop by remember { mutableStateOf(pctText(com.jungdo.attend.data.MyRoom.dropChance)) }
+    var open by remember { mutableStateOf(false) }
+    var msg by remember { mutableStateOf("") }
+    LaunchedEffect(com.jungdo.attend.data.MyRoom.enabled, com.jungdo.attend.data.MyRoom.dropChance) {
+        on = com.jungdo.attend.data.MyRoom.enabled; drop = pctText(com.jungdo.attend.data.MyRoom.dropChance)
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SectionTitle("🏠 마이룸 (복셀 가구 · 마크/바람 캐릭터)")
+        Text("끄면 보관함에서 마이룸 버튼이 사라지고 출석 때 가구도 안 나와요 (아이들 가구·캐릭터는 그대로 남아요). 가구 뽑기 1골드 · 캐릭터 뽑기 ${com.jungdo.attend.data.Mc.PRICE}골드 · 캐릭터 되팔기 ${com.jungdo.attend.data.Mc.SELL_GOLD}골드", color = Muted, fontSize = 13.sp)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            androidx.compose.material3.Switch(checked = on, onCheckedChange = { on = it; msg = "" })
+            Text(if (on) "켜짐" else "꺼짐", fontWeight = FontWeight.Bold)
+            OutlinedTextField(drop, { drop = it.filter { c -> c.isDigit() || c == '.' }; msg = "" }, label = { Text("등원·하원 가구 확률 %") }, singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.width(200.dp))
+            Button(onClick = {
+                val d = drop.toDoubleOrNull()?.coerceIn(0.0, 100.0) ?: com.jungdo.attend.data.MyRoom.dropChance
+                Repo.saveMyRoomConfig(on, d); msg = "저장됐어요 ✔"
+            }) { Text("저장") }
+            if (msg.isNotBlank()) PixelText(msg, color = OkGreen, fontSize = 13.sp)
+        }
+        OutlinedButton(onClick = { open = true }) { Text("🔧 복셀 가구 · 캐릭터 추가하기 (지금 ${com.jungdo.attend.data.MyRoom.custom.size}개)") }
+    }
+    if (open) MyRoomDialog(null, admin = true) { open = false }
 }

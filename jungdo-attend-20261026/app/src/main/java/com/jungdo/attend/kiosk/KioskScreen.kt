@@ -291,6 +291,7 @@ fun KioskScreen(onReset: () -> Unit, preview: Boolean = false) {
                         Box(Modifier.padding(top = 10.dp)) { GoldRow(a) }
                         Box(Modifier.padding(top = 10.dp)) { LootRow(a) }
                         Box(Modifier.padding(top = 10.dp)) { DressRow(a) }
+                        Box(Modifier.padding(top = 10.dp)) { com.jungdo.attend.ui.FurRow(a) }
                         Box(Modifier.padding(top = 10.dp)) { PrizeRow(a) }
                         Box(Modifier.padding(top = 10.dp)) { GiftRow(a) }
                     }

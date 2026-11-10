@@ -21,7 +21,8 @@ data class AwardResult(
     val dressKey: String? = null,  // 이번에 나온 옷 ("coat:012"). 이미 가진 옷이어도 나온 옷은 여기 들어감
     val dressDup: Boolean = false, // 그 옷이 이미 가진 옷이라 골드로 환급됐는지
     val dressRefund: Int = 0,      // 중복이라 돌려받은 골드
-    val dogamGold: Int = 0,        // 활성화된 도감으로 받은 추가 골드 (gold 와 별도)
+    val dogamGold: Int = 0,
+    val furKey: String? = null,      // 마이룸: 이번에 나온 가구 키        // 활성화된 도감으로 받은 추가 골드 (gold 와 별도)
     val giftGems: List<String> = emptyList(),    // 관장님 선물로 받은 보석
     val giftPlates: List<String> = emptyList(),  // 관장님 선물로 받은 네임플레이트
     val giftDress: List<String> = emptyList(),   // 관장님 선물로 받은 옷 (새로 얻은 것만)

@@ -79,11 +79,12 @@ fun AppRoot() {
     DisposableEffect(loggedIn) {
         val reg = if (loggedIn) AssetPack.startSync(ctx) else null
         val lootReg = if (loggedIn) Repo.startLootSync() else null // 보석·네임플레이트 확률
+        val roomRegs = if (loggedIn) Repo.startMyRoomSync() else emptyList() // 마이룸 설정·관리자 에셋
         val gemRarityReg = if (loggedIn) Repo.startGemRaritySync() else null // 보석별 등급
         val dogamReg = if (loggedIn) Repo.startDogamSync() else null // 도감
         val prizeReg = if (loggedIn) Repo.startPrizeSync() else null // 상품 목록·확률
         val uiReg = if (loggedIn) Repo.startUiSync() else null // 박스·캐릭터 크기
-        onDispose { reg?.remove(); lootReg?.remove(); gemRarityReg?.remove(); dogamReg?.remove(); prizeReg?.remove(); uiReg?.remove() }
+        onDispose { reg?.remove(); lootReg?.remove(); roomRegs.forEach { it.remove() }; gemRarityReg?.remove(); dogamReg?.remove(); prizeReg?.remove(); uiReg?.remove() }
     }
 
     UpdatePrompt() // 앱을 켜면 새 버전 확인 → "업데이트할까요?"
