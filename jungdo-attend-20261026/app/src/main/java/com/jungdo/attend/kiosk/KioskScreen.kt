@@ -157,6 +157,7 @@ fun KioskScreen(onReset: () -> Unit, preview: Boolean = false) {
     var doneAwards by remember { mutableStateOf<List<AwardResult>>(emptyList()) }
     var doneStudents by remember { mutableStateOf<List<Student>>(emptyList()) }   // 완료 화면에 캐릭터를 보여 줄 원생들
     var collectionId by remember { mutableStateOf<String?>(null) }   // 보관함을 열어 본 원생
+    var roomId by remember { mutableStateOf<String?>(null) }   // 마이룸을 연 원생
     var collectionTab by remember { mutableStateOf(0) }              // 보관함을 열 때 처음 보여줄 탭 (0 보석 · 1 플레이트 · 2 뽑기 · 3 드레스룸)
     var touchTick by remember { mutableStateOf(0) }                  // 캐릭터를 조작할 때마다 올라감 (자동 닫힘 시간 다시 시작)
     var showPin by remember { mutableStateOf(false) }
@@ -303,7 +304,7 @@ fun KioskScreen(onReset: () -> Unit, preview: Boolean = false) {
     // ── 등원/하원 선택 팝업 ──
     selected?.let { s0 ->
         val s = allStudents.firstOrNull { it.id == s0.id } ?: s0   // 보관함에서 바꾼 네임플레이트가 바로 보이게
-        LaunchedEffect(s0, withSibs, collectionId, touchTick) { if (collectionId == null && !adjusting) { delay(15_000); selected = null; withSibs = emptySet() } } // 15초 동안 안 누르면 자동 닫힘 (조절 중에는 안 닫힘)
+        LaunchedEffect(s0, withSibs, collectionId, roomId, touchTick) { if (collectionId == null && roomId == null && !adjusting) { delay(15_000); selected = null; withSibs = emptySet() } } // 15초 동안 안 누르면 자동 닫힘 (조절 중에는 안 닫힘)
         var charScale by rememberCharScale()
         val cfgDlg = LocalConfiguration.current
         val scrW = cfgDlg.screenWidthDp.toFloat()
@@ -383,6 +384,8 @@ fun KioskScreen(onReset: () -> Unit, preview: Boolean = false) {
                             }
                         }
                     }
+                // 🏠 마이룸 (관리자가 켜 둔 경우만)
+                if (com.jungdo.attend.data.MyRoom.enabled) GameButton("🏠 마이룸", onClick = { roomId = s.id }, modifier = Modifier.fillMaxWidth().height(subH), fontSize = subFont, color = theme.good)
             }
             GameTextButton("취소", 20.sp) { selected = null; withSibs = emptySet() }
         }
@@ -443,6 +446,13 @@ fun KioskScreen(onReset: () -> Unit, preview: Boolean = false) {
         val st = allStudents.firstOrNull { it.id == id }
         if (st == null) collectionId = null
         else CollectionDialog(st, startTab = collectionTab) { collectionId = null }
+    }
+
+    // 마이룸 (복셀 방 꾸미기 · 마크 캐릭터)
+    roomId?.let { id ->
+        val st = allStudents.firstOrNull { it.id == id }
+        if (st == null) roomId = null
+        else com.jungdo.attend.ui.MyRoomDialog(st) { roomId = null }
     }
 
     // 같은 번호를 쓰는 형제 → 누구인지 고르기

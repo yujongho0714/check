@@ -15,6 +15,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.BlendMode
@@ -52,7 +53,7 @@ class DressItem(val key: String, val name: String, val motions: Map<String, Dres
 
 /** dress.json 을 읽은 결과 */
 class DressPack(
-    val w: Int, val h: Int, val dur: Int, val footX: Float,
+    val w: Int, val h: Int, val dur: Int, val footX: Float, val footY: Float,
     val baseW: Int, val baseH: Int,
     val baseMotions: Map<String, List<IntArray>>,
     val itemsByCat: Map<String, List<DressItem>>,
@@ -99,7 +100,7 @@ object DressAssets {
         }
         val foot = root.getJSONArray("foot")
         return DressPack(
-            root.getInt("W"), root.getInt("H"), root.getInt("dur"), foot.getDouble(0).toFloat(),
+            root.getInt("W"), root.getInt("H"), root.getInt("dur"), foot.getDouble(0).toFloat(), foot.optDouble(1, 222.0).toFloat(),
             box.getInt(2), box.getInt(3), baseMotions, cats,
         )
     }
@@ -152,6 +153,7 @@ fun DressCharacter(
     dir: DressDir = DressDir.FRONT,
     action: DressAction = DressAction.STAND,
     onAttackDone: () -> Unit = {},
+    zoom: Float = 1.75f,   // 그림 칸에서 캐릭터를 얼마나 크게 (발을 아래쪽에 맞추고 확대) — 작아서 안 보이던 문제
 ) {
     val ctx = LocalContext.current.applicationContext
     val pack = rememberDressPack()
@@ -195,12 +197,18 @@ fun DressCharacter(
         DressAction.ATTACK -> (t / pack.dur).toInt().coerceAtMost(baseFrames.size - 1)
     }
 
-    Canvas(modifier.size(width = height * (pack.w.toFloat() / pack.h), height = height)) {
-        val s = size.height / pack.h
+    Canvas(modifier.size(width = height * (pack.w.toFloat() / pack.h), height = height).clipToBounds()) {
+        val s0 = size.height / pack.h
+        val s = s0 * zoom
+        // 발 위치를 칸 가운데 아래(92%)에 맞춤
+        val tx = size.width / 2f - pack.footX * s
+        val ty = size.height * 0.92f - pack.footY * s
+        drawContext.transform.translate(tx, ty)
         scale(s, s, pivot = Offset.Zero) {
             if (dir == DressDir.LEFT) scale(-1f, 1f, pivot = Offset(pack.footX, 0f)) { drawCharacter(pack, worn, images, motion, fi, baseFrames) }
             else drawCharacter(pack, worn, images, motion, fi, baseFrames)
         }
+        drawContext.transform.translate(-tx, -ty)
     }
 }
 
