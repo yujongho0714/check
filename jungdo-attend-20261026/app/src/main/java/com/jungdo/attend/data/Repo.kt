@@ -109,6 +109,7 @@ object Repo {
             belt = d.getString("belt") ?: "",
             jumpGrade = d.getString("jumpGrade") ?: "",
             beltManual = d.getBoolean("beltManual") ?: false,
+            beltAt = d.getLong("beltAt") ?: 0L,
         )
         // 나이가 있으면 올해 학년을 계산해서 보여줌 (저장된 grade 글자는 옛 값일 수 있음)
         if (base.age > 0 && base.ageYear > 0) return base.copy(grade = GradeCalc.labelOf(base.curAge))
@@ -186,7 +187,7 @@ object Repo {
 
     // ---------- 원생 ----------
     /** 띠·줄넘기 급은 명단 저장(studentData)과 따로 저장 → 현황표를 다시 올려도 안 지워짐 */
-    fun setBelt(id: String, belt: String, manual: Boolean) { if (id.isNotBlank()) students().document(id).set(mapOf("belt" to Belts.norm(belt), "beltManual" to manual), SetOptions.merge()) }
+    fun setBelt(id: String, belt: String, manual: Boolean) { if (id.isNotBlank()) students().document(id).set(mapOf("belt" to Belts.norm(belt), "beltManual" to manual, "beltAt" to System.currentTimeMillis()), SetOptions.merge()) }
     fun setJumpGrade(id: String, g: String) { if (id.isNotBlank()) students().document(id).set(mapOf("jumpGrade" to g), SetOptions.merge()) }
 
     fun saveStudent(s: Student) {

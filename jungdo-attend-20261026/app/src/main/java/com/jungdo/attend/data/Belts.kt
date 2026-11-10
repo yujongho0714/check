@@ -117,16 +117,18 @@ object BeltSync {
         val pair = res as Pair<Long, JSONObject>
         val stamp = pair.first; val data = pair.second
         // 통합관리 목록: [이름 · 학년 · 띠]  (옛 버전은 이름 → 띠)
-        data class E(val n: String, val g: String, val b: String)
+        // at = 통합관리에서 그 아이 띠가 바뀐 때 (0 = 모름/예전)
+        data class E(val n: String, val g: String, val b: String, val at: Long = 0L)
         val list = ArrayList<E>()
-        data.optJSONArray("l")?.let { a -> for (k in 0 until a.length()) a.optJSONObject(k)?.let { o -> list += E(o.optString("n").trim(), o.optString("g").trim(), Belts.norm(o.optString("b"))) } }
+        data.optJSONArray("l")?.let { a -> for (k in 0 until a.length()) a.optJSONObject(k)?.let { o -> list += E(o.optString("n").trim(), o.optString("g").trim(), Belts.norm(o.optString("b")), o.optLong("at")) } }
         if (list.isEmpty()) data.optJSONObject("b")?.let { b -> b.keys().forEach { k -> list += E(k.trim(), "", Belts.norm(b.optString(k))) } }
 
         val alive = students.filter { it.status != StudentStatus.LEFT }
         val byName = list.filter { it.b.isNotBlank() }.groupBy { it.n }
         val newBelt = HashMap<String, String>()   // 원생 id → 띠 ("" = 모름, 비움)
+        val newAt = HashMap<String, Long>()       // 원생 id → 통합관리에서 바뀐 때
         var paired = 0
-        alive.filter { !it.beltManual }.groupBy { it.name.trim() }.forEach { (name, kids) ->
+        alive.groupBy { it.name.trim() }.forEach { (name, kids) ->
             val cands = byName[name] ?: return@forEach
             fun sAge(s: Student) = if (s.curAge > 0) s.curAge else gradeKey(s.grade)
             fun sCat(s: Student) = catOf(s.grade, s.curAge)
@@ -134,6 +136,7 @@ object BeltSync {
                 // 한 명씩이어도 유치부 ↔ 초등부처럼 분명히 다르면 다른 아이로 봄
                 val sc = sCat(kids[0]); val ec = catOf(cands[0].g, 0)
                 newBelt[kids[0].id] = if (sc >= 0 && ec >= 0 && sc != ec) "" else cands[0].b
+                newAt[kids[0].id] = cands[0].at
                 return@forEach
             }
             // 이름이 같은 아이가 여럿: ① 나이·학년이 딱 맞으면 → ② 유치부/초등부/중등… 이 하나만 맞으면
@@ -143,20 +146,26 @@ object BeltSync {
                 val sg = sAge(s); val sc = sCat(s)
                 var hit = left.filter { sg < 99 && gradeKey(it.g) == sg }
                 if (hit.size != 1) hit = left.filter { sc >= 0 && catOf(it.g, 0) == sc }
-                if (hit.size == 1) { newBelt[s.id] = hit[0].b; left -= hit[0] } else rest += s
+                if (hit.size == 1) { newBelt[s.id] = hit[0].b; newAt[s.id] = hit[0].at; left -= hit[0] } else rest += s
             }
             // ③ 남은 아이는 나이 어린 아이 ↔ 낮은 띠 순서로 짝지음 (숫자가 같을 때만)
             if (rest.isNotEmpty()) {
                 if (rest.size == left.size) {
-                    rest.sortedBy { sAge(it) }.zip(left.sortedBy { Belts.rank(it.b) }).forEach { (s, e) -> newBelt[s.id] = e.b }
+                    rest.sortedBy { sAge(it) }.zip(left.sortedBy { Belts.rank(it.b) }).forEach { (s, e) -> newBelt[s.id] = e.b; newAt[s.id] = e.at }
                     paired += rest.size
                 } else rest.forEach { newBelt[it.id] = "" }   // 모르면 잘못된 띠를 두지 않고 비움
             }
         }
-        val changes = alive.mapNotNull { s -> newBelt[s.id]?.let { nb -> if (nb != s.belt) s.id to nb else null } }
+        // 직접 고친(📌) 띠는 통합관리에서 그 뒤에 또 바뀐 경우에만 바꿈 → 어디서 고치든 '나중에 고친 쪽'이 이김
+        val changes = alive.mapNotNull { s ->
+            val nb = newBelt[s.id] ?: return@mapNotNull null
+            val at = newAt[s.id] ?: 0L
+            if (s.beltManual && (at <= s.beltAt || nb.isBlank())) return@mapNotNull null
+            if (nb != s.belt || s.beltManual) Triple(s.id, nb, at) else null
+        }
         changes.chunked(400).forEach { chunk ->
             val batch = Repo.db.batch()
-            chunk.forEach { (id, nb) -> batch.update(Repo.students().document(id), mapOf("belt" to nb)) }
+            chunk.forEach { (id, nb, at) -> batch.update(Repo.students().document(id), mapOf("belt" to nb, "beltManual" to false, "beltAt" to at)) }
             batch.commit()
         }
         lastStamp = stamp
@@ -202,6 +211,48 @@ object BeltSync {
             g.startsWith("초") || g.contains("학년") -> 1
             else -> -1
         }
+    }
+
+    private const val URL_BACK =
+        "https://taekwondo-wordgame-default-rtdb.asia-southeast1.firebasedatabase.app/apps/pub_beltsync/data/back.json"
+    private var lastBackSig = ""
+
+    /**
+     * 출결(폰·PC)에서 직접 고친 띠 → 통합관리로 보내기 (통합관리가 1분마다 받아서 자기 명단에 넣음)
+     * 직접 고친(📌) 아이만, 고친 때(beltAt)와 함께 보냄
+     */
+    suspend fun pushBack(ctx: Context, students: List<Student>, force: Boolean = false) {
+        val pw = pass(ctx); if (pw.isBlank()) return
+        val arr = org.json.JSONArray()
+        students.filter { it.status != StudentStatus.LEFT && it.beltManual && it.belt.isNotBlank() }.sortedBy { it.id }.forEach { s ->
+            arr.put(JSONObject().put("n", s.name.trim()).put("g", s.grade).put("a", s.curAge).put("b", s.belt).put("at", if (s.beltAt > 0) s.beltAt else 1L))
+        }
+        val sig = pw.hashCode().toString() + arr.toString()
+        if (!force && sig == lastBackSig) return
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val payload = encrypt(pw, JSONObject().put("t", System.currentTimeMillis()).put("l", arr).toString())
+                val c = URL(URL_BACK).openConnection() as HttpURLConnection
+                c.requestMethod = "PUT"; c.doOutput = true; c.connectTimeout = 15000; c.readTimeout = 20000
+                c.setRequestProperty("Content-Type", "application/json")
+                c.outputStream.use { it.write(payload.toString().toByteArray()) }
+                val code = c.responseCode; c.disconnect()
+                if (code in 200..299) lastBackSig = sig
+            }
+        }
+    }
+
+    private fun encrypt(pw: String, text: String): JSONObject {
+        val rnd = java.security.SecureRandom()
+        val salt = ByteArray(16).also { rnd.nextBytes(it) }; val iv = ByteArray(12).also { rnd.nextBytes(it) }
+        val n = 150000
+        val key = pbkdf2(pw.toByteArray(Charsets.UTF_8), salt, n)
+        val c = Cipher.getInstance("AES/GCM/NoPadding")
+        c.init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, iv))
+        val d = c.doFinal(text.toByteArray(Charsets.UTF_8))
+        val e = Base64.getEncoder()
+        return JSONObject().put("v", 1).put("n", n).put("t", System.currentTimeMillis())
+            .put("s", e.encodeToString(salt)).put("i", e.encodeToString(iv)).put("d", e.encodeToString(d))
     }
 
     /** PBKDF2-HMAC-SHA256, 32바이트 (비밀번호는 UTF-8 그대로 → 웹과 똑같음) */

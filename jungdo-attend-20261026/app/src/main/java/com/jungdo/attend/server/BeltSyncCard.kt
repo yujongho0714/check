@@ -43,8 +43,11 @@ fun BeltAutoSync(students: List<Student>) {
     val cur by rememberUpdatedState(students)
     LaunchedEffect(Unit) {
         while (true) {
-            if (cur.isNotEmpty() && BeltSync.pass(ctx).isNotBlank()) runCatching { BeltSync.pull(ctx, cur) }
-            delay(if (cur.isEmpty()) 5_000L else 10 * 60_000L)
+            if (cur.isNotEmpty() && BeltSync.pass(ctx).isNotBlank()) {
+                runCatching { BeltSync.pull(ctx, cur) }
+                runCatching { BeltSync.pushBack(ctx, cur) }   // 직접 고친 띠 → 통합관리
+            }
+            delay(if (cur.isEmpty()) 5_000L else 2 * 60_000L)
         }
     }
 }
@@ -62,7 +65,7 @@ fun BeltSyncCard(students: List<Student>) {
     Card(colors = CardDefaults.cardColors(containerColor = Color.White)) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             SectionTitle("🥋 통합관리 띠 연동")
-            Text("통합관리에서 띠가 바뀌면 출결 앱에도 저절로 바뀌어요 (10분마다 + 지금 받기). 통합관리 [출결 앱 띠 보내기]에 넣은 비밀번호와 똑같이 넣어 주세요.",
+            Text("통합관리·출결 앱·PC 어디서 띠를 고쳐도 서로 맞춰져요 (2분마다, 나중에 고친 쪽이 이김). 통합관리 [출결 앱 띠 보내기]에 넣은 비밀번호와 똑같이 넣어 주세요.",
                 color = Muted, fontSize = 13.sp)
             OutlinedTextField(pw, { pw = it }, label = { Text("연동 비밀번호") }, singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
@@ -70,7 +73,7 @@ fun BeltSyncCard(students: List<Student>) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(enabled = !busy && pw.isNotBlank(), onClick = {
                     BeltSync.setPass(ctx, pw); busy = true
-                    scope.launch { runCatching { BeltSync.pull(ctx, students, force = true) }; busy = false }
+                    scope.launch { runCatching { BeltSync.pull(ctx, students, force = true) }; runCatching { BeltSync.pushBack(ctx, students, force = true) }; busy = false }
                 }) { Text(if (busy) "받는 중…" else "저장하고 지금 받기") }
             }
             if (info.isNotBlank()) Text(info, color = Navy, fontSize = 13.sp)

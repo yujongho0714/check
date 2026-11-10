@@ -275,7 +275,7 @@ function toStudent(d){
     phones: x.phones || [], phoneLabels: x.phoneLabels || [], memo: x.memo || '', siblingKey: x.siblingKey || '', demo: !!x.demo,
     status: x.status || 'ACTIVE', statusReason: x.statusReason || '', joinedMonth: x.joinedMonth || '', leftMonth: x.leftMonth || '',
     order: x.order || 0, attendNo: x.attendNo || '', school: x.school || '', fee: x.fee || 0, belt: x.belt || '', beltManual: !!x.beltManual,
-    jumpGrade: x.jumpGrade || '', inDay: x.inDay || '', outDay: x.outDay || '' };
+    beltAt: x.beltAt || 0, jumpGrade: x.jumpGrade || '', inDay: x.inDay || '', outDay: x.outDay || '' };
 }
 const active = () => S.students.filter(s => s.status === 'ACTIVE');
 const byName = (a, b) => gradeRank(gradeOf(a)) - gradeRank(gradeOf(b)) || a.name.localeCompare(b.name, 'ko');
@@ -428,7 +428,7 @@ function rRoster(p){
     $('#rbody').querySelectorAll('tr[data-id]').forEach(tr => tr.onclick = e => { if (e.target.closest('[data-nobubble]')) return; editStudent(S.students.find(s => s.id === tr.dataset.id)); });
     $('#rbody').querySelectorAll('[data-belt-of]').forEach(sel => sel.onchange = async () => {
       const s = S.students.find(x => x.id === sel.dataset.beltOf);
-      await setDoc(doc(db, 'students', s.id), { belt: normBelt(sel.value), beltManual: true }, { merge: true });
+      await setDoc(doc(db, 'students', s.id), { belt: normBelt(sel.value), beltManual: true, beltAt: Date.now() }, { merge: true }); setTimeout(() => bsPushBack(true), 1500);
       toast(`${s.name} 띠를 ${sel.value || '없음'}(으)로 고정했어요`);
     });
   };
@@ -460,6 +460,25 @@ async function bsFetch(pw){
   const list = Array.isArray(d.l) ? d.l.map(x => ({ n: String(x.n || '').trim(), g: String(x.g || '').trim(), b: normBelt(x.b) })) : Object.entries(d.b || {}).map(([n, b]) => ({ n: n.trim(), g: '', b: normBelt(b) }));
   return { t: o.t || d.t, list };
 }
+/* 출결에서 직접 고친(📌) 띠 → 통합관리로 (통합관리가 1분마다 받아 감). 비밀번호는 [통합관리 띠와 비교]에서 한 번 넣으면 기억 */
+const BS_BACK = BS_URL.replace('/blob.json', '/back.json');
+let bsBackSig = '';
+const u8b64 = u8 => { let x = ''; u8.forEach(c => x += String.fromCharCode(c)); return btoa(x); };
+async function bsEncrypt(pw, text){
+  const enc = new TextEncoder(), n = 150000, salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+  const base = await crypto.subtle.importKey('raw', enc.encode(pw), 'PBKDF2', false, ['deriveKey']);
+  const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: n, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt']);
+  const d = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(text)));
+  return { v: 1, n, t: Date.now(), s: u8b64(salt), i: u8b64(iv), d: u8b64(d) };
+}
+async function bsPushBack(force){
+  const pw = lsGet('jdpc_beltpw'); if (!pw || !S.students.length) return;
+  const l = S.students.filter(s => s.status !== 'LEFT' && s.beltManual && s.belt).sort((a, b) => a.id < b.id ? -1 : 1)
+    .map(s => ({ n: s.name.trim(), g: gradeOf(s), a: curAge(s), b: normBelt(s.belt), at: s.beltAt || 1 }));
+  const sig = pw.length + JSON.stringify(l); if (!force && sig === bsBackSig) return;
+  try { const r = await fetch(BS_BACK, { method: 'PUT', body: JSON.stringify(await bsEncrypt(pw, JSON.stringify({ t: Date.now(), l }))) }); if (r.ok) bsBackSig = sig; } catch(e){}
+}
+setInterval(() => bsPushBack(false), 120000);
 function catOf(raw, age){
   if (age > 0) return age <= 7 ? 0 : age <= 13 ? 1 : age <= 16 ? 2 : age <= 19 ? 3 : 4;
   const g = String(raw || '').replace(/\s/g, ''); if (!g) return -1;
@@ -521,7 +540,7 @@ function beltSyncModal(){
       box.querySelector('#bclose').onclick = closeModal;
       const ap = box.querySelector('#bapply'); if (ap) ap.onclick = async () => {
         const ids = [...box.querySelectorAll('[data-ap]:checked')].map(c => c.dataset.ap); if (!ids.length) return toast('체크한 아이가 없어요');
-        const b = writeBatch(db); ids.forEach(id => b.set(doc(db, 'students', id), { belt: m[id].belt, beltManual: false }, { merge: true })); await b.commit();
+        const b = writeBatch(db); ids.forEach(id => b.set(doc(db, 'students', id), { belt: m[id].belt, beltManual: false, beltAt: Date.now() }, { merge: true })); await b.commit();
         toast(`${ids.length}명 띠를 맞췄어요`); closeModal();
       };
     } catch(e){ box.innerHTML = `<p style="color:var(--bad)">${esc(e.message)}</p>`; }
@@ -664,6 +683,7 @@ function editStudent(s){
       joinedMonth: s.joinedMonth || thisMonth(), leftMonth: status === 'LEFT' ? (s.status === 'LEFT' && s.leftMonth ? s.leftMonth : thisMonth()) : '',
       order: s.order || 0, attendNo: no, school: r.querySelector('#fSchool').value.trim(), fee: s.fee || 0,
       belt: normBelt(r.querySelector('#fBelt').value), beltManual: r.querySelector('#fLock').checked, jumpGrade: r.querySelector('#fJump').value,
+      ...(normBelt(r.querySelector('#fBelt').value) !== normBelt(s.belt) || r.querySelector('#fLock').checked !== !!s.beltManual ? { beltAt: Date.now() } : {}),
       updatedAt: serverTimestamp() };
     try {
       if (isNew) await addDoc(collection(db, 'students'), data); else await setDoc(doc(db, 'students', s.id), data, { merge: true });
@@ -674,7 +694,7 @@ function editStudent(s){
           const b = writeBatch(db); sib.forEach(x => b.update(doc(db, 'students', x.id), { phones, phoneLabels: labels })); await b.commit();
         }
       }
-      toast('저장했어요'); closeModal();
+      toast('저장했어요'); closeModal(); setTimeout(() => bsPushBack(true), 1500);
     } catch(e){ toast('저장 실패: ' + (e.code || e.message)); }
   };
 }
