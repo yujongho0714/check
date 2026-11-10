@@ -432,6 +432,9 @@ private fun ServerSettings(onReset: () -> Unit) {
         AssetPackSettings()
 
         HorizontalDivider()
+        PcLinkSettings()
+
+        HorizontalDivider()
         SectionTitle("기기")
         OutlinedButton(onClick = { confirm = "mode" }) { Text("이 기기 모드 바꾸기 (출석 단말기 ↔ 문자 폰)") }
         OutlinedButton(onClick = { confirm = "logout" }) { Text("로그아웃", color = BadRed) }
