@@ -65,6 +65,7 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+    implementation("androidx.webkit:webkit:1.12.1")   // 마이룸 웹 화면 (앱 안 그림을 안전한 주소로 열기)
 
     // Firebase (실시간 DB + 로그인)
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
