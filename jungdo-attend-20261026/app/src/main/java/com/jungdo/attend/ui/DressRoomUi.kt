@@ -89,7 +89,7 @@ fun DressRoomPanel(s: Student, modifier: Modifier = Modifier) {
 
     val preview: @Composable () -> Unit = {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            DressCharacter(s.dressEquip, if (land) 260.dp else 320.dp, dir = dir, action = action, onAttackDone = { action = DressAction.STAND }, zoom = 2f)
+            DressCharacter(s.dressEquip, if (land) 260.dp else 320.dp, dir = dir, action = action, onAttackDone = { action = DressAction.STAND }, zoom = com.jungdo.attend.data.UiSize.layout(land).bag)
             Spacer(Modifier.height(4.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 listOf(DressDir.FRONT to "앞", DressDir.BACK to "뒤", DressDir.RIGHT to "오른쪽", DressDir.LEFT to "왼쪽").forEach { (d, label) ->
@@ -176,7 +176,7 @@ fun DressRoomPanel(s: Student, modifier: Modifier = Modifier) {
         val tryOn = remember(s.dressEquip, key) { s.dressEquip + (Dress.catOf(key) to key) }
         Dialog(onDismissRequest = { menuKey = null }) {
             GamePanel(Modifier.fillMaxWidth(), padding = 22.dp) {
-                DressCharacter(tryOn, 340.dp, action = DressAction.WALK, zoom = 2f)
+                DressCharacter(tryOn, 340.dp, action = DressAction.WALK, zoom = com.jungdo.attend.data.UiSize.layout(land).bag)
                 Spacer(Modifier.height(6.dp))
                 Text(nameOf(key), fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 Text("${Dress.catLabel(Dress.catOf(key))} · ${Dress.noOf(key)}번" + if (on) " · 입는 중" else "", fontSize = 14.sp, color = gameMuted())

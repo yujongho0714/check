@@ -941,6 +941,8 @@ object Repo {
             rank = num("${p}popRank", "popRank", 1.0).coerceIn(UiSize.ELEM_MIN, UiSize.ELEM_MAX),
             btn = num("${p}popBtn", "popBtn", 1.0).coerceIn(UiSize.ELEM_MIN, UiSize.ELEM_MAX),
             sub = num("${p}popSub", "popSub", 1.0).coerceIn(UiSize.ELEM_MIN, UiSize.ELEM_MAX),
+            bag = num("${p}bagZoom", "bagZoom", 2.0).coerceIn(UiSize.ZOOM_MIN, UiSize.ZOOM_MAX),
+            inv = num("${p}invZoom", "invZoom", 1.8).coerceIn(UiSize.ZOOM_MIN, UiSize.ZOOM_MAX),
         )
         UiSize.popLand = lay("L_")
         UiSize.popPort = lay("P_")
@@ -965,6 +967,7 @@ object Repo {
             x = l.x.coerceIn(-UiSize.X_RANGE, UiSize.X_RANGE), y = l.y.coerceIn(-UiSize.Y_RANGE, UiSize.Y_RANGE),
             plate = l.plate.coerceIn(UiSize.ELEM_MIN, UiSize.ELEM_MAX), rank = l.rank.coerceIn(UiSize.ELEM_MIN, UiSize.ELEM_MAX),
             btn = l.btn.coerceIn(UiSize.ELEM_MIN, UiSize.ELEM_MAX), sub = l.sub.coerceIn(UiSize.ELEM_MIN, UiSize.ELEM_MAX),
+            bag = l.bag.coerceIn(UiSize.ZOOM_MIN, UiSize.ZOOM_MAX), inv = l.inv.coerceIn(UiSize.ZOOM_MIN, UiSize.ZOOM_MAX),
         )
         if (land) UiSize.popLand = fixed else UiSize.popPort = fixed
         val p = if (land) "L_" else "P_"
@@ -972,6 +975,7 @@ object Repo {
             "${p}popBox" to fixed.box.toDouble(), "${p}popChar" to fixed.char.toDouble(), "${p}popPlate" to fixed.plate.toDouble(),
             "${p}popRank" to fixed.rank.toDouble(), "${p}popBtn" to fixed.btn.toDouble(), "${p}popSub" to fixed.sub.toDouble(),
             "${p}popScale" to fixed.pop.toDouble(), "${p}popX" to fixed.x.toDouble(), "${p}popY" to fixed.y.toDouble(),
+            "${p}bagZoom" to fixed.bag.toDouble(), "${p}invZoom" to fixed.inv.toDouble(),
         ), SetOptions.merge())
     }
 

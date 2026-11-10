@@ -20,6 +20,8 @@ import androidx.compose.runtime.setValue
 data class PopupLayout(
     val box: Float = 1f, val char: Float = 1f, val pop: Float = 1f, val x: Float = 0f, val y: Float = 0f,
     val plate: Float = 1f, val rank: Float = 1f, val btn: Float = 1f, val sub: Float = 1f,
+    val bag: Float = 2f,    // 가방(드레스룸)·옷 칸 누른 창의 캐릭터 확대
+    val inv: Float = 1.8f,  // 보관함 왼쪽 내 캐릭터 확대
 )
 
 object UiSize {
@@ -35,6 +37,8 @@ object UiSize {
     const val ELEM_MAX = 2.0f
     /** 팝업 캐릭터 100% 일 때 그려지는 크기 = 캐릭터 칸의 몇 배 (옷 그림에 빈 여백이 커서 기본부터 크게) */
     const val CHAR_BASE = 2.5f
+    const val ZOOM_MIN = 0.5f      // 가방·보관함 캐릭터 확대 범위
+    const val ZOOM_MAX = 4f
 
     // ── 가로 화면 / 세로 화면 설정을 따로 저장 (config/ui 의 L_*, P_* 값. 예전에 저장한 값은 처음엔 양쪽에 그대로 적용) ──
     // 출결 팝업 배치

@@ -738,6 +738,8 @@ private fun PopupAdjustPanel(
                 AdjustRow("계급·레벨", lay.rank, UiSize.ELEM_MIN..UiSize.ELEM_MAX, pct(lay.rank)) { onChange(lay.copy(rank = it)) }
                 AdjustRow("등원/하원 버튼", lay.btn, UiSize.ELEM_MIN..UiSize.ELEM_MAX, pct(lay.btn)) { onChange(lay.copy(btn = it)) }
                 AdjustRow("보관함 버튼", lay.sub, UiSize.ELEM_MIN..UiSize.ELEM_MAX, pct(lay.sub)) { onChange(lay.copy(sub = it)) }
+                AdjustRow("가방 속 캐릭터", lay.bag, UiSize.ZOOM_MIN..UiSize.ZOOM_MAX, pct(lay.bag)) { onChange(lay.copy(bag = it)) }
+                AdjustRow("보관함 왼쪽 캐릭터", lay.inv, UiSize.ZOOM_MIN..UiSize.ZOOM_MAX, pct(lay.inv)) { onChange(lay.copy(inv = it)) }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
                 androidx.compose.material3.Button(onClick = onSave) { androidx.compose.material3.Text("저장 (모든 기기)") }
