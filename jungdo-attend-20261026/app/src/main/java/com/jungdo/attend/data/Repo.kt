@@ -106,6 +106,8 @@ object Repo {
                 ?.mapNotNull { e -> val k = e.key as? String; val v = e.value as? String; if (k != null && v != null) k to v else null }
                 ?.toMap() ?: emptyMap(),
             gifts = strList(d.get("gifts")),
+            mcSkins = strList(d.get("mcSkins")),
+            mcSkin = d.getString("mcSkin") ?: "",
             belt = d.getString("belt") ?: "",
             jumpGrade = d.getString("jumpGrade") ?: "",
             beltManual = d.getBoolean("beltManual") ?: false,
@@ -777,6 +779,59 @@ object Repo {
             sold.size
         }.addOnSuccessListener { n -> onDone(n ?: 0, (n ?: 0) * Dress.SELL_GOLD) }
          .addOnFailureListener { onDone(-1, 0) }
+    }
+
+    // ---------- 마크 캐릭터 (뽑기 · 장착 · 판매) ----------
+    /** 마크 캐릭터 뽑기. 서버 골드 기준으로 계산 (pullDress 와 같은 방식) */
+    fun pullMc(id: String, count: Int, price: Int, refund: Int, onDone: (Dress.PullResult?, String?) -> Unit) {
+        val ref = students().document(id)
+        db.runTransaction { tx ->
+            val d = tx.get(ref)
+            val gold = (d.getLong("gold") ?: 0L).toInt()
+            val owned = strList(d.get("mcSkins"))
+            val n = count.coerceAtLeast(1)
+            if (gold < n * price) return@runTransaction null
+            val r = Mc.pull(owned, n, refund)
+            val f = HashMap<String, Any>()
+            if (r.newKeys.isNotEmpty()) f["mcSkins"] = FieldValue.arrayUnion(*r.newKeys.toTypedArray())
+            val delta = r.refund - n * price
+            if (delta != 0) f["gold"] = FieldValue.increment(delta.toLong())
+            if (f.isNotEmpty()) tx.update(ref, f)
+            r
+        }.addOnSuccessListener { r -> if (r == null) onDone(null, "골드가 모자라요") else onDone(r, null) }
+         .addOnFailureListener { onDone(null, "인터넷을 확인하고 다시 눌러 주세요") }
+    }
+
+    /** 마크 캐릭터 장착 ("" 이면 해제 → 드레스업 캐릭터로) */
+    fun setMcSkin(id: String, key: String) {
+        students().document(id).update(mapOf<String, Any>("mcSkin" to key))
+    }
+
+    /** 마크 캐릭터 팔기 (장착 중이면 안 팔림). onDone(받은 골드, 실패면 -1) */
+    fun sellMc(id: String, key: String, onDone: (Int) -> Unit) {
+        val ref = students().document(id)
+        db.runTransaction { tx ->
+            val d = tx.get(ref)
+            val owned = strList(d.get("mcSkins"))
+            if (key !in owned || d.getString("mcSkin") == key) return@runTransaction 0
+            tx.update(ref, mapOf<String, Any>("mcSkins" to FieldValue.arrayRemove(key), "gold" to FieldValue.increment(Mc.SELL_GOLD.toLong())))
+            Mc.SELL_GOLD
+        }.addOnSuccessListener { g -> onDone(g ?: 0) }.addOnFailureListener { onDone(-1) }
+    }
+
+    /** 보석 팔기 (장착 중이면 해제하고 팔기). onDone(받은 골드, 실패면 -1) */
+    fun sellGem(id: String, gemId: String, gold: Int, onDone: (Int) -> Unit) {
+        val ref = students().document(id)
+        db.runTransaction { tx ->
+            val d = tx.get(ref)
+            if (gemId !in strList(d.get("gems"))) return@runTransaction 0
+            val f = HashMap<String, Any>()
+            f["gems"] = FieldValue.arrayRemove(gemId)
+            f["gold"] = FieldValue.increment(gold.toLong())
+            if (d.getString("gem") == gemId) f["gem"] = ""
+            tx.update(ref, f)
+            gold
+        }.addOnSuccessListener { g -> onDone(g ?: 0) }.addOnFailureListener { onDone(-1) }
     }
 
     /** 입은 옷 전체를 한 번에 바꾸기 (모두 벗기 = 빈 map, 랜덤 코디 등) */
