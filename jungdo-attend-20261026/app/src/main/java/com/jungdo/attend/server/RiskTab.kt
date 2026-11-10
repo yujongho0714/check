@@ -58,18 +58,25 @@ fun RiskTab(students: List<Student>) {
     val absences by rememberAbsencesRange(from, today)
     val custom by rememberCustomHolidays()
     val risks = remember(students, events, absences, custom) { RiskAnalyzer.analyze(students, events, absences) }
-    var filter by remember { mutableStateOf("위험+주의") }
-    val shown = when (filter) { "위험+주의" -> risks.filter { it.level == "위험" || it.level == "주의" }; else -> risks }
+    var filter by remember { mutableStateOf("📞 전화 대상") }
+    val shown = when (filter) {
+        "📞 전화 대상" -> risks.filter { it.callNeeded }
+        "위험+주의" -> risks.filter { it.level == "위험" || it.level == "주의" }
+        else -> risks
+    }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
             Column {
                 Text("퇴관 위험도", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                Text("아이마다 '자기 평소 출석'과 최근 2주를 비교해요. 주말·공휴일·사유 결석은 빼고 계산합니다.\n" +
+                Text("📞 전화 대상: 연락 없이 수업일 2일 이상 연달아 안 온 아이 (사유 결석을 등록하면 빠져요).\n아이마다 '자기 평소 출석'과 최근 2주를 비교해요. 주말·공휴일·사유 결석은 빼고 계산합니다.\n" +
                     "위험 ${risks.count { it.level == "위험" }} · 주의 ${risks.count { it.level == "주의" }} · 안전 ${risks.count { it.level == "안전" }} · 기록 부족 ${risks.count { it.level == "기록 부족" }}",
                     color = Muted, fontSize = 13.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 6.dp)) {
-                    listOf("위험+주의", "전체").forEach { f -> Pill(f, filter == f, 15.sp) { filter = f } }
+                    listOf("📞 전화 대상", "위험+주의", "전체").forEach { f ->
+                        val n = when (f) { "📞 전화 대상" -> risks.count { it.callNeeded }; "위험+주의" -> risks.count { it.level == "위험" || it.level == "주의" }; else -> risks.size }
+                        Pill("$f $n", filter == f, 15.sp) { filter = f }
+                    }
                 }
             }
         }

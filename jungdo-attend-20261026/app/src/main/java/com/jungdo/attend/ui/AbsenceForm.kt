@@ -158,18 +158,9 @@ fun AbsenceForm(
             Pill("내일", from == tm && to == tm, 15.sp) { from = tm; to = tm }
             Pill("오늘~내일", from == t && to == tm, 15.sp) { from = t; to = tm }
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("시작 ", color = Muted)
-            TextButton(onClick = { from = Repo.shiftDay(from, -1) }) { Text("◀") }
-            Text(dayLabel(from), fontWeight = FontWeight.Bold)
-            TextButton(onClick = { from = Repo.shiftDay(from, 1); if (to < from) to = from }) { Text("▶") }
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("끝    ", color = Muted)
-            TextButton(onClick = { to = Repo.shiftDay(to, -1); if (to < from) from = to }) { Text("◀") }
-            Text(dayLabel(to), fontWeight = FontWeight.Bold)
-            TextButton(onClick = { to = Repo.shiftDay(to, 1) }) { Text("▶") }
-        }
+        // 달력: 한 번 누르면 하루, 이어서 뒤 날짜를 누르면 기간
+        RangeCalendar(from, to) { f, t -> from = f; to = t }
+        Text(if (from == to) "고른 날: ${dayLabel(from)} (하루)" else "고른 기간: ${dayLabel(from)} ~ ${dayLabel(to)}", fontWeight = FontWeight.Bold)
         // 긴 결석(독감·여행 등): 시작일 기준으로 끝 날짜를 한 번에 정하기
         Text("기간 빠르게 (시작일부터)", color = Muted, fontSize = 13.sp)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {

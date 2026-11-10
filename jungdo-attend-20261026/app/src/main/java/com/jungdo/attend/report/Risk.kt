@@ -16,6 +16,8 @@ data class Risk(
     val lastDay: String?,
     val recent: Int,          // 최근 2주 출석일
     val usualRate: Double,    // 평소 출석률 (수업일 대비)
+    val callNeeded: Boolean = false,  // 연락 없이 연달아 빠짐 → 전화 대상
+    val gap: Int = 0,                 // 마지막 출석 뒤 연락 없이 빠진 수업일
 )
 
 /**
@@ -26,6 +28,8 @@ data class Risk(
  */
 object RiskAnalyzer {
     const val LOOKBACK = 70
+    /** 연락 없이 이만큼(수업일) 연달아 안 오면 전화 대상 */
+    const val CALL_DAYS = 2
 
     fun analyze(students: List<Student>, events: List<AttendEvent>, absences: List<Absence>, today: String = Repo.today()): List<Risk> {
         val yesterday = Repo.shiftDay(today, -1)
@@ -54,7 +58,11 @@ object RiskAnalyzer {
             val gapOpen = openDays(if (last == null) start else Repo.shiftDay(last, 1), yesterday, ex).size
             val reasons = mutableListOf<String>()
 
+            // 📞 전화 대상: 연락(사유 결석) 없이 수업일 2일 이상 연달아 안 옴 (주 2~3회 오는 아이는 평소 오는 횟수로 2번 이상 빠졌을 때)
+            fun callNeeded(usual: Double) = last != null && gapOpen >= CALL_DAYS && (usual >= 0.5 || gapOpen * maxOf(usual, 0.3) >= CALL_DAYS * 0.8)
+            val callMsg = "📞 수업일 ${gapOpen}일 연속 결석 · 연락 없음 → 전화해 보세요"
             if (baseOpen.size < 5 && recentOpen.size < 5) {
+                if (callNeeded(0.8)) return@map Risk(s, 40, "주의", listOf(callMsg), last, recentAtt, 0.0, true, gapOpen)
                 return@map Risk(s, 0, "기록 부족", listOf("출석 기록이 쌓이는 중 (2주 이상 필요)"), last, recentAtt, 0.0)
             }
             val usual = when {
@@ -77,8 +85,10 @@ object RiskAnalyzer {
             val exRecent = ex.count { it >= recentStart }
             if (exRecent > 0) reasons += "사유 결석 ${exRecent}일 (계산에서 제외)"
 
+            val call = callNeeded(usual)
+            if (call) { reasons.add(0, callMsg); score = maxOf(score, if (gapOpen >= CALL_DAYS + 2) 60.0 else 40.0) }
             val sc = score.roundToInt().coerceIn(0, 100)
-            Risk(s, sc, when { sc >= 60 -> "위험"; sc >= 30 -> "주의"; else -> "안전" }, reasons, last, recentAtt, usual)
-        }.sortedByDescending { it.score }
+            Risk(s, sc, when { sc >= 60 -> "위험"; sc >= 30 -> "주의"; else -> "안전" }, reasons, last, recentAtt, usual, call, gapOpen)
+        }.sortedWith(compareByDescending<Risk> { it.callNeeded }.thenByDescending { it.score })
     }
 }

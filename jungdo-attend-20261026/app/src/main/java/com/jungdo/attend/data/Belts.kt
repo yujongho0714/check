@@ -128,19 +128,27 @@ object BeltSync {
         var paired = 0
         alive.filter { !it.beltManual }.groupBy { it.name.trim() }.forEach { (name, kids) ->
             val cands = byName[name] ?: return@forEach
-            if (kids.size == 1 && cands.size == 1) { newBelt[kids[0].id] = cands[0].b; return@forEach }
-            // 이름이 같은 아이가 여럿: ① 학년이 딱 맞으면 그걸로
+            fun sAge(s: Student) = if (s.curAge > 0) s.curAge else gradeKey(s.grade)
+            fun sCat(s: Student) = catOf(s.grade, s.curAge)
+            if (kids.size == 1 && cands.size == 1) {
+                // 한 명씩이어도 유치부 ↔ 초등부처럼 분명히 다르면 다른 아이로 봄
+                val sc = sCat(kids[0]); val ec = catOf(cands[0].g, 0)
+                newBelt[kids[0].id] = if (sc >= 0 && ec >= 0 && sc != ec) "" else cands[0].b
+                return@forEach
+            }
+            // 이름이 같은 아이가 여럿: ① 나이·학년이 딱 맞으면 → ② 유치부/초등부/중등… 이 하나만 맞으면
             val left = cands.toMutableList()
             val rest = ArrayList<Student>()
             kids.forEach { s ->
-                val sg = gradeKey(s.grade)
-                val hit = left.filter { sg < 99 && gradeKey(it.g) == sg }
+                val sg = sAge(s); val sc = sCat(s)
+                var hit = left.filter { sg < 99 && gradeKey(it.g) == sg }
+                if (hit.size != 1) hit = left.filter { sc >= 0 && catOf(it.g, 0) == sc }
                 if (hit.size == 1) { newBelt[s.id] = hit[0].b; left -= hit[0] } else rest += s
             }
-            // ② 남은 아이는 나이 어린 아이 ↔ 낮은 띠 순서로 짝지음 (숫자가 같을 때만)
+            // ③ 남은 아이는 나이 어린 아이 ↔ 낮은 띠 순서로 짝지음 (숫자가 같을 때만)
             if (rest.isNotEmpty()) {
                 if (rest.size == left.size) {
-                    rest.sortedBy { gradeKey(it.grade) }.zip(left.sortedBy { Belts.rank(it.b) }).forEach { (s, e) -> newBelt[s.id] = e.b }
+                    rest.sortedBy { sAge(it) }.zip(left.sortedBy { Belts.rank(it.b) }).forEach { (s, e) -> newBelt[s.id] = e.b }
                     paired += rest.size
                 } else rest.forEach { newBelt[it.id] = "" }   // 모르면 잘못된 띠를 두지 않고 비움
             }
@@ -178,6 +186,21 @@ object BeltSync {
             g.startsWith("고") -> 16 + n
             g.contains("학년") || g.startsWith("초") -> 7 + n
             else -> 99
+        }
+    }
+
+    /** 큰 분류: 0 유치부 / 1 초등 / 2 중등 / 3 고등 / 4 성인 / -1 모름 (나이를 알면 나이로) */
+    fun catOf(raw: String, age: Int): Int {
+        if (age > 0) return when { age <= 7 -> 0; age <= 13 -> 1; age <= 16 -> 2; age <= 19 -> 3; else -> 4 }
+        val g = raw.replace(" ", "")
+        return when {
+            g.isBlank() -> -1
+            g.contains("유치") || g.contains("세") || g.contains("살") -> 0
+            g.startsWith("중") -> 2
+            g.startsWith("고") -> 3
+            g.contains("성인") -> 4
+            g.startsWith("초") || g.contains("학년") -> 1
+            else -> -1
         }
     }
 

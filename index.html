@@ -109,6 +109,7 @@ tr.click:hover{background:#f8fafc;cursor:pointer}
     <h1>🥋 정도 출결 PC</h1>
     <div class="dev"><span id="devServer"><i class="dot"></i>문자 폰</span><span id="devKiosk"><i class="dot"></i>키오스크</span></div>
     <div class="sp"></div>
+    <button id="qsmsBtn" style="background:#f5c518;color:#111;font-weight:800">✉️ 문자 보내기</button>
     <span class="who" id="who"></span>
     <button id="logoutBtn">로그아웃</button>
   </header>
@@ -118,6 +119,7 @@ tr.click:hover{background:#f8fafc;cursor:pointer}
     <button data-t="bulk">단체 문자</button>
     <button data-t="month">월간 출석부</button>
     <button data-t="absent">결석 · 받은 문자</button>
+    <button data-t="call">📞 전화 대상</button>
     <button data-t="msg">문자 문구 · 오늘 안내</button>
   </nav>
   <main><div class="panel" id="panel"></div></main>
@@ -128,7 +130,7 @@ tr.click:hover{background:#f8fafc;cursor:pointer}
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
-import { getFirestore, collection, doc, onSnapshot, query, where, orderBy, limit, setDoc, updateDoc, addDoc, deleteDoc, getDoc, writeBatch, serverTimestamp, deleteField } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+import { getFirestore, collection, doc, onSnapshot, query, where, orderBy, limit, setDoc, updateDoc, addDoc, deleteDoc, getDoc, getDocs, writeBatch, serverTimestamp, deleteField } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
 /* ═════════════ 기본 도우미 ═════════════ */
 const $ = s => document.querySelector(s);
@@ -211,6 +213,7 @@ $('#loginBtn').onclick = async () => {
 };
 $('#pwIn').addEventListener('keydown', e => { if (e.key === 'Enter') $('#loginBtn').click(); });
 $('#logoutBtn').onclick = () => signOut(auth);
+$('#qsmsBtn').onclick = () => quickSmsModal(null);
 
 const saved = lsGet('jdpc_cfg');
 if (saved){ try { connect(JSON.parse(saved)); onAuthStateChanged(auth, onAuth); } catch(e){ showLogin(); } } else showLogin();
@@ -256,7 +259,7 @@ function renderDev(){
 /* ═════════════ 탭 ═════════════ */
 $('#tabs').onclick = e => { const b = e.target.closest('button'); if (!b) return; S.tab = b.dataset.t; document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b)); render(); };
 function rerender(tabs){ if (tabs.includes(S.tab) && !S.busyInput) render(); }
-function render(){ const p = $('#panel'); ({ today: rToday, roster: rRoster, bulk: rBulk, month: rMonth, absent: rAbsent, msg: rMsg })[S.tab](p); }
+function render(){ const p = $('#panel'); ({ today: rToday, roster: rRoster, bulk: rBulk, month: rMonth, absent: rAbsent, msg: rMsg, call: rCall })[S.tab](p); }
 // 글 쓰는 중에는 실시간 갱신으로 화면을 다시 그리지 않음
 document.addEventListener('focusin', e => { if (e.target.matches('#panel input[type=text], #panel textarea')) S.busyInput = true; });
 document.addEventListener('focusout', () => { S.busyInput = false; });
@@ -302,44 +305,277 @@ async function manualEvent(id, type){
   toast(`${s.name} ${type === 'IN' ? '등원' : '하원'} 처리했어요`);
 }
 
-/* ─── 원생 명단 ─── */
-const RS = { q: '', status: 'ACTIVE', belt: '' };
-function rRoster(p){
-  const q = RS.q.trim();
-  let list = S.students.filter(s => RS.status === 'ALL' || s.status === RS.status);
-  if (q) list = list.filter(s => s.name.includes(q) || choseong(s.name).startsWith(q) || s.attendNo.includes(q) || s.phones.some(x => normPhone(x).includes(q.replace(/\D/g, '') || '@@')));
-  if (RS.belt) list = list.filter(s => normBelt(s.belt) === RS.belt);
-  list.sort(byName);
-  const belts = [...new Set(active().map(s => normBelt(s.belt)).filter(Boolean))].sort((a, b) => beltRank(a) - beltRank(b));
-  const dupNo = {}; active().forEach(s => { if (s.attendNo) dupNo[s.attendNo] = (dupNo[s.attendNo] || 0) + 1; });
-  p.innerHTML = `
-    <div class="row">
-      <input type="text" id="rq" placeholder="이름 · 초성(ㄱㅅㅇ) · 출결번호 · 전화번호" value="${esc(RS.q)}" style="width:300px">
-      ${[['ACTIVE','재원'],['LEAVE','휴관'],['LEFT','퇴관'],['ALL','전체']].map(([k, l]) => `<button class="pill ${RS.status === k ? 'on' : ''}" data-st="${k}">${l}</button>`).join('')}
-      <select id="rbelt"><option value="">띠 전체</option>${belts.map(b => `<option ${RS.belt === b ? 'selected' : ''}>${esc(b)}</option>`).join('')}</select>
-      <div class="grow"></div>
-      <button class="btn ghost" id="rx">엑셀로 받기</button>
-      <button class="btn" id="radd">+ 원생 추가</button>
-    </div>
-    <p class="muted">${list.length}명 · 줄을 누르면 고칠 수 있어요. 고친 내용은 문자 폰·키오스크에 바로 반영돼요.</p>
-    <div class="scroll"><table>
-      <tr><th>이름</th><th>학년</th><th>출결번호</th><th>띠</th><th>줄넘기</th><th>보호자 번호</th><th>상태</th><th>메모</th></tr>
-      ${list.map(s => `<tr class="click" data-id="${s.id}"><td><b>${esc(s.name)}</b>${s.demo ? ' <span class="tag t-in">시범단</span>' : ''}</td><td>${esc(gradeOf(s))}</td>
-        <td>${esc(s.attendNo)}${s.attendNo && dupNo[s.attendNo] > 1 ? ' <span class="tag t-bad">겹침</span>' : ''}</td>
-        <td>${beltHtml(s.belt)}${s.beltManual ? ' <span class="muted" title="직접 고정한 띠">📌</span>' : ''}</td><td>${esc(s.jumpGrade)}</td>
-        <td>${s.phones.map((x, i) => `${esc(s.phoneLabels[i] || '보호자')} ${esc(prettyPhone(normPhone(x)))}`).join('<br>')}</td>
-        <td>${s.status === 'ACTIVE' ? '재원' : s.status === 'LEAVE' ? '<span class="tag t-wait">휴관</span>' : '<span class="tag t-gray">퇴관</span>'}</td>
-        <td class="muted">${esc(s.memo)}</td></tr>`).join('')}
-    </table></div>`;
-  const rq = $('#rq'); rq.oninput = () => { RS.q = rq.value; const pos = rq.selectionStart; rRoster(p); const n = $('#rq'); n.focus(); n.setSelectionRange(pos, pos); };
-  p.querySelectorAll('[data-st]').forEach(b => b.onclick = () => { RS.status = b.dataset.st; rRoster(p); });
-  $('#rbelt').onchange = e => { RS.belt = e.target.value; rRoster(p); };
-  p.querySelectorAll('tr[data-id]').forEach(tr => tr.onclick = () => editStudent(S.students.find(s => s.id === tr.dataset.id)));
-  $('#radd').onclick = () => editStudent(null);
-  $('#rx').onclick = () => exportXlsx([['이름','학년','출결번호','띠','줄넘기','보호자 번호','상태','메모'], ...list.map(s => [s.name, gradeOf(s), s.attendNo, normBelt(s.belt), s.jumpGrade, s.phones.map((x, i) => `${s.phoneLabels[i] || '보호자'} ${prettyPhone(normPhone(x))}`).join(' / '), s.status === 'ACTIVE' ? '재원' : s.status === 'LEAVE' ? '휴관' : '퇴관', s.memo])], `roster_${today()}.xlsx`, '원생 명단');
-}
+/* ─── 공통: 찾기·고르기·정렬 ─── */
 const CHO = 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ';
+const CHO_KEYS = 'ㄱㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅌㅍㅎ';
+const BASE_CHO = { 'ㄲ':'ㄱ','ㄸ':'ㄷ','ㅃ':'ㅂ','ㅆ':'ㅅ','ㅉ':'ㅈ' };
 const choseong = s => [...s].map(c => { const k = c.charCodeAt(0) - 0xAC00; return k >= 0 && k < 11172 ? CHO[Math.floor(k / 588)] : c; }).join('');
+const cho1 = s => { const c = choseong(s)[0] || ''; return BASE_CHO[c] || c; };
+/** 앱과 같은 찾기: 초성만 치면 성 또는 이름 첫 글자부터, 그 밖엔 이름에 들어 있으면 */
+function nameMatch(name, q){
+  const t = q.replace(/\s/g, ''); if (!t) return true;
+  if ([...t].every(c => c >= 'ㄱ' && c <= 'ㅎ')){ const init = choseong(name).split('').map(c => BASE_CHO[c] || c).join(''); const want = [...t].map(c => BASE_CHO[c] || c).join(''); return init.startsWith(want) || init.slice(1).startsWith(want); }
+  if (/^\d+$/.test(t)) return false;
+  return name.includes(t);
+}
+/** 나이(세): 나이가 저장돼 있으면 그대로, 없으면 학년 글자로 */
+const ageKey = s => curAge(s) || ageOf(gradeOf(s)) || 0;
+const newF = () => ({ q: '', cho: new Set(), grades: new Set(), ages: new Set(), belts: new Set(), sort: 'name' });
+function applyF(list, F){
+  return list.filter(s =>
+    (!F.q || nameMatch(s.name, F.q) || (/\d{3,}/.test(F.q) && (s.attendNo.includes(F.q) || s.phones.some(x => normPhone(x).includes(F.q.replace(/\D/g, '')))))) &&
+    (!F.cho.size || F.cho.has(cho1(s.name)) || F.cho.has(cho1(givenName(s.name)))) &&
+    (!F.grades.size || F.grades.has(gradeOf(s))) &&
+    (!F.ages.size || F.ages.has(String(ageKey(s)))) &&
+    (!F.belts.size || F.belts.has(normBelt(s.belt) || '띠 없음')));
+}
+const SORTS = [['name','가나다순'],['nameDesc','가나다 거꾸로'],['ageAsc','나이 어린 순'],['ageDesc','나이 많은 순'],['beltDesc','띠 높은 순'],['beltAsc','띠 낮은 순'],['no','출결번호 순']];
+function sortF(list, sort){
+  const nm = (a, b) => a.name.localeCompare(b.name, 'ko');
+  const ak = s => ageKey(s) || 999;
+  const f = {
+    name: nm, nameDesc: (a, b) => -nm(a, b),
+    ageAsc: (a, b) => ak(a) - ak(b) || nm(a, b),
+    ageDesc: (a, b) => (ageKey(b) || -1) - (ageKey(a) || -1) || nm(a, b),
+    beltDesc: (a, b) => (beltRank(b.belt) % 9999) - (beltRank(a.belt) % 9999) || nm(a, b),
+    beltAsc: (a, b) => beltRank(a.belt) - beltRank(b.belt) || nm(a, b),
+    no: (a, b) => (parseInt(a.attendNo, 10) || 1e9) - (parseInt(b.attendNo, 10) || 1e9) || nm(a, b),
+  }[sort] || nm;
+  return [...list].sort(f);
+}
+/** 찾기 칸 + 초성·학년·나이·띠 버튼 + 정렬 (누르면 목록만 다시 그림 → 한글 입력이 안 끊김) */
+function filterBarHtml(F, kids, withSort = true){
+  const grades = [...new Set(kids.map(gradeOf).filter(Boolean))].sort((a, b) => gradeRank(a) - gradeRank(b));
+  const ages = [...new Set(kids.map(ageKey).filter(Boolean))].sort((a, b) => a - b);
+  const belts = [...new Set(kids.map(s => normBelt(s.belt)).filter(Boolean))].sort((a, b) => beltRank(a) - beltRank(b));
+  const pills = (key, arr, label) => arr.length ? `<div class="row" style="gap:5px;margin-top:6px"><span class="muted" style="width:34px">${label}</span>${arr.map(v => `<button class="pill ${F[key].has(String(v)) ? 'on' : ''}" data-fk="${key}" data-fv="${esc(v)}" style="padding:3px 10px;font-size:13.5px">${esc(key === 'ages' ? v + '세' : v)}</button>`).join('')}</div>` : '';
+  return `<div class="fbar">
+    <div class="row"><input type="text" data-fq placeholder="이름 · 초성(ㄱㅅㅇ) · 출결번호 · 전화번호" value="${esc(F.q)}" style="width:290px">
+      ${withSort ? `<select data-fsort>${SORTS.map(([k, l]) => `<option value="${k}" ${F.sort === k ? 'selected' : ''}>${l}</option>`).join('')}</select>` : ''}
+      <button class="pill" data-fclear>찾기 조건 지우기</button></div>
+    ${pills('cho', [...CHO_KEYS], '초성')}${pills('grades', grades, '학년')}${pills('ages', ages, '나이')}${pills('belts', belts.length ? [...belts, '띠 없음'] : [], '띠')}
+  </div>`;
+}
+function bindFilterBar(root, F, redraw){
+  const q = root.querySelector('[data-fq]');
+  q.addEventListener('input', e => { F.q = q.value; if (!e.isComposing) redraw(); });
+  q.addEventListener('compositionend', () => { F.q = q.value; redraw(); });
+  root.querySelectorAll('[data-fk]').forEach(b => b.onclick = () => { const set = F[b.dataset.fk], v = b.dataset.fv; set.has(v) ? set.delete(v) : set.add(v); b.classList.toggle('on', set.has(v)); redraw(); });
+  const so = root.querySelector('[data-fsort]'); if (so) so.onchange = () => { F.sort = so.value; redraw(); };
+  root.querySelector('[data-fclear]').onclick = () => { F.q = ''; q.value = ''; ['cho','grades','ages','belts'].forEach(k => F[k].clear()); root.querySelectorAll('[data-fk]').forEach(b => b.classList.remove('on')); redraw(); };
+}
+
+/* ─── 원생 명단 ─── */
+const RS = { status: 'ACTIVE', F: newF() };
+function rRoster(p){
+  const base = S.students.filter(s => RS.status === 'ALL' || s.status === RS.status);
+  p.innerHTML = `
+    <div class="row"><div id="rbar" class="grow"></div>
+      <div class="row" style="align-self:flex-start">${[['ACTIVE','재원'],['LEAVE','휴관'],['LEFT','퇴관'],['ALL','전체']].map(([k, l]) => `<button class="pill ${RS.status === k ? 'on' : ''}" data-st="${k}">${l}</button>`).join('')}</div></div>
+    <div class="row" style="margin-top:10px"><span class="muted grow" id="rcount"></span>
+      <button class="btn ghost" id="rsync">🥋 통합관리 띠와 비교·맞추기</button><button class="btn ghost" id="rx">엑셀로 받기</button><button class="btn" id="radd">+ 원생 추가</button></div>
+    <div class="scroll" style="margin-top:8px"><table>
+      <thead><tr><th>이름</th><th>나이</th><th>학년</th><th>출결번호</th><th>띠 <span class="muted">(바로 고치면 📌고정)</span></th><th>줄넘기</th><th>보호자 번호</th><th>상태</th><th>메모</th></tr></thead>
+      <tbody id="rbody"></tbody></table></div>`;
+  $('#rbar').innerHTML = filterBarHtml(RS.F, base);
+  let list = [];
+  const draw = () => {
+    list = sortF(applyF(S.students.filter(s => RS.status === 'ALL' || s.status === RS.status), RS.F), RS.F.sort);
+    const dupNo = {}; active().forEach(s => { if (s.attendNo) dupNo[s.attendNo] = (dupNo[s.attendNo] || 0) + 1; });
+    $('#rcount').textContent = `${list.length}명 · 줄을 누르면 고칠 수 있어요. 고친 내용은 문자 폰·키오스크에 바로 반영돼요.`;
+    $('#rbody').innerHTML = list.map(s => `<tr class="click" data-id="${s.id}"><td><b>${esc(s.name)}</b>${s.demo ? ' <span class="tag t-in">시범단</span>' : ''}</td>
+      <td>${ageKey(s) ? ageKey(s) + '세' : ''}</td><td>${esc(gradeOf(s))}</td>
+      <td>${esc(s.attendNo)}${s.attendNo && dupNo[s.attendNo] > 1 ? ' <span class="tag t-bad">겹침</span>' : ''}</td>
+      <td data-nobubble><select data-belt-of="${s.id}" style="padding:4px 6px;font-size:13px"><option value="">-</option>${beltOptions(s.belt)}</select>${s.beltManual ? ' <span title="직접 고정한 띠 (통합관리 연동이 안 바꿈)">📌</span>' : ''}</td>
+      <td>${esc(s.jumpGrade)}</td>
+      <td>${s.phones.map((x, i) => `${esc(s.phoneLabels[i] || '보호자')} ${esc(prettyPhone(normPhone(x)))}`).join('<br>')}</td>
+      <td>${s.status === 'ACTIVE' ? '재원' : s.status === 'LEAVE' ? '<span class="tag t-wait">휴관</span>' : '<span class="tag t-gray">퇴관</span>'}</td>
+      <td class="muted">${esc(s.memo)}</td></tr>`).join('');
+    $('#rbody').querySelectorAll('tr[data-id]').forEach(tr => tr.onclick = e => { if (e.target.closest('[data-nobubble]')) return; editStudent(S.students.find(s => s.id === tr.dataset.id)); });
+    $('#rbody').querySelectorAll('[data-belt-of]').forEach(sel => sel.onchange = async () => {
+      const s = S.students.find(x => x.id === sel.dataset.beltOf);
+      await setDoc(doc(db, 'students', s.id), { belt: normBelt(sel.value), beltManual: true }, { merge: true });
+      toast(`${s.name} 띠를 ${sel.value || '없음'}(으)로 고정했어요`);
+    });
+  };
+  bindFilterBar($('#rbar'), RS.F, draw); draw();
+  p.querySelectorAll('[data-st]').forEach(b => b.onclick = () => { RS.status = b.dataset.st; rRoster(p); });
+  $('#radd').onclick = () => editStudent(null);
+  $('#rsync').onclick = beltSyncModal;
+  $('#rx').onclick = () => exportXlsx([['이름','나이','학년','출결번호','띠','줄넘기','보호자 번호','상태','메모'], ...list.map(s => [s.name, ageKey(s) || '', gradeOf(s), s.attendNo, normBelt(s.belt), s.jumpGrade, s.phones.map((x, i) => `${s.phoneLabels[i] || '보호자'} ${prettyPhone(normPhone(x))}`).join(' / '), s.status === 'ACTIVE' ? '재원' : s.status === 'LEAVE' ? '휴관' : '퇴관', s.memo])], `roster_${today()}.xlsx`, '원생 명단');
+}
+/** 띠 고르기 목록: 색띠 + 1~4품 각 급 */
+function beltOptions(cur){
+  cur = normBelt(cur);
+  const all = [...COLORS]; for (let p = 1; p <= 4; p++) for (let g = p * 12; g >= 1; g--) all.push(`${p}품 ${g}급`);
+  if (cur && !all.includes(cur)) all.push(cur);
+  return all.map(b => `<option ${b === cur ? 'selected' : ''}>${b}</option>`).join('');
+}
+
+/* ─── 통합관리 띠와 비교·맞추기 (PC에서 직접 받아서 비교) ─── */
+const BS_URL = 'https://taekwondo-wordgame-default-rtdb.asia-southeast1.firebasedatabase.app/apps/pub_beltsync/data/blob.json';
+const b64u8 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+async function bsFetch(pw){
+  const r = await fetch(BS_URL, { cache: 'no-store' }); if (!r.ok) throw new Error('HTTP ' + r.status);
+  const o = await r.json(); if (!o) throw new Error('통합관리에서 아직 띠를 보내지 않았어요');
+  const enc = new TextEncoder();
+  const base = await crypto.subtle.importKey('raw', enc.encode(pw), 'PBKDF2', false, ['deriveKey']);
+  const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: b64u8(o.s), iterations: o.n || 150000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+  let plain; try { plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64u8(o.i) }, key, b64u8(o.d)); } catch(e){ throw new Error('비밀번호가 통합관리와 달라요'); }
+  const d = JSON.parse(new TextDecoder().decode(plain));
+  const list = Array.isArray(d.l) ? d.l.map(x => ({ n: String(x.n || '').trim(), g: String(x.g || '').trim(), b: normBelt(x.b) })) : Object.entries(d.b || {}).map(([n, b]) => ({ n: n.trim(), g: '', b: normBelt(b) }));
+  return { t: o.t || d.t, list };
+}
+function catOf(raw, age){
+  if (age > 0) return age <= 7 ? 0 : age <= 13 ? 1 : age <= 16 ? 2 : age <= 19 ? 3 : 4;
+  const g = String(raw || '').replace(/\s/g, ''); if (!g) return -1;
+  if (/유치|세|살/.test(g)) return 0; if (g.startsWith('중')) return 2; if (g.startsWith('고')) return 3; if (g.includes('성인')) return 4; if (g.startsWith('초') || g.includes('학년')) return 1; return -1;
+}
+function gradeKeyOf(raw){
+  const g = String(raw || '').replace(/\s/g, ''); const m = g.match(/(\d+)/); if (!m) return 99; const n = +m[1];
+  if (/세|살/.test(g)) return n; if (g.startsWith('중')) return 13 + n; if (g.startsWith('고')) return 16 + n; if (g.includes('학년') || g.startsWith('초')) return 7 + n; return 99;
+}
+/** 앱(문자 폰)과 똑같은 규칙으로 아이마다 통합관리 띠를 찾음 → { id: {belt, how} } */
+function matchBelts(list){
+  const out = {};
+  const byName = {}; list.filter(e => e.b).forEach(e => (byName[e.n] = byName[e.n] || []).push(e));
+  const groups = {}; S.students.filter(s => s.status !== 'LEFT').forEach(s => (groups[s.name.trim()] = groups[s.name.trim()] || []).push(s));
+  Object.entries(groups).forEach(([name, kids]) => {
+    const cands = byName[name]; if (!cands) return;
+    const sAge = s => curAge(s) || gradeKeyOf(gradeOf(s)); const sCat = s => catOf(gradeOf(s), curAge(s));
+    if (kids.length === 1 && cands.length === 1){
+      const sc = sCat(kids[0]), ec = catOf(cands[0].g, 0);
+      out[kids[0].id] = sc >= 0 && ec >= 0 && sc !== ec ? { belt: '', how: `통합관리 ${name}(${cands[0].g})은 다른 아이 같아요` } : { belt: cands[0].b, how: '' };
+      return;
+    }
+    const left = [...cands], rest = [];
+    kids.forEach(s => {
+      let hit = left.filter(e => sAge(s) < 99 && gradeKeyOf(e.g) === sAge(s));
+      if (hit.length !== 1) hit = left.filter(e => sCat(s) >= 0 && catOf(e.g, 0) === sCat(s));
+      if (hit.length === 1){ out[s.id] = { belt: hit[0].b, how: `이름 같은 아이 · 학년으로 구분(${hit[0].g})` }; left.splice(left.indexOf(hit[0]), 1); } else rest.push(s);
+    });
+    if (rest.length){
+      if (rest.length === left.length){ const ls = [...left].sort((a, b) => beltRank(a.b) - beltRank(b.b)); [...rest].sort((a, b) => sAge(a) - sAge(b)).forEach((s, i) => out[s.id] = { belt: ls[i].b, how: '이름 같은 아이 · 나이 순으로 짝지음' }); }
+      else rest.forEach(s => out[s.id] = { belt: '', how: '이름 같은 아이를 구분 못 함' });
+    }
+  });
+  return out;
+}
+function beltSyncModal(){
+  const r = modal(`<h2>🥋 통합관리 띠와 비교·맞추기</h2>
+    <p class="muted">통합관리 [출결 앱 띠 보내기]에 넣은 비밀번호를 넣으면, 통합관리 띠와 출결 띠가 다른 아이만 보여줘요. 체크한 아이만 바뀌어요. 📌고정한 아이는 체크가 꺼져 있어요.</p>
+    <div class="row"><input type="password" id="bpw" placeholder="연동 비밀번호" value="${esc(lsGet('jdpc_beltpw'))}"><button class="btn" id="bgo">비교하기</button></div>
+    <div id="bres" style="margin-top:12px"></div>`);
+  r.querySelector('#bgo').onclick = async () => {
+    const pw = r.querySelector('#bpw').value; const box = r.querySelector('#bres');
+    if (!pw) return toast('비밀번호를 넣어 주세요');
+    box.innerHTML = '<p class="muted">받는 중…</p>';
+    try {
+      const { t, list } = await bsFetch(pw); lsSet('jdpc_beltpw', pw);
+      const m = matchBelts(list);
+      const kids = S.students.filter(s => s.status !== 'LEFT');
+      const diffs = kids.filter(s => m[s.id] && m[s.id].belt !== normBelt(s.belt)).sort(byName);
+      const missing = kids.filter(s => !m[s.id] && s.status === 'ACTIVE');
+      const names = new Set(kids.map(s => s.name.trim())); const extra = [...new Set(list.map(e => e.n))].filter(n => !names.has(n));
+      box.innerHTML = `<p class="muted">통합관리 보낸 때: ${t ? new Date(t).toLocaleString('ko-KR') : '?'} · 통합관리 ${list.length}명</p>
+        <h3>다른 아이 ${diffs.length}명</h3>
+        <div class="scroll" style="max-height:46vh"><table><tr><th></th><th>이름</th><th>나이·학년</th><th>지금 출결 띠</th><th>통합관리 띠</th><th>설명</th></tr>
+        ${diffs.map(s => `<tr><td><input type="checkbox" data-ap="${s.id}" ${s.beltManual ? '' : 'checked'}></td><td><b>${esc(s.name)}</b>${s.beltManual ? ' 📌' : ''}</td><td>${ageKey(s) ? ageKey(s) + '세 ' : ''}${esc(gradeOf(s))}</td><td>${beltHtml(s.belt) || '<span class="muted">없음</span>'}</td><td>${beltHtml(m[s.id].belt) || '<span class="muted">비움</span>'}</td><td class="muted">${esc(m[s.id].how)}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">모두 같아요 👍</td></tr>'}</table></div>
+        ${missing.length ? `<p class="muted">통합관리에 없는 원생 ${missing.length}명: ${esc(missing.map(s => s.name).join(', '))}</p>` : ''}
+        ${extra.length ? `<p class="muted">출결에 없는 통합관리 이름 ${extra.length}명: ${esc(extra.join(', '))}</p>` : ''}
+        <div class="row" style="margin-top:10px"><div class="grow"></div><button class="btn ghost" id="bclose">닫기</button><button class="btn" id="bapply" ${diffs.length ? '' : 'disabled'}>체크한 아이 통합관리 띠로 바꾸기</button></div>`;
+      box.querySelector('#bclose').onclick = closeModal;
+      const ap = box.querySelector('#bapply'); if (ap) ap.onclick = async () => {
+        const ids = [...box.querySelectorAll('[data-ap]:checked')].map(c => c.dataset.ap); if (!ids.length) return toast('체크한 아이가 없어요');
+        const b = writeBatch(db); ids.forEach(id => b.set(doc(db, 'students', id), { belt: m[id].belt, beltManual: false }, { merge: true })); await b.commit();
+        toast(`${ids.length}명 띠를 맞췄어요`); closeModal();
+      };
+    } catch(e){ box.innerHTML = `<p style="color:var(--bad)">${esc(e.message)}</p>`; }
+  };
+  if (lsGet('jdpc_beltpw')) r.querySelector('#bgo').click();
+}
+
+/* ─── 문자 한 통 바로 보내기 (PC에서 써서 → 문자 폰이 발송) ─── */
+function quickSmsModal(pre){
+  const s = pre || null;
+  const r = modal(`<h2>✉️ 문자 보내기</h2>
+    <p class="muted">PC에서 쓴 문자를 문자 폰이 바로 보내요 (관장님 폰 번호·요금). 받는 사람은 아이 이름으로 찾거나 번호를 직접 넣으세요.</p>
+    <div class="form">
+      <label>아이</label><div><input type="text" id="qq" placeholder="이름·초성" value="${s ? esc(s.name) : ''}" style="width:200px"><div class="kids" id="qk" style="max-height:130px;margin-top:6px"></div></div>
+      <label>받는 번호</label><div><div id="qph" class="row" style="gap:6px"></div><input type="text" id="qnum" placeholder="직접 넣기: 010-1234-5678 (여러 개는 쉼표)" style="width:100%;margin-top:6px"></div>
+      <label>내용</label><textarea id="qt" placeholder="문자 내용"></textarea>
+    </div>
+    <div class="row" style="margin-top:12px"><span class="muted grow" id="qinfo"></span><button class="btn ghost" id="qc">닫기</button><button class="btn" id="qs">보내기</button></div>`);
+  const picked = new Map();   // 번호 → 이름
+  const drawPh = () => { r.querySelector('#qph').innerHTML = [...picked].map(([p, n]) => `<span class="pill on">${esc(n)} ${esc(prettyPhone(p))} <a href="#" data-unp="${p}" style="color:#fff">✕</a></span>`).join('') || '<span class="muted">아이를 누르면 보호자 번호가 들어가요</span>';
+    r.querySelectorAll('[data-unp]').forEach(a => a.onclick = e => { e.preventDefault(); picked.delete(a.dataset.unp); drawPh(); }); };
+  const addKid = k => { k.phones.forEach((p, i) => { const n = normPhone(p); if (n.length >= 9) picked.set(n, `${k.name} ${k.phoneLabels[i] || '보호자'}`); }); drawPh(); };
+  const drawK = () => { const q = r.querySelector('#qq').value.trim(); const list = q ? active().filter(k => nameMatch(k.name, q)).sort(byName).slice(0, 30) : [];
+    r.querySelector('#qk').innerHTML = list.map(k => `<button class="kid" data-qk="${k.id}">${esc(k.name)} <span class="muted">${esc(gradeOf(k))}</span></button>`).join('');
+    r.querySelectorAll('[data-qk]').forEach(b => b.onclick = () => addKid(S.students.find(x => x.id === b.dataset.qk))); };
+  const qq = r.querySelector('#qq'); qq.addEventListener('input', e => { if (!e.isComposing) drawK(); }); qq.addEventListener('compositionend', drawK);
+  if (s) addKid(s); drawPh(); drawK();
+  r.querySelector('#qc').onclick = closeModal;
+  r.querySelector('#qs').onclick = async () => {
+    r.querySelector('#qnum').value.split(/[,\n]/).map(normPhone).filter(n => n.length >= 9).forEach(n => { if (!picked.has(n)) picked.set(n, prettyPhone(n)); });
+    const text = r.querySelector('#qt').value.trim();
+    if (!picked.size) return toast('받는 번호가 없어요'); if (!text) return toast('내용을 써 주세요');
+    if (!confirm(`${picked.size}명에게 보낼까요?\n\n${text}`)) return;
+    const now = Date.now();
+    await addDoc(collection(db, 'bulk'), { title: `PC 문자 · ${[...picked.values()][0]}${picked.size > 1 ? ` 외 ${picked.size - 1}` : ''}`, createdMs: now, lastMs: now, status: 'PENDING', items: [...picked].map(([p, n]) => ({ n, p, t: text })), results: {} });
+    toast('문자 폰으로 보냈어요 (단체 문자 탭에서 결과 확인)'); closeModal();
+  };
+}
+
+/* ─── 📞 전화 대상 (연락 없이 2일 이상 연달아 결석) ─── */
+const HOLI = {'2026-01-01':1,'2026-02-16':1,'2026-02-17':1,'2026-02-18':1,'2026-03-01':1,'2026-03-02':1,'2026-05-01':1,'2026-05-05':1,'2026-05-24':1,'2026-05-25':1,'2026-06-03':1,'2026-06-06':1,'2026-07-17':1,'2026-08-15':1,'2026-08-17':1,'2026-09-24':1,'2026-09-25':1,'2026-09-26':1,'2026-10-03':1,'2026-10-05':1,'2026-10-09':1,'2026-12-25':1,
+  '2027-01-01':1,'2027-02-06':1,'2027-02-07':1,'2027-02-08':1,'2027-02-09':1,'2027-03-01':1,'2027-05-01':1,'2027-05-03':1,'2027-05-05':1,'2027-05-13':1,'2027-06-06':1,'2027-07-17':1,'2027-07-19':1,'2027-08-15':1,'2027-08-16':1,'2027-09-14':1,'2027-09-15':1,'2027-09-16':1,'2027-10-03':1,'2027-10-04':1,'2027-10-09':1,'2027-10-11':1,'2027-12-25':1,'2027-12-27':1};
+const shiftDay = (d, n) => { const t = new Date(d + 'T12:00:00'); t.setDate(t.getDate() + n); return dayOf(t.getTime()); };
+const CS = { ev: [], ab: [], hol: {}, loadedDay: '' };
+function isOff(d){ const c = CS.hol[d]; if (c === '수업') return false; const w = new Date(d + 'T12:00:00').getDay(); return w === 0 || w === 6 || !!c || !!HOLI[d]; }
+async function loadCall(){
+  CS.loadedDay = today(); const from = shiftDay(today(), -70);
+  const [e, a, h] = await Promise.all([
+    getDocs(query(collection(db, 'events'), where('day', '>=', from))),
+    getDocs(query(collection(db, 'absences'), where('day', '>=', from))),
+    getDoc(doc(db, 'config', 'holidays')),
+  ]);
+  CS.ev = e.docs.map(d => d.data()).filter(x => x.type === 'IN'); CS.ab = a.docs.map(d => d.data()); CS.hol = (h.exists() && h.get('days')) || {};
+}
+function callList(){
+  const yest = shiftDay(today(), -1);
+  const att = {}; CS.ev.forEach(e => (att[e.studentId] = att[e.studentId] || new Set()).add(e.day));
+  S.todayEv.filter(e => e.type === 'IN').forEach(e => (att[e.studentId] = att[e.studentId] || new Set()).add(e.day));
+  const exc = {}; CS.ab.forEach(a => (exc[a.studentId] = exc[a.studentId] || new Set()).add(a.day));
+  const from70 = shiftDay(today(), -70), recent = shiftDay(today(), -14);
+  return active().map(s => {
+    const days = att[s.id] || new Set(), ex = exc[s.id] || new Set();
+    const last = [...days].filter(d => d <= today()).sort().pop();
+    if (!last) return null;
+    if (days.has(today())) return null;
+    let gap = 0; for (let d = shiftDay(last, 1); d <= yest; d = shiftDay(d, 1)) if (!isOff(d) && !ex.has(d)) gap++;
+    let open = 0, came = 0; const st = s.joinedMonth && s.joinedMonth + '-01' > from70 ? s.joinedMonth + '-01' : from70;
+    for (let d = st; d < recent; d = shiftDay(d, 1)) if (!isOff(d) && !ex.has(d)){ open++; if (days.has(d)) came++; }
+    const usual = open >= 5 ? came / open : 0.8;
+    const need = gap >= 2 && (usual >= 0.5 || gap * Math.max(usual, 0.3) >= 1.6);
+    return need ? { s, gap, last, usual } : null;
+  }).filter(Boolean).sort((a, b) => b.gap - a.gap);
+}
+async function rCall(p){
+  p.innerHTML = '<p class="muted">출석 기록 읽는 중…</p>';
+  if (CS.loadedDay !== today()) { try { await loadCall(); } catch(e){ p.innerHTML = `<p style="color:var(--bad)">못 읽었어요: ${esc(e.message)}</p>`; return; } }
+  const list = callList();
+  p.innerHTML = `<h2>📞 전화 대상 ${list.length}명</h2>
+    <p class="muted">연락(사유 결석) 없이 수업일 2일 이상 연달아 안 온 아이예요. 주말·공휴일·휴관일은 빼고 세요. 주 2~3회 오는 아이는 평소 오는 횟수로 2번 이상 빠졌을 때 나와요. 통화하고 [결석 등록]을 하면 목록에서 빠져요.</p>
+    <div class="scroll"><table><tr><th>이름</th><th>나이·학년</th><th>마지막 출석</th><th>연속 결석</th><th>보호자 번호</th><th></th></tr>
+    ${list.map(x => `<tr><td><b>${esc(x.s.name)}</b></td><td>${ageKey(x.s) ? ageKey(x.s) + '세 ' : ''}${esc(gradeOf(x.s))}</td><td>${x.last.slice(5).replace('-', '/')}</td>
+      <td><span class="tag ${x.gap >= 4 ? 't-bad' : 't-wait'}">수업일 ${x.gap}일</span></td>
+      <td>${x.s.phones.map((ph, i) => `${esc(x.s.phoneLabels[i] || '보호자')} <b>${esc(prettyPhone(normPhone(ph)))}</b>`).join('<br>')}</td>
+      <td><button class="btn small ghost" data-cs="${x.s.id}">✉️ 문자</button> <button class="btn small" data-ca="${x.s.id}">결석 등록</button></td></tr>`).join('') || '<tr><td colspan="6" class="muted">전화할 아이가 없어요 👍</td></tr>'}
+    </table></div>`;
+  p.querySelectorAll('[data-cs]').forEach(b => b.onclick = () => quickSmsModal(S.students.find(s => s.id === b.dataset.cs)));
+  p.querySelectorAll('[data-ca]').forEach(b => b.onclick = () => { AB.pre = b.dataset.ca; document.querySelector('#tabs [data-t=absent]').click(); });
+}
 
 function modal(html){ const r = $('#modalRoot'); r.innerHTML = `<div class="modal"><div class="box">${html}</div></div>`; r.querySelector('.modal').onclick = e => { if (e.target.classList.contains('modal')) closeModal(); }; return r; }
 const closeModal = () => { $('#modalRoot').innerHTML = ''; };
@@ -367,7 +603,7 @@ function editStudent(s){
       <label>시범단</label><label style="color:var(--ink);font-weight:500"><input type="checkbox" id="fDemo" ${s.demo ? 'checked' : ''}> 시범단</label>
       <label>메모</label><input type="text" id="fMemo" value="${esc(s.memo)}">
     </div>
-    <div class="row" style="margin-top:16px"><div class="grow"></div><button class="btn ghost" id="fCancel">닫기</button><button class="btn" id="fSave">저장</button></div>`);
+    <div class="row" style="margin-top:16px">${isNew ? '' : '<button class="btn ghost" id="fSms">✉️ 이 아이 보호자께 문자</button>'}<div class="grow"></div><button class="btn ghost" id="fCancel">닫기</button><button class="btn" id="fSave">저장</button></div>`);
   const ageIn = r.querySelector('#fAge');
   ageIn.oninput = () => { const a = +ageIn.value || 0; r.querySelector('#fAgeL').textContent = a ? '→ ' + labelOf(a) + ' (해마다 저절로 올라가요)' : '나이를 넣으면 학년이 해마다 저절로 바뀌어요'; };
   r.querySelectorAll('[data-belt]').forEach(b => b.onclick = () => { r.querySelector('#fBelt').value = b.dataset.belt; r.querySelector('#fLock').checked = true; r.querySelectorAll('[data-belt]').forEach(x => x.classList.toggle('on', x === b)); });
@@ -375,6 +611,7 @@ function editStudent(s){
   r.querySelector('#fAddPhone').onclick = () => r.querySelector('#fPhones').insertAdjacentHTML('beforeend', phoneRow('보호자', ''));
   r.querySelector('#fPhones').onclick = e => { const b = e.target.closest('[data-delp]'); if (b) b.parentElement.remove(); };
   r.querySelector('#fCancel').onclick = closeModal;
+  if (!isNew) r.querySelector('#fSms').onclick = () => quickSmsModal(s);
   r.querySelector('#fSave').onclick = async () => {
     const name = r.querySelector('#fName').value.trim(); if (!name){ toast('이름을 넣어 주세요'); return; }
     const a = +ageIn.value || 0; const gSel = r.querySelector('#fGrade').value;
@@ -410,12 +647,10 @@ function editStudent(s){
 const phoneRow = (l, n) => `<div class="row prow" style="margin-bottom:6px"><input type="text" class="pl" value="${esc(l)}" style="width:90px"><input type="text" class="pn" value="${esc(n ? prettyPhone(n) : '')}" placeholder="010-0000-0000" style="width:170px"><button class="btn small ghost" data-delp>빼기</button></div>`;
 
 /* ─── 단체 문자 ─── */
-const BS = { sel: new Set(), kuk: new Set(), belt: new Set(), grade: new Set(), group: '', q: '', allPhones: false, text: '', title: '' };
+const BS = { sel: new Set(), kuk: new Set(), F: newF(), group: '', allPhones: false, text: '', title: '' };
 function rBulk(p){
   const kids = active().sort(byName);
-  const belts = [...new Set(kids.map(s => normBelt(s.belt)).filter(Boolean))].sort((a, b) => beltRank(a) - beltRank(b));
-  const grades = [...new Set(kids.map(gradeOf).filter(Boolean))].sort((a, b) => gradeRank(a) - gradeRank(b));
-  const shown = kids.filter(s => (!BS.belt.size || BS.belt.has(normBelt(s.belt))) && (!BS.grade.size || BS.grade.has(gradeOf(s))) && (!BS.q || s.name.includes(BS.q) || choseong(s.name).startsWith(BS.q)));
+  const shownNow = () => sortF(applyF(kids, BS.F), BS.F.sort);
   const chosen = kids.filter(s => BS.sel.has(s.id));
   const items = buildItems(BS.text, chosen, BS.allPhones);
   p.innerHTML = `
@@ -432,13 +667,11 @@ function rBulk(p){
         <button class="pill" id="bdemo">시범단</button>
         <button class="pill" id="bsave">선택을 그룹으로 저장</button>
       </div>
-      <div class="row" style="margin-bottom:6px"><span class="muted">학년</span>${grades.map(g => `<button class="pill ${BS.grade.has(g) ? 'on' : ''}" data-g="${esc(g)}">${esc(g)}</button>`).join('')}</div>
-      ${belts.length ? `<div class="row" style="margin-bottom:6px"><span class="muted">띠</span>${belts.map(b => `<button class="pill ${BS.belt.has(b) ? 'on' : ''}" data-b="${esc(b)}">${esc(b)}</button>`).join('')}</div>` : ''}
-      <input type="text" id="bq" placeholder="이름·초성으로 찾기" value="${esc(BS.q)}" style="width:220px;margin-bottom:6px">
-      <div class="kids" style="max-height:330px">${shown.map(s => `<button class="kid ${BS.sel.has(s.id) ? 'on' : ''}" data-k="${s.id}">${esc(s.name)} <span class="muted">${esc(gradeOf(s))}</span> ${s.belt ? `<span class="muted">· ${esc(normBelt(s.belt))}</span>` : ''}</button>`).join('') || '<span class="muted">조건에 맞는 아이가 없어요</span>'}</div>
+      <div id="bbar"></div>
+      <div class="kids" id="bkids" style="max-height:330px;margin-top:8px"></div>
     </div>
     <div>
-      <h2>문자 내용</h2>
+      <div class="row"><h2 class="grow">문자 내용</h2><button class="btn small ghost" onclick="document.getElementById('qsmsBtn').click()">✉️ 한 명·번호로 바로 보내기</button></div>
       <input type="text" id="btitle" placeholder="제목 (기록용, 예: 11월 국기원 심사 안내)" value="${esc(BS.title)}" style="width:100%;margin-bottom:8px">
       <textarea id="btext" style="min-height:170px" placeholder="{호칭} 안녕하세요! {이름} …">${esc(BS.text)}</textarea>
       <p class="muted">{이름}=성 뺀 이름(형제는 "윤우, 서연") · {성명}=전체 이름 · {호칭}=어머님/아버님 · {날짜}=오늘 날짜. 같은 번호(형제)는 1통만 가요.</p>
@@ -455,15 +688,17 @@ function rBulk(p){
     </div></div>`;
   const reb = () => rBulk(p);
   p.querySelectorAll('[data-kuk]').forEach(b => b.onclick = () => { const k = b.dataset.kuk; BS.kuk.has(k) ? BS.kuk.delete(k) : BS.kuk.add(k); BS.group = ''; BS.sel = new Set(kids.filter(s => BS.kuk.has(normBelt(s.belt))).map(s => s.id)); if (!BS.title || BS.title.startsWith('국기원')) BS.title = BS.kuk.size ? `국기원 문자(${[...BS.kuk].join('·')})` : ''; reb(); });
-  p.querySelectorAll('[data-k]').forEach(b => b.onclick = () => { const id = b.dataset.k; BS.sel.has(id) ? BS.sel.delete(id) : BS.sel.add(id); reb(); });
-  p.querySelectorAll('[data-g]').forEach(b => b.onclick = () => { const g = b.dataset.g; BS.grade.has(g) ? BS.grade.delete(g) : BS.grade.add(g); reb(); });
-  p.querySelectorAll('[data-b]').forEach(b => b.onclick = () => { const g = b.dataset.b; BS.belt.has(g) ? BS.belt.delete(g) : BS.belt.add(g); reb(); });
+  $('#bbar').innerHTML = filterBarHtml(BS.F, kids);
+  const drawKids = () => {
+    $('#bkids').innerHTML = shownNow().map(s => `<button class="kid ${BS.sel.has(s.id) ? 'on' : ''}" data-k="${s.id}">${esc(s.name)} <span class="muted">${ageKey(s) ? ageKey(s) + '세 ' : ''}${esc(gradeOf(s))}</span> ${s.belt ? `<span class="muted">· ${esc(normBelt(s.belt))}</span>` : ''}</button>`).join('') || '<span class="muted">조건에 맞는 아이가 없어요</span>';
+    $('#bkids').querySelectorAll('[data-k]').forEach(b => b.onclick = () => { const id = b.dataset.k; BS.sel.has(id) ? BS.sel.delete(id) : BS.sel.add(id); reb(); });
+  };
+  bindFilterBar($('#bbar'), BS.F, drawKids); drawKids();
   $('#bgroup').onchange = e => { BS.group = e.target.value; const g = S.groups.find(x => x.id === BS.group); BS.kuk.clear(); BS.sel = new Set(g ? g.ids.filter(id => kids.some(s => s.id === id)) : []); if (g) BS.title = g.name; reb(); };
-  $('#ball').onclick = () => { shown.forEach(s => BS.sel.add(s.id)); reb(); };
+  $('#ball').onclick = () => { shownNow().forEach(s => BS.sel.add(s.id)); reb(); };
   $('#bnone').onclick = () => { BS.sel.clear(); BS.kuk.clear(); BS.group = ''; reb(); };
   $('#bdemo').onclick = () => { BS.sel = new Set(kids.filter(s => s.demo).map(s => s.id)); BS.title = BS.title || '시범단'; reb(); };
   $('#bsave').onclick = async () => { if (!BS.sel.size) return toast('먼저 아이를 고르세요'); const name = prompt('그룹 이름'); if (!name) return; await addDoc(collection(db, 'groups'), { name: name.trim(), studentIds: [...BS.sel], updatedAt: serverTimestamp() }); toast('그룹을 저장했어요'); };
-  const bq = $('#bq'); bq.oninput = () => { BS.q = bq.value; const pos = bq.selectionStart; reb(); const n = $('#bq'); n.focus(); n.setSelectionRange(pos, pos); };
   $('#btitle').oninput = e => { BS.title = e.target.value; };
   $('#btext').oninput = e => { BS.text = e.target.value; };
   $('#btext').onblur = reb;
@@ -533,6 +768,7 @@ function rMonth(p){
 }
 
 /* ─── 결석 · 받은 문자 ─── */
+const AB = { pre: '' };
 const KIND = { ABSENT: ['결석 문자', 't-wait'], SCHEDULE: ['시간·차량', 't-in'], OTHER: ['기타 문자', 't-gray'], UNKNOWN: ['등록 안 된 번호', 't-bad'] };
 function rAbsent(p){
   if (MS.loaded !== MS.month) loadMonth();
@@ -542,7 +778,8 @@ function rAbsent(p){
     <div>
       <h2>사유 결석 등록</h2>
       <div class="card">
-        <div class="row"><input type="text" id="aq" placeholder="이름·초성으로 찾기" style="width:200px"><input type="date" id="ad" value="${today()}"></div>
+        <div class="row"><input type="text" id="aq" placeholder="이름·초성으로 찾기" style="width:200px"><span class="muted">시작</span><input type="date" id="ad" value="${today()}"><span class="muted">끝</span><input type="date" id="ad2" value="${today()}"></div>
+        <p class="muted" id="adinfo" style="margin:4px 0"></p>
         <div class="kids" id="akids" style="max-height:160px;margin:8px 0"></div>
         <div class="row"><input type="text" id="ar" placeholder="사유 (예: 감기, 여행)" class="grow"><button class="btn" id="asave">결석 등록</button></div>
       </div>
@@ -559,15 +796,18 @@ function rAbsent(p){
         ${m.reply ? `<div class="muted">↪ 답장: ${esc(m.reply)}</div>` : ''}
         <div class="row"><div class="grow"></div><button class="btn small ${m.handled ? 'ghost' : ''}" data-h="${m.id}" data-v="${m.handled ? 0 : 1}">${m.handled ? '처리 안 함으로' : '처리 완료'}</button></div></div>`; }).join('') || '<p class="muted">받은 문자가 없어요</p>'}
     </div></div>`;
-  const picked = new Set();
-  const drawKids = () => { const q = $('#aq').value.trim(); const list = active().filter(s => !q || s.name.includes(q) || choseong(s.name).startsWith(q)).sort(byName).slice(0, 80);
+  const picked = new Set(AB.pre ? [AB.pre] : []); AB.pre = '';
+  const drawKids = () => { const q = $('#aq').value.trim(); const list = active().filter(s => picked.has(s.id) || (q && nameMatch(s.name, q))).sort(byName).slice(0, 80);
     $('#akids').innerHTML = list.map(s => `<button class="kid ${picked.has(s.id) ? 'on' : ''}" data-ak="${s.id}">${esc(s.name)} <span class="muted">${esc(gradeOf(s))}</span></button>`).join(''); };
   drawKids();
-  $('#aq').oninput = drawKids;
+  $('#aq').addEventListener('input', e => { if (!e.isComposing) drawKids(); }); $('#aq').addEventListener('compositionend', drawKids);
+  const rangeDays = () => { let a = $('#ad').value, b = $('#ad2').value || a; if (!a) return []; if (b < a) b = a; const out = []; for (let d = a; d <= b && out.length < 120; d = shiftDay(d, 1)) if (!isOff(d)) out.push(d); return out; };
+  const info = () => { const a = $('#ad').value, b = $('#ad2').value; const n = rangeDays().length; $('#adinfo').textContent = a && b && b > a ? `${a.slice(5)} ~ ${b.slice(5)} · 수업일 ${n}일 결석 처리 (주말·공휴일 빼고)` : '하루만 결석 처리 (여러 날이면 끝 날짜를 고르세요)'; };
+  $('#ad').onchange = () => { if (!$('#ad2').value || $('#ad2').value < $('#ad').value) $('#ad2').value = $('#ad').value; info(); }; $('#ad2').onchange = info; info();
   $('#akids').onclick = e => { const b = e.target.closest('[data-ak]'); if (!b) return; const id = b.dataset.ak; picked.has(id) ? picked.delete(id) : picked.add(id); drawKids(); };
-  $('#asave').onclick = async () => { const day = $('#ad').value; const reason = $('#ar').value.trim(); if (!picked.size || !day) return toast('아이와 날짜를 고르세요');
-    const b = writeBatch(db); [...picked].forEach(id => { const s = S.students.find(x => x.id === id); b.set(doc(db, 'absences', `${day}_${id}`), { day, studentId: id, name: s.name, reason, createdAt: serverTimestamp() }); });
-    await b.commit(); toast(`${picked.size}명 결석 등록했어요`); picked.clear(); $('#ar').value = ''; drawKids(); };
+  $('#asave').onclick = async () => { const days = rangeDays(); const reason = $('#ar').value.trim() || '부모님 연락'; if (!picked.size || !days.length) return toast('아이와 날짜(수업일)를 고르세요');
+    const b = writeBatch(db); [...picked].forEach(id => { const s = S.students.find(x => x.id === id); days.forEach(day => b.set(doc(db, 'absences', `${day}_${id}`), { day, studentId: id, name: s.name, reason, createdAt: serverTimestamp() })); });
+    await b.commit(); CS.loadedDay = ''; toast(`${picked.size}명 · ${days.length}일 결석 등록했어요`); picked.clear(); $('#ar').value = ''; drawKids(); };
   p.querySelectorAll('[data-ad]').forEach(b => b.onclick = () => deleteDoc(doc(db, 'absences', b.dataset.ad)));
   p.querySelectorAll('[data-h]').forEach(b => b.onclick = () => setDoc(doc(db, 'inbox', b.dataset.h), { handled: b.dataset.v === '1' }, { merge: true }));
 }
