@@ -255,7 +255,7 @@ const saved = lsGet('jdpc_cfg');
 if (saved){ try { connect(JSON.parse(saved)); onAuthStateChanged(auth, onAuth); } catch(e){ showLogin(); } } else showLogin();
 
 /* ═════════════ 실시간 데이터 ═════════════ */
-const S = { students: [], todayEv: [], groups: [], bulk: [], bulkAll: [], inbox: [], dev: {}, tab: 'today' };
+const S = { chatHidden: {}, students: [], todayEv: [], groups: [], bulk: [], bulkAll: [], inbox: [], dev: {}, tab: 'today' };
 let unsubs = [];
 function onAuth(user){
   unsubs.forEach(u => u()); unsubs = [];
@@ -268,6 +268,7 @@ function onAuth(user){
   unsubs.push(onSnapshot(collection(db, 'groups'), snap => { S.groups = snap.docs.map(d => ({ id: d.id, name: d.get('name') || '', ids: d.get('studentIds') || [] })); rerender(['bulk']); }, err));
   unsubs.push(onSnapshot(query(collection(db, 'bulk'), orderBy('createdMs', 'desc'), limit(300)), snap => { S.bulkAll = snap.docs.map(d => ({ id: d.id, ...d.data() })); S.bulk = S.bulkAll.slice(0, 15); rerender(['bulk', 'chat']); }, err));
   unsubs.push(onSnapshot(query(collection(db, 'inbox'), orderBy('at', 'desc'), limit(300)), snap => { S.inbox = snap.docs.map(d => ({ id: d.id, ...d.data() })); rerender(['absent', 'chat']); updChatBadge(); }, () => {}));
+  unsubs.push(onSnapshot(doc(db, 'config', 'pcChat'), d => { S.chatHidden = (d.exists() && d.get('hidden')) || {}; rerender(['chat']); }, () => {}));
   ['server', 'kiosk'].forEach(w => unsubs.push(onSnapshot(doc(db, 'status', w), d => { S.dev[w] = d.exists() ? d.data() : null; renderDev(); }, () => {})));
   const t = setInterval(renderDev, 30000); unsubs.push(() => clearInterval(t));
   render();
@@ -932,7 +933,7 @@ function buildConvs(){
     const targets = e.matchedPhone ? [e.matchedPhone] : (e.phones || []);
     targets.forEach(p => put(p, { at: e.sentMs || e.clientTime || 0, me: true, text: e.message, st: e.status === 'SENT' ? 'ok' : e.status === 'FAILED' ? 'fail' : 'wait', attend: true }));
   });
-  m.forEach(list => list.sort((a, b) => a.at - b.at));
+  m.forEach((list, p) => { const h = S.chatHidden[p] || 0; const keep = list.filter(x => x.at > h).sort((a, b) => a.at - b.at); if (keep.length) m.set(p, keep); else m.delete(p); });
   return m;
 }
 function loadChatEvents(){
@@ -978,6 +979,9 @@ function drawList(){
         <div class="row" style="gap:6px"><span class="cprev grow">${r.last.me ? '' : ''}${esc(r.last.text.replace(/\n/g, ' '))}</span>${r.unread ? `<span class="cbadge">${r.unread}</span>` : ''}</div></div></div>`).join('')
     + (extra.length ? `<div class="muted" style="padding:8px 12px">대화 없는 번호</div>` + extra.map(p => { const t = convTitle(p); return `<div class="citem" data-cp="${p}"><div class="cav" style="background:#e5e7eb;color:#6b7280">${esc(t.name[0])}</div><div class="cmid"><b class="cname">${esc(t.name)}</b><div class="cprev">${esc(t.sub)}</div></div></div>`; }).join('') : '')
     || '<p class="muted" style="padding:14px">아직 주고받은 문자가 없어요. [+ 새 문자]로 시작하세요.</p>';
+  const nh = Object.keys(S.chatHidden).length;
+  if (nh) $('#clistBody').insertAdjacentHTML('beforeend', `<div style="padding:12px;text-align:center"><a href="#" id="cunhide" class="muted">나간 대화방 ${nh}개 다시 보기</a></div>`);
+  const uh = $('#cunhide'); if (uh) uh.onclick = e => { e.preventDefault(); unhideModal(); };
   $('#clistBody').querySelectorAll('[data-cp]').forEach(d => d.onclick = () => { CH.cur = d.dataset.cp; drawChat(); });
 }
 function drawRoom(){
@@ -996,8 +1000,8 @@ function drawRoom(){
   }).join('');
   const unreadIds = list.filter(x => x.unread).map(x => x.id);
   const headHtml = `<div class="grow"><b style="font-size:16px">${esc(t.name)}</b><div class="muted">${esc(t.sub)}</div></div>
-      ${unreadIds.length ? `<button class="btn small ghost" id="cread">받은 문자 ${unreadIds.length}개 처리 완료</button>` : ''}`;
-  const bindRead = () => { const rd = $('#cread'); if (rd) rd.onclick = async () => { const b = writeBatch(db); unreadIds.forEach(id => b.set(doc(db, 'inbox', id), { handled: true }, { merge: true })); await b.commit(); toast('처리 완료로 표시했어요'); }; };
+      ${unreadIds.length ? `<button class="btn small ghost" id="cread">받은 문자 ${unreadIds.length}개 처리 완료</button>` : ''}<button class="btn small ghost" id="cleave">나가기</button>`;
+  const bindRead = () => { $('#cleave').onclick = () => leaveRoom(p, t.name); const rd = $('#cread'); if (rd) rd.onclick = async () => { const b = writeBatch(db); unreadIds.forEach(id => b.set(doc(db, 'inbox', id), { handled: true }, { merge: true })); await b.commit(); toast('처리 완료로 표시했어요'); }; };
   if (room.dataset.p === p && $('#ctext')){
     // 같은 대화: 입력 칸은 그대로 두고 말풍선만 새로
     $('#croomHead').innerHTML = headHtml; const body = $('#cbody'); const atEnd = body.scrollHeight - body.scrollTop - body.clientHeight < 80;
@@ -1005,8 +1009,7 @@ function drawRoom(){
   }
   room.dataset.p = p;
   room.innerHTML = `
-    <div class="croomHead" id="croomHead"><div class="grow"><b style="font-size:16px">${esc(t.name)}</b><div class="muted">${esc(t.sub)}</div></div>
-      ${unreadIds.length ? `<button class="btn small ghost" id="cread">받은 문자 ${unreadIds.length}개 처리 완료</button>` : ''}</div>
+    <div class="croomHead" id="croomHead">${headHtml}</div>
     <div class="cbody" id="cbody">${bubbles || '<div class="cempty" style="color:#4b5563">첫 문자를 보내 보세요</div>'}</div>
     <div class="cinput">
       <div class="row" style="gap:6px;padding:6px 10px 0">${QUICK.map((q, i) => `<button class="pill" data-qt="${i}" style="font-size:12.5px;padding:3px 10px">${esc(q[0])}</button>`).join('')}</div>
@@ -1056,6 +1059,19 @@ function openChatWith(s){
 
 
 /* ─── 👥 단체방: 단체 문자 한 번 = 단체 채팅방 하나 (나만 보는 방) ─── */
+/* 대화방 나가기: 그때까지의 대화는 목록·방에서 사라지고, 새 문자가 오면 방이 다시 생겨요 (카톡처럼). 모든 PC에 똑같이 */
+async function leaveRoom(key, name){
+  if (!confirm(`'${name}' 방에서 나갈까요?\n지금까지 대화가 목록에서 사라져요. 새 문자가 오면 방이 다시 생겨요.\n(실제 문자 기록은 지워지지 않고, [나간 대화방 다시 보기]로 되살릴 수 있어요)`)) return;
+  await setDoc(doc(db, 'config', 'pcChat'), { hidden: { [key]: Date.now() } }, { merge: true });
+  CH.cur = ''; toast('방에서 나갔어요');
+}
+function unhideModal(){
+  const keys = Object.keys(S.chatHidden);
+  const nameOf = k => k.startsWith('g:') ? '👥 ' + ((S.bulkAll.find(j => 'g:' + j.id === k) || {}).title || '단체방') : convTitle(k).name;
+  const m = modal(`<h2>나간 대화방 ${keys.length}개</h2><div style="max-height:60vh;overflow:auto">${keys.map(k => `<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)"><b class="grow">${esc(nameOf(k))}</b><span class="muted">${new Date(S.chatHidden[k]).toLocaleDateString('ko-KR')} 나감</span><button class="btn small" data-uh="${esc(k)}">되살리기</button></div>`).join('')}</div><div class="row" style="margin-top:12px"><div class="grow"></div><button class="btn ghost" id="uclose">닫기</button></div>`);
+  m.querySelector('#uclose').onclick = closeModal;
+  m.querySelectorAll('[data-uh]').forEach(b => b.onclick = async () => { await updateDoc(doc(db, 'config', 'pcChat'), { ['hidden.' + b.dataset.uh]: deleteField() }); b.closest('.row').remove(); toast('되살렸어요'); });
+}
 function groupJobs(){ return S.bulkAll.filter(j => (j.items || []).length > 1 && !String(j.title || '').startsWith('💬')); }
 /** 방에 들어갈 것: 내가 보낸 단체 문자 + 보낸 뒤 그 사람들이 보낸 답장 + 내가 그 사람에게 따로 보낸 답장 */
 function groupMsgs(j){
@@ -1068,11 +1084,12 @@ function groupMsgs(j){
   S.bulkAll.forEach(o => { if (o.id === j.id || (o.createdMs || 0) < from || (o.items || []).length !== 1) return; const it = o.items[0]; const p = normPhone(it.p);
     if (phones.has(p)) { const r = (o.results || {})[0]; out.push({ at: o.createdMs, me: true, p, text: it.t, st: r === 'OK' ? 'ok' : r ? 'fail' : (o.status === 'DONE' ? 'fail' : 'wait'), err: r && r !== 'OK' ? r : '' }); } });
   out.sort((a, b) => a.at - b.at);
-  return { out, phones };
+  const h = S.chatHidden['g:' + j.id] || 0;
+  return { out: out.filter(x => x.at > h), phones };
 }
 function groupListHtml(){
-  const jobs = groupJobs().map(j => { const g = groupMsgs(j); const last = g.out[g.out.length - 1]; return { j, last, unread: g.out.filter(x => x.unread).length, replies: g.out.filter(x => !x.me).length }; })
-    .sort((a, b) => b.last.at - a.last.at).slice(0, 30);
+  const jobs = groupJobs().map(j => { const g = groupMsgs(j); if (!g.out.length) return null; const last = g.out[g.out.length - 1]; return { j, last, unread: g.out.filter(x => x.unread).length, replies: g.out.filter(x => !x.me).length }; })
+    .filter(Boolean).sort((a, b) => b.last.at - a.last.at).slice(0, 30);
   if (!jobs.length) return '';
   return `<div class="muted" style="padding:8px 12px 2px;font-weight:700">👥 단체방</div>` + jobs.map(x => `<div class="citem ${CH.cur === 'g:' + x.j.id ? 'on' : ''}" data-cp="g:${x.j.id}">
       <div class="cav" style="background:#7c9fc0">👥</div>
@@ -1102,12 +1119,13 @@ function drawGroupRoom(room){
   const unreadIds = out.filter(x => x.unread).map(x => x.id);
   const headHtml = `<div class="grow"><b style="font-size:16px">👥 ${esc(j.title || '단체 문자')}</b><div class="muted">${phones.size}명 · 답장 ${replied.size}명 · 아직 답 없음 ${noReply.length}명</div></div>
     ${unreadIds.length ? `<button class="btn small ghost" id="cread">받은 답장 ${unreadIds.length}개 처리 완료</button>` : ''}
-    <button class="btn small ghost" id="gmem">참여자 보기</button>`;
+    <button class="btn small ghost" id="gmem">참여자 보기</button><button class="btn small ghost" id="cleave">나가기</button>`;
   const targetHtml = `<span class="muted">받는 사람</span>
     <button class="pill ${CH.gTarget === 'ALL' ? 'on' : ''}" data-gt="ALL">📢 모두 (${phones.size}명)</button>
     ${CH.gTarget && CH.gTarget !== 'ALL' ? `<button class="pill on" data-gt="${CH.gTarget}">↪ ${esc(who(CH.gTarget))}께만 ✕</button>` : '<span class="muted" style="font-size:12.5px">말풍선 옆 [↪ 답장]을 누르면 그 분께만 보내요</span>'}`;
   const bindHead = () => {
     const rd = $('#cread'); if (rd) rd.onclick = async () => { const b = writeBatch(db); unreadIds.forEach(id => b.set(doc(db, 'inbox', id), { handled: true }, { merge: true })); await b.commit(); toast('처리 완료로 표시했어요'); };
+    $('#cleave').onclick = () => leaveRoom('g:' + j.id, j.title || '단체방');
     $('#gmem').onclick = () => { const m = modal(`<h2>참여자 ${phones.size}명</h2><div style="max-height:60vh;overflow:auto">${[...phones.keys()].map(p => `<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)"><b class="grow">${esc(who(p))}</b><span class="muted">${esc(prettyPhone(p))}</span>${replied.has(p) ? '<span class="tag t-ok">답장함</span>' : '<span class="tag t-gray">아직</span>'}<button class="btn small ghost" data-mp="${p}">1:1 대화</button></div>`).join('')}</div><div class="row" style="margin-top:12px"><div class="grow"></div><button class="btn ghost" id="mclose">닫기</button></div>`);
       m.querySelector('#mclose').onclick = closeModal; m.querySelectorAll('[data-mp]').forEach(b => b.onclick = () => { CH.cur = b.dataset.mp; closeModal(); drawChat(); }); };
   };
