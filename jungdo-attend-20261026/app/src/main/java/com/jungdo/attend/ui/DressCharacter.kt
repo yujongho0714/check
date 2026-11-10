@@ -153,7 +153,7 @@ fun DressCharacter(
     dir: DressDir = DressDir.FRONT,
     action: DressAction = DressAction.STAND,
     onAttackDone: () -> Unit = {},
-    zoom: Float = 1.75f,   // 그림 칸에서 캐릭터를 얼마나 크게 (발을 아래쪽에 맞추고 확대) — 작아서 안 보이던 문제
+    zoom: Float = 1f,   // 그림 칸에서 캐릭터를 얼마나 크게 (발을 아래쪽에 맞추고 확대) — 작아서 안 보이던 문제
 ) {
     val ctx = LocalContext.current.applicationContext
     val pack = rememberDressPack()
