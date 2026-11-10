@@ -176,7 +176,7 @@ fun DressRoomPanel(s: Student, modifier: Modifier = Modifier) {
         val tryOn = remember(s.dressEquip, key) { s.dressEquip + (Dress.catOf(key) to key) }
         Dialog(onDismissRequest = { menuKey = null }) {
             GamePanel(Modifier.fillMaxWidth(), padding = 22.dp) {
-                DressCharacter(tryOn, 230.dp, action = DressAction.WALK)
+                DressCharacter(tryOn, 300.dp, action = DressAction.WALK)
                 Spacer(Modifier.height(6.dp))
                 Text(nameOf(key), fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 Text("${Dress.catLabel(Dress.catOf(key))} · ${Dress.noOf(key)}번" + if (on) " · 입는 중" else "", fontSize = 14.sp, color = gameMuted())
