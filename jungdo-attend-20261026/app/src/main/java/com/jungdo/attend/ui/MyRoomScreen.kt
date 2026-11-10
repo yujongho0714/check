@@ -12,6 +12,8 @@ import android.webkit.WebViewClient
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -116,8 +118,9 @@ fun MyRoomDialog(s: Student?, admin: Boolean = false, onClose: () -> Unit) {
     }
 
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        val conf = androidx.compose.ui.platform.LocalConfiguration.current
         AndroidView(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.size(conf.screenWidthDp.dp, conf.screenHeightDp.dp),
             factory = { c ->
                 // https://appassets.androidplatform.net/assets/… = 앱 안 그림, /pack/… = 관리자가 올린 그림 묶음(옷 입히기 등)
                 val loader = WebViewAssetLoader.Builder()
@@ -135,6 +138,7 @@ fun MyRoomDialog(s: Student?, admin: Boolean = false, onClose: () -> Unit) {
                     }
                     .build()
                 WebView(c).apply {
+                    layoutParams = android.view.ViewGroup.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
                     settings.allowFileAccess = false

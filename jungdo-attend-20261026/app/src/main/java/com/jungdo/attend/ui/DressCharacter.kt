@@ -247,3 +247,29 @@ private fun DrawScope.drawCharacter(
 
     AFTER_BODY.forEach { c -> worn[c]?.let { drawItem(it, images, motion, fi) } }
 }
+
+/** 가방 칸에 넣는 옷 한 벌 그림 (앞모습 첫 프레임만, 칸 크기에 맞춰서) */
+@Composable
+fun DressItemIcon(key: String, size: Dp, modifier: Modifier = Modifier) {
+    val ctx = LocalContext.current.applicationContext
+    val pack = rememberDressPack()
+    val item = remember(pack, key) { pack?.item(key) }
+    if (pack == null || item == null) { Spacer(modifier.size(size)); return }
+    val ver = AssetPack.version
+    val img by produceState(DressAssets.peekImage(item.sheet), item.sheet, ver) {
+        value = withContext(Dispatchers.IO) { DressAssets.image(ctx, item.sheet) }
+    }
+    val m = item.motions["walk_f"] ?: item.motions.values.firstOrNull()
+    Canvas(modifier.size(size)) {
+        val im = img ?: return@Canvas
+        val mm = m ?: return@Canvas
+        val f = mm.frames.firstOrNull() ?: return@Canvas
+        if (mm.w <= 0 || mm.h <= 0) return@Canvas
+        val sc = minOf(this.size.width / mm.w, this.size.height / mm.h)
+        val ox = (this.size.width - mm.w * sc) / 2f
+        val oy = (this.size.height - mm.h * sc) / 2f
+        drawContext.transform.translate(ox, oy)
+        scale(sc, sc, pivot = Offset.Zero) { drawFrame(im, f[0], f[1], mm.w, mm.h, 0, 0) }
+        drawContext.transform.translate(-ox, -oy)
+    }
+}

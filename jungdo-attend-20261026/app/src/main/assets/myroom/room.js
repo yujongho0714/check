@@ -41,19 +41,27 @@ function thumb(k){if(THUMB[k])return THUMB[k];const f=FUR[k];if(!f)return '';con
 const TXC={};function skinTex(k){if(TXC[k])return TXC[k];const s=SKINS[k]||SKINS['000'];const t=new THREE.TextureLoader().load(s?s.u:'../mc/000.png');t.magFilter=t.minFilter=THREE.NearestFilter;return TXC[k]=t}
 function mcBox(w,h,d,u,v,inf){const s=1/16,e=(inf||0)*s,g=new THREE.BoxGeometry(w*s+e*2,h*s+e*2,d*s+e*2),uv=g.attributes.uv;const Rr=(x,y,ww,hh)=>{const u0=x/64,u1=(x+ww)/64,vt=1-y/64,vb=1-(y+hh)/64;return[[u0,vt],[u1,vt],[u0,vb],[u1,vb]]};
  const F=[Rr(u+d+w,v+d,d,h),Rr(u,v+d,d,h),Rr(u+d,v,w,d),Rr(u+d+w,v,w,d),Rr(u+d,v+d,w,h),Rr(u+2*d+w,v+d,w,h)];for(let f=0;f<6;f++)for(let k=0;k<4;k++)uv.setXY(f*4+k,F[f][k][0],F[f][k][1]);return g}
-function mkChar(k){const M1=new THREE.MeshLambertMaterial({map:skinTex(k),alphaTest:.5}),M2=new THREE.MeshLambertMaterial({map:skinTex(k),alphaTest:.5,side:THREE.DoubleSide});const C={root:new THREE.Group(),mats:[M1,M2]};const body=new THREE.Group();C.root.add(body);C.body=body;
- const part=(w,h,d,u,v,u2,v2,px,py,pz,oy)=>{const g=new THREE.Group();g.position.set(px/16,py/16,pz/16);const m=new THREE.Mesh(mcBox(w,h,d,u,v),M1);m.position.y=oy/16;m.castShadow=true;g.add(m);const m2=new THREE.Mesh(mcBox(w,h,d,u2,v2,.5),M2);m2.position.y=oy/16;g.add(m2);body.add(g);return g};
- C.legR=part(4,12,4,0,16,0,32,-2,12,0,-6);C.legL=part(4,12,4,16,48,0,48,2,12,0,-6);part(8,12,4,16,16,16,32,0,12,0,6);C.armR=part(4,12,4,40,16,40,32,-6,22,0,-4);C.armL=part(4,12,4,32,48,48,48,6,22,0,-4);part(8,8,8,0,0,32,0,0,24,0,4);return C}
-// ---------- 동작 (선생님이 메이커에 넣은 모캡 동작) ----------
-const PZ0={legR:[0,0],legL:[0,0],armR:[0,0],armL:[0,0],lean:0,roll:0,spin:0,jump:0,ox:0,oz:0};
+function mkChar(k){const M1=new THREE.MeshLambertMaterial({map:skinTex(k),alphaTest:.5}),M2=new THREE.MeshLambertMaterial({map:skinTex(k),alphaTest:.5,side:THREE.DoubleSide});const C={root:new THREE.Group(),mats:[M1,M2],tips:[]};
+ // 뼈대: 골반(엉덩이 높이) → 다리 · 가슴 → 팔 · 머리. 동작은 골반을 중심으로 돌아서 공중돌기·옆돌기가 자연스러워요
+ const hips=new THREE.Group();hips.position.y=12/16;C.root.add(hips);C.body=hips;const chest=new THREE.Group();hips.add(chest);C.chest=chest;
+ const part=(par,w,h,d,u,v,u2,v2,px,py,pz,oy,tip)=>{const g=new THREE.Group();g.position.set(px/16,py/16,pz/16);const m=new THREE.Mesh(mcBox(w,h,d,u,v),M1);m.position.y=oy/16;m.castShadow=true;g.add(m);const m2=new THREE.Mesh(mcBox(w,h,d,u2,v2,.5),M2);m2.position.y=oy/16;g.add(m2);par.add(g);
+  if(tip!=null){const t=new THREE.Object3D();t.position.y=tip/16;g.add(t);C.tips.push(t)}return g};
+ C.legR=part(hips,4,12,4,0,16,0,32,-2,0,0,-6,-12);C.legL=part(hips,4,12,4,16,48,0,48,2,0,0,-6,-12);part(chest,8,12,4,16,16,16,32,0,0,0,6);
+ C.armR=part(chest,4,12,4,40,16,40,32,-6,10,0,-4,-10);C.armL=part(chest,4,12,4,32,48,48,48,6,10,0,-4,-10);C.head=part(chest,8,8,8,0,0,32,0,0,12,0,4,8);return C}
+// ---------- 동작 (선생님이 메이커에 넣은 모캡 동작을 관절 회전으로 미리 바꿔 둔 것) ----------
+const PZ0={legR:[0,0],legL:[0,0],armR:[0,0],armL:[0,0],lean:0,roll:0};
 const pz=p=>Object.assign({},PZ0,JSON.parse(JSON.stringify(p||{})));
-const L2=(a,b,t)=>a+(b-a)*t;
-function frPose(a){return{legR:[a[4],a[5]],legL:[a[6],a[7]],armR:[a[0],a[1]],armL:[a[2],a[3]],lean:a[8],roll:a[9],spin:-a[10],jump:a[11],ox:a[12],oz:a[13],raw:1}}
-function sample(sk,t){const n=sk.fr.length,f=t*sk.fps;if(f>=n-1)return{p:frPose(sk.fr[n-1]),done:true};const i=Math.floor(f),k=f-i,a=sk.fr[i],b=sk.fr[i+1];return{p:frPose(a.map((v,j)=>L2(v,b[j],k))),done:false}}
-function applyPose(c,p){c.legR.rotation.x=p.legR[0];c.legR.rotation.z=p.legR[1];c.armR.rotation.x=p.armR[0];c.armR.rotation.z=p.armR[1];
- if(p.raw){c.legL.rotation.x=p.legL[0];c.legL.rotation.z=p.legL[1];c.armL.rotation.x=p.armL[0];c.armL.rotation.z=p.armL[1]}else{c.legL.rotation.x=p.legL[0];c.legL.rotation.z=-p.legL[1];c.armL.rotation.x=p.armL[0];c.armL.rotation.z=-p.armL[1]}
- c.body.rotation.x=p.lean;c.body.rotation.z=p.roll}
-const isAtk=p=>Math.abs(p.legR[0])>1.2||Math.abs(p.legL[0])>1.2||Math.abs(p.armR[0])>1.3;
+const L2=(a,b,t)=>a+(b-a)*t;const SC=.75/.825;   // 사람 엉덩이 높이(0.825m) → 마크 엉덩이 높이
+const _qa=new THREE.Quaternion(),_qb=new THREE.Quaternion(),_v=new THREE.Vector3(),_e=new THREE.Euler();
+function clipAt(sk,t){const n=sk.fr.length,x=Math.max(0,Math.min(n-1,t*sk.fps)),i=Math.floor(x),j=Math.min(n-1,i+1),k=x-i;return{A:sk.fr[i],B:sk.fr[j],k,done:t*sk.fps>=n-1}}
+function clipRoot(f){const A=f.A,B=f.B,k=f.k;return[L2(A[28],B[28],k)*SC,L2(A[29],B[29],k)*SC,L2(A[30],B[30],k)*SC]}
+function clipYaw(f){_qa.fromArray(f.A,0);_qb.fromArray(f.B,0);_qa.slerp(_qb,f.k);_e.setFromQuaternion(_qa,'YXZ');return _e.y}
+function applyClip(c,f){const J=[c.body,c.chest,c.head,c.armR,c.armL,c.legR,c.legL];J.forEach((o,m)=>{_qa.fromArray(f.A,m*4);_qb.fromArray(f.B,m*4);o.quaternion.copy(_qa).slerp(_qb,f.k)});
+ const r=clipRoot(f);c.body.position.set(r[0],r[1],r[2]);
+ // 손·발·머리가 바닥 밑으로 들어가지 않게 올려 줌
+ c.root.updateMatrixWorld(true);let mn=1e9;c.tips.forEach(t=>{t.getWorldPosition(_v);mn=Math.min(mn,_v.y)});const by=c.root.getWorldPosition(_v).y;if(mn<by)c.body.position.y+=by-mn}
+function applyPose(c,p){c.body.quaternion.set(0,0,0,1);c.chest.quaternion.set(0,0,0,1);c.head.quaternion.set(0,0,0,1);c.body.position.set(0,12/16,0);
+ c.legR.rotation.set(p.legR[0],0,p.legR[1]);c.legL.rotation.set(p.legL[0],0,-p.legL[1]);c.armR.rotation.set(p.armR[0],0,p.armR[1]);c.armL.rotation.set(p.armL[0],0,-p.armL[1]);c.body.rotation.set(p.lean,0,p.roll)}
 // ---------- 바람 캐릭터: 아이가 입은 옷 그대로 (dressup 그림) ----------
 let BRF=null,BRI=null;
 const ldImg=u=>new Promise(r=>{const i=new Image();i.onload=()=>r(i);i.onerror=()=>r(null);i.src=u});
@@ -76,15 +84,15 @@ function drawBrThumb(cv){if(!BRF)return;const g=cv.getContext('2d');g.imageSmoot
 // ---------- 방 안의 캐릭터들 ----------
 const MAXC=4;const NPC=[];let PL=null;
 function mkActor(key){const a={key,x:0,z:0,tx:0,tz:0,face:0,t:Math.random()*9,sk:null,skT:0,wait:Math.random()*2};if(key==='B'){a.b=mkBaram();a.root=a.b.root}else{a.c=mkChar(key);a.c.root.scale.setScalar(1.05);a.root=a.c.root}S.add(a.root);return a}
-function doSkill(a,sk){if(a.sk)return;a.sk=sk;a.skT=0}
-function tickActor(a,dt,speed){a.t+=dt;let moving=false,p=null;
- if(a.sk){a.skT+=dt;const r=sample(a.sk,a.skT);p=r.p;if(r.done){a.face-=p.spin*Math.PI/180;a.sk=null;p=null}}
+function doSkill(a,sk){if(a.sk)return;a.sk=sk;a.skT=0;a.tx=a.x;a.tz=a.z}
+function tickActor(a,dt,speed){a.t+=dt;let moving=false,f=null;
+ if(a.sk){a.skT+=dt;f=clipAt(a.sk,a.skT);if(f.done){// 끝난 자리·방향 이어 받기
+   const r=clipRoot(f),y=clipYaw(f),c=Math.cos(a.face),s=Math.sin(a.face);const nx=a.x+r[0]*c+r[2]*s,nz=a.z-r[0]*s+r[2]*c;if(Math.abs(nx)<N/2-.3&&Math.abs(nz)<N/2-.3&&!blocked(nx,nz)){a.x=a.tx=nx;a.z=a.tz=nz}a.face+=y;a.sk=null;f=null}}
  if(!a.sk){const dx=a.tx-a.x,dz=a.tz-a.z,dist=Math.hypot(dx,dz);if(dist>.05){const sp=Math.min(dist,speed*dt),nx=a.x+dx/dist*sp,nz=a.z+dz/dist*sp;if(!blocked(nx,nz)&&Math.abs(nx)<N/2-.3&&Math.abs(nz)<N/2-.3){a.x=nx;a.z=nz;moving=true}else{a.tx=a.x;a.tz=a.z}a.face=Math.atan2(dx,dz)}}
- const spin=p?p.spin*Math.PI/180:0;let ox=0,oz=0;if(p){const c=Math.cos(a.face),s=Math.sin(a.face);ox=p.ox*c+p.oz*s;oz=-p.ox*s+p.oz*c}
- a.root.position.set(a.x+ox,p?p.jump:0,a.z+oz);
- if(a.c){const c=a.c;if(p){applyPose(c,p);c.body.position.y=0}else{const w=moving?Math.sin(a.t*11):0;applyPose(c,pz({legR:[-w*.9,0],legL:[w*.9,0],armR:[w*.9,0],armL:[-w*.9,0]}));c.body.position.y=moving?Math.abs(Math.cos(a.t*11))*.05:Math.sin(a.t*3)*.015}
-  const tgt=a.face+spin;if(p)c.root.rotation.y=tgt;else c.root.rotation.y+=((tgt-c.root.rotation.y+Math.PI*3)%(Math.PI*2)-Math.PI)*Math.min(1,dt*14)}
- else brFrame(a.b,a.face+spin,moving,a.t,p&&isAtk(p))}
+ a.root.position.set(a.x,0,a.z);
+ if(a.c){const c=a.c;if(f){c.root.rotation.y=a.face;applyClip(c,f)}else{const w=moving?Math.sin(a.t*11):0;applyPose(c,pz({legR:[-w*.9,0],legL:[w*.9,0],armR:[w*.9,0],armL:[-w*.9,0]}));c.body.position.y=12/16+(moving?Math.abs(Math.cos(a.t*11))*.05:Math.sin(a.t*3)*.015);
+  c.root.rotation.y+=((a.face-c.root.rotation.y+Math.PI*3)%(Math.PI*2)-Math.PI)*Math.min(1,dt*14)}}
+ else{let yaw=0,atk=false;if(f){const r=clipRoot(f),c=Math.cos(a.face),s=Math.sin(a.face);a.root.position.set(a.x+r[0]*c+r[2]*s,Math.max(0,r[1]-.75),a.z-r[0]*s+r[2]*c);yaw=clipYaw(f);atk=!!(f.k<.5?f.A:f.B)[31]}brFrame(a.b,a.face+yaw,moving,a.t,atk)}}
 function setCtl(key){const old=PL;PL=mkActor(key);if(old){PL.x=old.x;PL.z=old.z;PL.tx=old.tx;PL.tz=old.tz;PL.face=old.face;S.remove(old.root)}else{PL.x=PL.tx=1;PL.z=PL.tz=2}
  BIG.setKey(key);$('curName').textContent=nameOf(key)}
 function nameOf(k){return k==='B'?'⚔ 내 바람 캐릭터':(SKINS[k]?SKINS[k].n:'캐릭터')}
@@ -108,8 +116,10 @@ function blocked(x,z){const cx=Math.floor(x+N/2),cz=Math.floor(z+N/2);return pla
 let saveT=0;function saveRoom(){clearTimeout(saveT);saveT=setTimeout(()=>{const r={placed:placed.map(p=>({id:p.id,k:p.k,x:p.x,z:p.z,rot:p.rot})),npc:NPC.map(n=>n.key),ctl:PL?PL.key:''};if(AB)AB.saveRoom(JSON.stringify(r))},400)}
 // ---------- 가방 ----------
 function modal(html){const m=document.createElement('div');m.className='modal';m.innerHTML='<div class="card get">'+html+'</div>';m.onclick=e=>{if(e.target===m)closeM(m)};document.body.appendChild(m);return m}
-function closeM(m){if(m._P){DLG.splice(DLG.indexOf(m._P),1);m._P.r.dispose()}m.remove()}
+function closeM(m){if(m._P){DLG.splice(DLG.indexOf(m._P),1);m._P.r.dispose();try{m._P.r.forceContextLoss()}catch(e){}}m.classList.add('out');setTimeout(()=>m.remove(),220)}
 function confirmSell(name,pr,yes){const m=modal('<h3>정말로 판매하시겠습니까?</h3><p>「'+name+'」을(를) 팔고 '+pr+'골드를 받아요.<br>판 물건은 사라지고 되돌릴 수 없어요.</p><div class="row"><button class="btn p" id="y">예</button><button class="btn" id="n">아니오</button></div>');m.querySelector('#y').onclick=()=>{closeM(m);yes()};m.querySelector('#n').onclick=()=>closeM(m)}
+function gacha(col,show){const m=modal('<div class="gc" style="--c:'+col+'"><div class="burst"></div><div class="cap"><i class="t"></i><i class="b"></i><b></b></div></div><p>두근두근…</p>');m.onclick=null;
+ const g=m.querySelector('.gc');setTimeout(()=>{g.classList.add('open');try{navigator.vibrate&&navigator.vibrate(40)}catch(e){}},1000);setTimeout(()=>{show(m);m.onclick=e=>{if(e.target===m)closeM(m)}},1500)}
 function myChars(){const L=['B'].filter(()=>!!ST.dress);return L.concat(ST.mc.filter(k=>SKINS[k]))}
 function rBag(){const el=$('bag');el.innerHTML='';$('gold').textContent=ST.gold;
  if(tab==='a'){admin(el);return}
@@ -140,8 +150,10 @@ $('cgacha').onclick=()=>{if(ST.gold<ST.mcPrice){toast('골드가 모자라요');
 const PENDING={};function call(op,...a){if(!AB){toast('미리보기에선 저장이 안 돼요');return}AB[op](...a.map(String))}
 window.onBridge=function(r){try{if(typeof r==='string')r=JSON.parse(r)}catch(e){return}
  if(!r.ok){toast(r.err||'다시 해 주세요');return}
- if(r.op==='pullFur'){const f=FUR[r.k];if(f)modal('<p>🪑 가구 뽑기 결과!</p><img alt="" src="'+thumb(r.k)+'"><h3>'+f.n+'</h3><p style="color:'+RCOL[f.r]+';font-weight:700">'+f.r+'</p><div class="row"><button class="btn on" onclick="closeM(this.closest(\'.modal\'))">가방에 넣기</button></div>')}
- if(r.op==='pullMc'){const k=r.k;const m=modal('<p>🧑 캐릭터 뽑기 결과!</p><canvas class="big3d" width="440" height="480"></canvas><h3>'+nameOf(k)+'</h3><p>'+(r.dup?'이미 있는 캐릭터예요 (골드 조금 돌려받음)':'새 캐릭터!')+'</p><div class="row"><button class="btn on" id="eq">바로 조종</button><button class="btn" id="ok">가방에 넣기</button></div>');const P=preview(m.querySelector('canvas'),k);DLG.push(P);m._P=P;m.querySelector('#ok').onclick=()=>closeM(m);m.querySelector('#eq').onclick=()=>{closeM(m);setCtl(k);if(AB)AB.setMcSkin(k);saveRoom();rBag()}}
+ if(r.op==='pullFur'){const f=FUR[r.k];if(f)gacha(RCOL[f.r],m=>{m.querySelector('.card').innerHTML='<div class="reveal"><p>🪑 가구 뽑기 결과!</p><img alt="" src="'+thumb(r.k)+'"><h3>'+f.n+'</h3><span class="shine" style="background:'+RCOL[f.r]+'">'+f.r+'</span><p>가방에 들어갔어요 · 눌러서 방에 놓아 보세요</p><div class="row"><button class="btn on" id="pl">🏠 바로 놓기</button><button class="btn" id="ok">확인</button></div></div>';
+   m.querySelector('#ok').onclick=()=>closeM(m);m.querySelector('#pl').onclick=()=>{closeM(m);const b=(ST.room.fur||[]).slice().reverse().find(x=>x.k===r.k&&!placed.some(p=>p.id===x.id));if(b)itemMenu(b);else toast('잠깐 뒤에 가방에서 눌러 주세요')}})}
+ if(r.op==='pullMc'){const k=r.k;gacha(r.dup?'#8a8fa3':'#f5b82e',m=>{m.querySelector('.card').innerHTML='<div class="reveal"><p>🧑 캐릭터 뽑기 결과!</p><canvas class="big3d" width="440" height="480"></canvas><h3>'+nameOf(k)+'</h3><p>'+(r.dup?'이미 있는 캐릭터예요 (골드 조금 돌려받음)':'✨ 새 캐릭터!')+'</p><div class="row"><button class="btn on" id="eq">🎮 바로 조종</button><button class="btn" id="ok">가방에 넣기</button></div></div>';
+   const P=preview(m.querySelector('canvas'),k);DLG.push(P);m._P=P;m.querySelector('#ok').onclick=()=>{closeM(m);tab='c';document.querySelectorAll('[data-t]').forEach(x=>x.classList.toggle('on',x.dataset.t==='c'));rBag()};m.querySelector('#eq').onclick=()=>{closeM(m);setCtl(k);if(AB)AB.setMcSkin(k);saveRoom();rBag();toast(nameOf(k)+' 조종!')}})}
  if(r.op==='sellFur'||r.op==='sellMc')toast('판매했어요 +'+r.gold+'골드');
  if(r.op==='addAsset')toast('추가했어요!');if(r.op==='delAsset')toast('지웠어요')};
 let first=true;
