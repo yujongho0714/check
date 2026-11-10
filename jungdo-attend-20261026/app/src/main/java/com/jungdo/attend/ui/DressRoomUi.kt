@@ -5,6 +5,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.window.Dialog
+import com.jungdo.attend.ui.game.GamePanel
+import com.jungdo.attend.ui.game.GameSlot
+import com.jungdo.attend.ui.game.GameTextButton
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -73,13 +82,14 @@ fun DressRoomPanel(s: Student, modifier: Modifier = Modifier) {
     // 팔기 확인 창 (팔 옷 목록) · 결과 글
     var sellKeys by remember { mutableStateOf<List<String>?>(null) }
     var sellMsg by remember { mutableStateOf("") }
+    var menuKey by remember { mutableStateOf<String?>(null) }   // 누른 칸
     val wornKeys = s.dressEquip.values.toSet()
     // 성별이 달라서 팔 수 있는 옷 (입고 있는 건 빼고, 모든 부위)
     val wrongAll = s.dress.distinct().filter { wrongSex(it) && it !in wornKeys }
 
     val preview: @Composable () -> Unit = {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            DressCharacter(s.dressEquip, if (land) 150.dp else 140.dp, dir = dir, action = action, onAttackDone = { action = DressAction.STAND })
+            DressCharacter(s.dressEquip, if (land) 200.dp else 180.dp, dir = dir, action = action, onAttackDone = { action = DressAction.STAND })
             Spacer(Modifier.height(4.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 listOf(DressDir.FRONT to "앞", DressDir.BACK to "뒤", DressDir.RIGHT to "오른쪽", DressDir.LEFT to "왼쪽").forEach { (d, label) ->
@@ -133,27 +143,26 @@ fun DressRoomPanel(s: Student, modifier: Modifier = Modifier) {
             if (list.isEmpty()) {
                 PixelText("아직 ${Dress.catLabel(cat)} 옷이 없어요. 🎁 뽑기에서 모아 보세요!", color = gameMuted(), fontSize = 15.sp, modifier = Modifier.padding(8.dp))
             } else {
-                Text("옷을 누르면 입어요 (입은 옷을 다시 누르면 벗어요) · 안 입는 옷은 ${Dress.SELL_GOLD}골드에 팔 수 있어요", color = gameMuted(), fontSize = 13.sp)
-                LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    items(list) { key ->
+                Text("칸을 누르면 크게 입어 보고 [장착하기 · 판매하기]를 고를 수 있어요", color = gameMuted(), fontSize = 13.sp)
+                Spacer(Modifier.height(4.dp))
+                // 가방 칸: 한 칸에 옷 한 벌 (입은 옷은 초록 표시)
+                LazyVerticalGrid(GridCells.Adaptive(if (land) 92.dp else 86.dp), Modifier.weight(1f).fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    gridItems(list) { key ->
                         val on = worn == key
-                        Row(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
-                                .background(if (on) Color(0x3322C55E) else Color(0x14808080))
-                                .clickable { Repo.setDressEquip(s.id, cat, if (on) "" else key) }
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text("${Dress.noOf(key)}", fontSize = 13.sp, color = gameMuted(), modifier = Modifier.width(34.dp))
-                            Text(nameOf(key), fontSize = 17.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal, maxLines = 1, modifier = Modifier.weight(1f))
-                            if (!on && wrongSex(key)) Text("성별 다름", fontSize = 11.sp, color = Color(0xFFB45309), modifier = Modifier.padding(end = 6.dp))
-                            if (!on) Text(
-                                "팔기 +${Dress.SELL_GOLD}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White,
-                                modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(Color(0xFFB45309))
-                                    .clickable { sellKeys = listOf(key) }.padding(horizontal = 8.dp, vertical = 4.dp),
-                            )
-                            if (on) PixelText("✔ 입는 중", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White,
-                                modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(OkGreen).padding(horizontal = 6.dp, vertical = 2.dp))
+                        Box(contentAlignment = Alignment.TopStart) {
+                            GameSlot(Modifier.fillMaxWidth().aspectRatio(0.82f)
+                                .then(if (on) Modifier.background(Color(0x3322C55E), RoundedCornerShape(8.dp)) else Modifier)
+                                .clickable { menuKey = key }) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    DressItemIcon(key, 54.dp)
+                                    Text(nameOf(key), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal)
+                                }
+                            }
+                            if (on) PixelText("입는 중", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White,
+                                modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(OkGreen).padding(horizontal = 5.dp, vertical = 1.dp))
+                            else if (wrongSex(key)) PixelText("성별 다름", fontSize = 10.sp, color = Color.White,
+                                modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(Color(0xFFB45309)).padding(horizontal = 5.dp, vertical = 1.dp))
                         }
                     }
                 }
@@ -161,10 +170,34 @@ fun DressRoomPanel(s: Student, modifier: Modifier = Modifier) {
         }
     }
 
+    // 칸을 누르면: 크게 입어 보기 + 장착하기 / 판매하기 / 닫기
+    menuKey?.let { key ->
+        val on = worn == key
+        val tryOn = remember(s.dressEquip, key) { s.dressEquip + (Dress.catOf(key) to key) }
+        Dialog(onDismissRequest = { menuKey = null }) {
+            GamePanel(Modifier.fillMaxWidth(), padding = 22.dp) {
+                DressCharacter(tryOn, 230.dp, action = DressAction.WALK)
+                Spacer(Modifier.height(6.dp))
+                Text(nameOf(key), fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text("${Dress.catLabel(Dress.catOf(key))} · ${Dress.noOf(key)}번" + if (on) " · 입는 중" else "", fontSize = 14.sp, color = gameMuted())
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    GameButton(if (on) "벗기" else "장착하기", onClick = {
+                        Repo.setDressEquip(s.id, Dress.catOf(key), if (on) "" else key); menuKey = null
+                    }, color = theme.good, fontSize = 18.sp, sound = null)
+                    GameButton("판매하기 +${Dress.SELL_GOLD}G", onClick = { menuKey = null; sellKeys = listOf(key) },
+                        enabled = !on, color = theme.secondary, fontSize = 18.sp, sound = null)
+                    GameTextButton("닫기", 18.sp) { menuKey = null }
+                }
+                if (on) Text("입고 있는 옷은 벗어야 팔 수 있어요", fontSize = 13.sp, color = gameMuted(), modifier = Modifier.padding(top = 6.dp))
+            }
+        }
+    }
+
     sellKeys?.let { keys ->
         AlertDialog(
             onDismissRequest = { sellKeys = null },
-            title = { Text("장비 팔기") },
+            title = { Text("정말로 판매하시겠습니까?") },
             text = {
                 Text(
                     (if (keys.size == 1) "「${nameOf(keys[0])}」" else "${keys.size}벌") +
@@ -181,9 +214,9 @@ fun DressRoomPanel(s: Student, modifier: Modifier = Modifier) {
                             else -> "${n}벌을 팔아서 ${gold}골드를 받았어요!"
                         }
                     }
-                }) { Text("팔기") }
+                }) { Text("예") }
             },
-            dismissButton = { TextButton(onClick = { sellKeys = null }) { Text("취소") } },
+            dismissButton = { TextButton(onClick = { sellKeys = null }) { Text("아니오") } },
         )
     }
 
