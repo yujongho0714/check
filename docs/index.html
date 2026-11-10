@@ -78,6 +78,38 @@ tr.click:hover{background:#f8fafc;cursor:pointer}
 .kids{display:flex;flex-wrap:wrap;gap:6px;max-height:280px;overflow:auto;padding:4px}
 .kid{border:1px solid var(--line);border-radius:8px;padding:5px 9px;font-size:13.5px;background:#fff}
 .kid.on{background:#dbeafe;border-color:#93c5fd}
+
+/* 카톡 느낌 문자 */
+.chat{display:grid;grid-template-columns:330px 1fr;height:calc(100vh - 175px);min-height:480px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.clist{border-right:1px solid var(--line);display:flex;flex-direction:column;background:#fff;min-height:0}
+.chead{display:flex;align-items:center;padding:12px}
+.clistBody{overflow:auto;flex:1}
+.citem{display:flex;gap:10px;padding:10px 12px;cursor:pointer;align-items:center}
+.citem:hover{background:#f5f5f5}.citem.on{background:#eef2f7}
+.cav{width:44px;height:44px;border-radius:16px;background:#9bbbd4;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:18px;flex:none}
+.cav.sm{width:38px;height:38px;border-radius:14px;font-size:15px}
+.cmid{flex:1;min-width:0}.cname{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14.5px}
+.cprev{color:#6b7280;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.cbadge{background:#f43f5e;color:#fff;border-radius:99px;font-size:11.5px;font-weight:800;padding:1px 7px;line-height:17px}
+.croom{display:flex;flex-direction:column;background:#b2c7da;min-height:0}
+.croomHead{display:flex;align-items:center;gap:10px;padding:12px 16px;background:rgba(178,199,218,.95);border-bottom:1px solid rgba(0,0,0,.06)}
+.cbody{flex:1;overflow:auto;padding:14px 16px}
+.cday{text-align:center;margin:14px 0}.cday span{background:rgba(0,0,0,.18);color:#fff;font-size:12px;padding:4px 12px;border-radius:99px}
+.cmsg{display:flex;gap:8px;margin:6px 0;align-items:flex-start}
+.cmsg.me{justify-content:flex-end;align-items:flex-end}
+.cwho{font-size:12.5px;color:#374151;margin-bottom:3px}
+.cb{background:#fff;border-radius:4px 14px 14px 14px;padding:8px 11px;max-width:460px;white-space:pre-wrap;word-break:break-word;font-size:14.5px;line-height:1.45;box-shadow:0 1px 1px rgba(0,0,0,.05)}
+.cb.me{background:#fee500;border-radius:14px 4px 14px 14px}
+.cb.att{background:#fff7b3}
+.ctag{font-size:11px;color:#6b7280;margin-bottom:3px;font-weight:700}
+.cmeta{display:flex;flex-direction:column;align-items:flex-end;font-size:11px;color:#4b5563;gap:1px;white-space:nowrap}
+.cmsg:not(.me) .cmeta{align-items:flex-start}
+.cfail{color:#dc2626;font-weight:800}.cwait{color:#1d4ed8;font-weight:700}.cun{color:#f59e0b}
+.cinput{background:#fff;border-top:1px solid var(--line)}
+.cinput textarea{flex:1;min-height:44px;max-height:160px;border:0;outline:0;resize:none;padding:6px 4px;font-size:15px}
+.csend{background:#fee500;border:0;border-radius:8px;padding:10px 16px;font-weight:800;color:#3c1e1e}
+.cempty{margin:auto;text-align:center;color:#334155;font-size:15px;line-height:1.7;padding:40px}
+@media (max-width:800px){.chat{grid-template-columns:1fr}.croom{min-height:70vh}}
 @media (max-width:700px){.form{grid-template-columns:1fr}.dev{width:100%}}
 </style>
 </head>
@@ -115,6 +147,7 @@ tr.click:hover{background:#f8fafc;cursor:pointer}
   </header>
   <nav id="tabs">
     <button data-t="today" class="on">오늘 출결</button>
+    <button data-t="chat">💬 문자</button>
     <button data-t="roster">원생 명단</button>
     <button data-t="bulk">단체 문자</button>
     <button data-t="month">월간 출석부</button>
@@ -213,13 +246,13 @@ $('#loginBtn').onclick = async () => {
 };
 $('#pwIn').addEventListener('keydown', e => { if (e.key === 'Enter') $('#loginBtn').click(); });
 $('#logoutBtn').onclick = () => signOut(auth);
-$('#qsmsBtn').onclick = () => quickSmsModal(null);
+$('#qsmsBtn').onclick = () => document.querySelector('#tabs [data-t=chat]').click();
 
 const saved = lsGet('jdpc_cfg');
 if (saved){ try { connect(JSON.parse(saved)); onAuthStateChanged(auth, onAuth); } catch(e){ showLogin(); } } else showLogin();
 
 /* ═════════════ 실시간 데이터 ═════════════ */
-const S = { students: [], todayEv: [], groups: [], bulk: [], inbox: [], dev: {}, tab: 'today' };
+const S = { students: [], todayEv: [], groups: [], bulk: [], bulkAll: [], inbox: [], dev: {}, tab: 'today' };
 let unsubs = [];
 function onAuth(user){
   unsubs.forEach(u => u()); unsubs = [];
@@ -230,8 +263,8 @@ function onAuth(user){
   unsubs.push(onSnapshot(collection(db, 'students'), snap => { S.students = snap.docs.map(toStudent); rerender(['today','roster','bulk','month','absent']); }, err));
   unsubs.push(onSnapshot(query(collection(db, 'events'), where('day', '==', today())), snap => { S.todayEv = snap.docs.map(d => ({ id: d.id, ...d.data() })); rerender(['today']); }, err));
   unsubs.push(onSnapshot(collection(db, 'groups'), snap => { S.groups = snap.docs.map(d => ({ id: d.id, name: d.get('name') || '', ids: d.get('studentIds') || [] })); rerender(['bulk']); }, err));
-  unsubs.push(onSnapshot(query(collection(db, 'bulk'), orderBy('createdMs', 'desc'), limit(15)), snap => { S.bulk = snap.docs.map(d => ({ id: d.id, ...d.data() })); rerender(['bulk']); }, err));
-  unsubs.push(onSnapshot(query(collection(db, 'inbox'), orderBy('at', 'desc'), limit(60)), snap => { S.inbox = snap.docs.map(d => ({ id: d.id, ...d.data() })); rerender(['absent']); }, () => {}));
+  unsubs.push(onSnapshot(query(collection(db, 'bulk'), orderBy('createdMs', 'desc'), limit(300)), snap => { S.bulkAll = snap.docs.map(d => ({ id: d.id, ...d.data() })); S.bulk = S.bulkAll.slice(0, 15); rerender(['bulk', 'chat']); }, err));
+  unsubs.push(onSnapshot(query(collection(db, 'inbox'), orderBy('at', 'desc'), limit(300)), snap => { S.inbox = snap.docs.map(d => ({ id: d.id, ...d.data() })); rerender(['absent', 'chat']); updChatBadge(); }, () => {}));
   ['server', 'kiosk'].forEach(w => unsubs.push(onSnapshot(doc(db, 'status', w), d => { S.dev[w] = d.exists() ? d.data() : null; renderDev(); }, () => {})));
   const t = setInterval(renderDev, 30000); unsubs.push(() => clearInterval(t));
   render();
@@ -258,8 +291,9 @@ function renderDev(){
 
 /* ═════════════ 탭 ═════════════ */
 $('#tabs').onclick = e => { const b = e.target.closest('button'); if (!b) return; S.tab = b.dataset.t; document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b)); render(); };
-function rerender(tabs){ if (tabs.includes(S.tab) && !S.busyInput) render(); }
-function render(){ const p = $('#panel'); ({ today: rToday, roster: rRoster, bulk: rBulk, month: rMonth, absent: rAbsent, msg: rMsg, call: rCall })[S.tab](p); }
+function rerender(tabs){ if (!tabs.includes(S.tab)) return; if (S.tab === 'chat') { drawChat(); return; } if (!S.busyInput) render(); }
+function updChatBadge(){ const n = S.inbox.filter(x => !x.handled).length; const b = document.querySelector('#tabs [data-t=chat]'); if (b) b.innerHTML = '💬 문자' + (n ? ` <span class="cbadge">${n}</span>` : ''); }
+function render(){ const p = $('#panel'); ({ today: rToday, chat: rChat, roster: rRoster, bulk: rBulk, month: rMonth, absent: rAbsent, msg: rMsg, call: rCall })[S.tab](p); }
 // 글 쓰는 중에는 실시간 갱신으로 화면을 다시 그리지 않음
 document.addEventListener('focusin', e => { if (e.target.matches('#panel input[type=text], #panel textarea')) S.busyInput = true; });
 document.addEventListener('focusout', () => { S.busyInput = false; });
@@ -573,7 +607,7 @@ async function rCall(p){
       <td>${x.s.phones.map((ph, i) => `${esc(x.s.phoneLabels[i] || '보호자')} <b>${esc(prettyPhone(normPhone(ph)))}</b>`).join('<br>')}</td>
       <td><button class="btn small ghost" data-cs="${x.s.id}">✉️ 문자</button> <button class="btn small" data-ca="${x.s.id}">결석 등록</button></td></tr>`).join('') || '<tr><td colspan="6" class="muted">전화할 아이가 없어요 👍</td></tr>'}
     </table></div>`;
-  p.querySelectorAll('[data-cs]').forEach(b => b.onclick = () => quickSmsModal(S.students.find(s => s.id === b.dataset.cs)));
+  p.querySelectorAll('[data-cs]').forEach(b => b.onclick = () => openChatWith(S.students.find(s => s.id === b.dataset.cs)));
   p.querySelectorAll('[data-ca]').forEach(b => b.onclick = () => { AB.pre = b.dataset.ca; document.querySelector('#tabs [data-t=absent]').click(); });
 }
 
@@ -611,7 +645,7 @@ function editStudent(s){
   r.querySelector('#fAddPhone').onclick = () => r.querySelector('#fPhones').insertAdjacentHTML('beforeend', phoneRow('보호자', ''));
   r.querySelector('#fPhones').onclick = e => { const b = e.target.closest('[data-delp]'); if (b) b.parentElement.remove(); };
   r.querySelector('#fCancel').onclick = closeModal;
-  if (!isNew) r.querySelector('#fSms').onclick = () => quickSmsModal(s);
+  if (!isNew) r.querySelector('#fSms').onclick = () => openChatWith(s);
   r.querySelector('#fSave').onclick = async () => {
     const name = r.querySelector('#fName').value.trim(); if (!name){ toast('이름을 넣어 주세요'); return; }
     const a = +ageIn.value || 0; const gSel = r.querySelector('#fGrade').value;
@@ -671,7 +705,7 @@ function rBulk(p){
       <div class="kids" id="bkids" style="max-height:330px;margin-top:8px"></div>
     </div>
     <div>
-      <div class="row"><h2 class="grow">문자 내용</h2><button class="btn small ghost" onclick="document.getElementById('qsmsBtn').click()">✉️ 한 명·번호로 바로 보내기</button></div>
+      <div class="row"><h2 class="grow">문자 내용</h2><button class="btn small ghost" onclick="document.getElementById('qsmsBtn').click()">💬 한 명에게 카톡처럼 보내기</button></div>
       <input type="text" id="btitle" placeholder="제목 (기록용, 예: 11월 국기원 심사 안내)" value="${esc(BS.title)}" style="width:100%;margin-bottom:8px">
       <textarea id="btext" style="min-height:170px" placeholder="{호칭} 안녕하세요! {이름} …">${esc(BS.text)}</textarea>
       <p class="muted">{이름}=성 뺀 이름(형제는 "윤우, 서연") · {성명}=전체 이름 · {호칭}=어머님/아버님 · {날짜}=오늘 날짜. 같은 번호(형제)는 1통만 가요.</p>
@@ -841,6 +875,158 @@ async function rMsg(p){
     await setDoc(doc(db, 'notices', today()), { common: $('#nCommon').value, byClass: bc }); toast('오늘 안내를 저장했어요'); };
   $('#tSave').onclick = async () => { const tIn = $('#tIn').value, tOut = $('#tOut').value; if (!tIn.trim() || !tOut.trim()) return toast('문구가 비어 있어요');
     await setDoc(doc(db, 'config', 'messages'), { tplIn: tIn, tplOut: tOut }, { merge: true }); toast('문구를 저장했어요'); };
+}
+
+
+/* ─── 💬 문자 (카톡처럼) ─── */
+const CH = { cur: '', q: '', ev: [], evLoaded: false, showAttend: false, unsub: null };
+function phoneOwners(p){
+  const out = [];
+  S.students.forEach(s => s.phones.forEach((x, i) => { if (normPhone(x) === p) out.push({ s, label: s.phoneLabels[i] || '보호자' }); }));
+  return out;
+}
+function convTitle(p){
+  const o = phoneOwners(p);
+  if (!o.length) return { name: prettyPhone(p), sub: '등록 안 된 번호' };
+  const names = [...new Set(o.map(x => x.s.name))].join(', ');
+  return { name: `${names} ${o[0].label}`, sub: `${o.map(x => x.s.name).filter((v, i, a) => a.indexOf(v) === i).join(', ')} · ${prettyPhone(p)}` };
+}
+/** 번호별 대화: 받은 문자 + 보낸 단체/PC 문자 + (선택) 등원·하원 알림 */
+function buildConvs(){
+  const m = new Map();
+  const put = (p, msg) => { p = normPhone(p); if (p.length < 9) return; if (!m.has(p)) m.set(p, []); m.get(p).push(msg); };
+  S.inbox.forEach(x => {
+    put(x.from, { at: x.at || 0, me: false, text: x.body || '', unread: !x.handled, id: x.id });
+    if (x.reply) put(x.from, { at: (x.at || 0) + 1, me: true, text: x.reply, st: x.replyError ? 'fail' : 'ok', err: x.replyError });
+  });
+  S.bulkAll.forEach(j => (j.items || []).forEach((it, i) => {
+    const r = (j.results || {})[i];
+    put(it.p, { at: j.createdMs || 0, me: true, text: it.t || '', st: r === 'OK' ? 'ok' : r ? 'fail' : (j.status === 'DONE' ? 'fail' : 'wait'), err: r && r !== 'OK' ? r : '', title: j.title });
+  }));
+  if (CH.showAttend) CH.ev.forEach(e => {
+    if (!e.message) return;
+    const targets = e.matchedPhone ? [e.matchedPhone] : (e.phones || []);
+    targets.forEach(p => put(p, { at: e.sentMs || e.clientTime || 0, me: true, text: e.message, st: e.status === 'SENT' ? 'ok' : e.status === 'FAILED' ? 'fail' : 'wait', attend: true }));
+  });
+  m.forEach(list => list.sort((a, b) => a.at - b.at));
+  return m;
+}
+function loadChatEvents(){
+  if (CH.unsub) return;
+  const from = shiftDay(today(), -7);
+  CH.unsub = onSnapshot(query(collection(db, 'events'), where('day', '>=', from)), snap => { CH.ev = snap.docs.map(d => d.data()); if (S.tab === 'chat' && CH.showAttend) drawChat(); });
+  unsubs.push(() => { CH.unsub && CH.unsub(); CH.unsub = null; });
+}
+const hm = ms => { const d = new Date(ms); let h = d.getHours(); const ap = h < 12 ? '오전' : '오후'; h = h % 12 || 12; return `${ap} ${h}:${pad(d.getMinutes())}`; };
+const dayTitle = ms => { const d = new Date(ms); return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 ${'일월화수목금토'[d.getDay()]}요일`; };
+
+function rChat(p){
+  p.innerHTML = `
+  <div class="chat">
+    <aside class="clist">
+      <div class="chead"><b style="font-size:17px">💬 문자</b><div class="grow"></div><button class="btn small" id="cnew">+ 새 문자</button></div>
+      <div style="padding:0 10px 8px"><input type="text" id="cq" placeholder="이름 · 초성 · 번호로 찾기" style="width:100%"></div>
+      <label class="muted" style="padding:0 12px 6px;display:block"><input type="checkbox" id="catt" ${CH.showAttend ? 'checked' : ''}> 등원·하원 알림 문자도 보기 (최근 7일)</label>
+      <div id="clistBody" class="clistBody"></div>
+    </aside>
+    <section class="croom" id="croom"></section>
+  </div>`;
+  const cq = $('#cq');
+  cq.addEventListener('input', e => { CH.q = cq.value; if (!e.isComposing) drawList(); });
+  cq.addEventListener('compositionend', () => { CH.q = cq.value; drawList(); });
+  $('#catt').onchange = e => { CH.showAttend = e.target.checked; if (CH.showAttend) loadChatEvents(); drawChat(); };
+  $('#cnew').onclick = newChatPicker;
+  if (CH.showAttend) loadChatEvents();
+  drawChat();
+}
+function drawChat(){ if (!$('#clistBody')) return; drawList(); drawRoom(); }
+function drawList(){
+  const convs = buildConvs();
+  const q = CH.q.trim();
+  let rows = [...convs].map(([p, list]) => ({ p, last: list[list.length - 1], unread: list.filter(x => x.unread).length, t: convTitle(p) }));
+  if (q) rows = rows.filter(r => r.p.includes(q.replace(/\D/g, '') || '@@') || phoneOwners(r.p).some(o => nameMatch(o.s.name, q)) || r.t.name.includes(q));
+  rows.sort((a, b) => b.last.at - a.last.at);
+  // 찾기로 대화가 없는 아이도 나오게 (새 대화)
+  const extra = q ? active().filter(s => nameMatch(s.name, q)).flatMap(s => s.phones.map(normPhone).filter(x => x.length >= 9 && !convs.has(x))).filter((v, i, a) => a.indexOf(v) === i).slice(0, 10) : [];
+  $('#clistBody').innerHTML = rows.map(r => `<div class="citem ${CH.cur === r.p ? 'on' : ''}" data-cp="${r.p}">
+      <div class="cav">${esc((r.t.name || '?')[0])}</div>
+      <div class="cmid"><div class="row" style="gap:6px"><b class="grow cname">${esc(r.t.name)}</b><span class="muted" style="font-size:12px">${new Date(r.last.at).toDateString() === new Date().toDateString() ? hm(r.last.at) : `${new Date(r.last.at).getMonth() + 1}/${new Date(r.last.at).getDate()}`}</span></div>
+        <div class="row" style="gap:6px"><span class="cprev grow">${r.last.me ? '' : ''}${esc(r.last.text.replace(/\n/g, ' '))}</span>${r.unread ? `<span class="cbadge">${r.unread}</span>` : ''}</div></div></div>`).join('')
+    + (extra.length ? `<div class="muted" style="padding:8px 12px">대화 없는 번호</div>` + extra.map(p => { const t = convTitle(p); return `<div class="citem" data-cp="${p}"><div class="cav" style="background:#e5e7eb;color:#6b7280">${esc(t.name[0])}</div><div class="cmid"><b class="cname">${esc(t.name)}</b><div class="cprev">${esc(t.sub)}</div></div></div>`; }).join('') : '')
+    || '<p class="muted" style="padding:14px">아직 주고받은 문자가 없어요. [+ 새 문자]로 시작하세요.</p>';
+  $('#clistBody').querySelectorAll('[data-cp]').forEach(d => d.onclick = () => { CH.cur = d.dataset.cp; drawChat(); });
+}
+function drawRoom(){
+  const room = $('#croom'); if (!room) return;
+  if (!CH.cur){ room.dataset.p = ''; room.innerHTML = `<div class="cempty">왼쪽에서 대화를 고르거나<br>[+ 새 문자]를 누르세요</div>`; return; }
+  const p = CH.cur; const t = convTitle(p); const list = buildConvs().get(p) || [];
+  let lastDay = '';
+  const bubbles = list.map(x => {
+    const d = dayOf(x.at); let sep = '';
+    if (d !== lastDay){ lastDay = d; sep = `<div class="cday"><span>${dayTitle(x.at)}</span></div>`; }
+    const st = x.me ? (x.st === 'ok' ? '' : x.st === 'fail' ? `<span class="cfail" title="${esc(x.err || '')}">실패</span>` : `<span class="cwait">보내는 중</span>`) : '';
+    return sep + (x.me
+      ? `<div class="cmsg me"><div class="cmeta">${st}<span>${hm(x.at)}</span></div><div class="cb me ${x.attend ? 'att' : ''}">${x.attend ? '<div class="ctag">등·하원 알림</div>' : x.title && !x.title.startsWith('💬') && !x.title.startsWith('PC 문자') ? `<div class="ctag">${esc(x.title)}</div>` : ''}${esc(x.text)}</div></div>`
+      : `<div class="cmsg"><div class="cav sm">${esc(t.name[0])}</div><div><div class="cwho">${esc(t.name)}</div><div class="row" style="align-items:flex-end;gap:6px;flex-wrap:nowrap"><div class="cb">${esc(x.text)}</div><div class="cmeta"><span>${hm(x.at)}</span>${x.unread ? '<span class="cun">●</span>' : ''}</div></div></div></div>`);
+  }).join('');
+  const unreadIds = list.filter(x => x.unread).map(x => x.id);
+  const headHtml = `<div class="grow"><b style="font-size:16px">${esc(t.name)}</b><div class="muted">${esc(t.sub)}</div></div>
+      ${unreadIds.length ? `<button class="btn small ghost" id="cread">받은 문자 ${unreadIds.length}개 처리 완료</button>` : ''}`;
+  const bindRead = () => { const rd = $('#cread'); if (rd) rd.onclick = async () => { const b = writeBatch(db); unreadIds.forEach(id => b.set(doc(db, 'inbox', id), { handled: true }, { merge: true })); await b.commit(); toast('처리 완료로 표시했어요'); }; };
+  if (room.dataset.p === p && $('#ctext')){
+    // 같은 대화: 입력 칸은 그대로 두고 말풍선만 새로
+    $('#croomHead').innerHTML = headHtml; const body = $('#cbody'); const atEnd = body.scrollHeight - body.scrollTop - body.clientHeight < 80;
+    body.innerHTML = bubbles || ''; if (atEnd) body.scrollTop = body.scrollHeight; bindRead(); return;
+  }
+  room.dataset.p = p;
+  room.innerHTML = `
+    <div class="croomHead" id="croomHead"><div class="grow"><b style="font-size:16px">${esc(t.name)}</b><div class="muted">${esc(t.sub)}</div></div>
+      ${unreadIds.length ? `<button class="btn small ghost" id="cread">받은 문자 ${unreadIds.length}개 처리 완료</button>` : ''}</div>
+    <div class="cbody" id="cbody">${bubbles || '<div class="cempty" style="color:#4b5563">첫 문자를 보내 보세요</div>'}</div>
+    <div class="cinput">
+      <div class="row" style="gap:6px;padding:6px 10px 0">${QUICK.map((q, i) => `<button class="pill" data-qt="${i}" style="font-size:12.5px;padding:3px 10px">${esc(q[0])}</button>`).join('')}</div>
+      <div class="row" style="padding:8px 10px;gap:8px;align-items:flex-end;flex-wrap:nowrap">
+        <textarea id="ctext" placeholder="문자 입력 (Enter 보내기 · Shift+Enter 줄바꿈)" rows="2"></textarea>
+        <button class="csend" id="csend">전송</button></div>
+      <div class="muted" style="padding:0 12px 8px;font-size:12px" id="clen"></div>
+    </div>`;
+  const body = $('#cbody'); body.scrollTop = body.scrollHeight;
+  const ta = $('#ctext'); const draft = CH.drafts && CH.drafts[p]; if (draft) ta.value = draft;
+  const len = () => { const n = [...ta.value].reduce((a, c) => a + (c.charCodeAt(0) > 127 ? 2 : 1), 0); $('#clen').textContent = ta.value ? `${n}바이트 · ${n > 90 ? '장문(LMS)' : '단문(SMS)'}` : ''; };
+  ta.oninput = () => { (CH.drafts = CH.drafts || {})[p] = ta.value; len(); }; len();
+  ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing){ e.preventDefault(); sendChat(); } });
+  $('#csend').onclick = sendChat;
+  room.querySelectorAll('[data-qt]').forEach(b => b.onclick = () => { const o = phoneOwners(p); ta.value = buildReply(QUICK[+b.dataset.qt][1], o.map(x => x.s.name).filter((v, i, a) => a.indexOf(v) === i), o[0] ? o[0].label : ''); ta.oninput(); ta.focus(); });
+  bindRead();
+  ta.focus();
+}
+const QUICK = [
+  ['결석 확인', '{호칭} 안녕하세요! {이름} 오늘 도장에 오지 않아 연락드렸습니다. 혹시 무슨 일 있으신가요?'],
+  ['감사 인사', '{호칭} 연락주셔서 감사합니다~! {이름} 푹 쉬고 다음 수업에 만나도록 하겠습니다 😊'],
+  ['하원 안내', '{호칭} 안녕하세요! {이름} 오늘 수업 잘 마치고 하원합니다.'],
+];
+async function sendChat(){
+  const ta = $('#ctext'); const text = ta.value.trim(); const p = CH.cur;
+  if (!text || !p) return;
+  const t = convTitle(p); const now = Date.now();
+  ta.value = ''; if (CH.drafts) delete CH.drafts[p]; ta.oninput && ta.oninput(); if (CH.drafts) delete CH.drafts[p];
+  try {
+    await addDoc(collection(db, 'bulk'), { title: `💬 ${t.name}`, createdMs: now, lastMs: now, status: 'PENDING', items: [{ n: t.name, p, t: text }], results: {} });
+  } catch(e){ ta.value = text; toast('못 보냈어요: ' + (e.code || e.message)); }
+}
+function newChatPicker(){
+  const r = modal(`<h2>새 문자</h2><p class="muted">아이를 찾아서 보호자를 고르거나, 번호를 직접 넣으세요.</p>
+    <input type="text" id="nq" placeholder="이름 · 초성" style="width:100%"><div id="nk" style="max-height:300px;overflow:auto;margin:8px 0"></div>
+    <div class="row"><input type="text" id="nnum" placeholder="번호 직접: 010-1234-5678" class="grow"><button class="btn" id="ngo">이 번호로</button></div>`);
+  const draw = () => { const q = r.querySelector('#nq').value.trim(); const list = q ? active().filter(s => nameMatch(s.name, q)).sort(byName).slice(0, 30) : [];
+    r.querySelector('#nk').innerHTML = list.map(s => `<div class="card" style="margin-bottom:6px;padding:8px 10px"><b>${esc(s.name)}</b> <span class="muted">${esc(gradeOf(s))}</span><div class="row" style="margin-top:6px">${s.phones.map((x, i) => `<button class="pill" data-np="${normPhone(x)}">${esc(s.phoneLabels[i] || '보호자')} ${esc(prettyPhone(normPhone(x)))}</button>`).join('') || '<span class="muted">번호 없음</span>'}</div></div>`).join('');
+    r.querySelectorAll('[data-np]').forEach(b => b.onclick = () => { CH.cur = b.dataset.np; closeModal(); drawChat(); }); };
+  const nq = r.querySelector('#nq'); nq.addEventListener('input', e => { if (!e.isComposing) draw(); }); nq.addEventListener('compositionend', draw); nq.focus();
+  r.querySelector('#ngo').onclick = () => { const n = normPhone(r.querySelector('#nnum').value); if (n.length < 9) return toast('번호를 확인해 주세요'); CH.cur = n; closeModal(); drawChat(); };
+}
+function openChatWith(s){
+  const p = s && s.phones.map(normPhone).find(x => x.length >= 9);
+  CH.cur = p || ''; closeModal(); document.querySelector('#tabs [data-t=chat]').click();
 }
 
 /* ─── 엑셀 ─── */
