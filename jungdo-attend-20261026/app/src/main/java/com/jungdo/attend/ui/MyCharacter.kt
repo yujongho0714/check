@@ -150,6 +150,9 @@ fun MyCharacterStage(
     val charWpx = charHpx * ratio
     val maxX = (stageWpx - charWpx).coerceAtLeast(0f)
     val maxY = (stageHpx - charHpx).coerceAtLeast(0f)
+    // 위로는 발이 바닥(벽 아래 선)에 닿을 때까지 걸어 올라갈 수 있게 (그림 크기·배율 반영)
+    val floorTopPx = stageHpx * 0.58f
+    val minY = minOf(0f, floorTopPx - charHpx / 2f - charHpx * zoom * 0.45f).coerceAtLeast(-stageHpx)
     val speed = with(density) { 150.dp.toPx() }   // 1초에 150dp 걷기
 
     var pos by remember(maxX, maxY) { mutableStateOf(Offset(maxX / 2f, maxY)) }   // 캐릭터 왼쪽 위 (무대 맨 아래 가운데에서 시작)
@@ -184,7 +187,7 @@ fun MyCharacterStage(
                     DressDir.LEFT -> Offset(pos.x - step, pos.y)
                     DressDir.RIGHT -> Offset(pos.x + step, pos.y)
                 }
-                pos = Offset(moved.x.coerceIn(0f, maxX), moved.y.coerceIn(0f, maxY))
+                pos = Offset(moved.x.coerceIn(0f, maxX), moved.y.coerceIn(minY, maxY))
             } else if (tg != null) {
                 val d = tg - pos
                 val dist = d.getDistance()
@@ -213,14 +216,14 @@ fun MyCharacterStage(
             Modifier.width(stageWidth).height(stageH)
                 .clip(RoundedCornerShape(16.dp))
                 .dojoBackdrop()
-                .pointerInput(maxX, maxY, charWpx, charHpx) {
+                .pointerInput(maxX, maxY, minY, charWpx, charHpx) {
                     detectTapGestures { o ->
                         touch()
                         if (!attacking) {
                             held = null
                             target = Offset(
                                 (o.x - charWpx / 2f).coerceIn(0f, maxX),
-                                (o.y - charHpx * 0.9f).coerceIn(0f, maxY),
+                                (o.y - charHpx / 2f - charHpx * zoom * 0.45f).coerceIn(minY, maxY),
                             )
                         }
                     }
