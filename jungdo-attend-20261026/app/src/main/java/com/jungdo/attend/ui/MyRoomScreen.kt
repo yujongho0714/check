@@ -106,6 +106,9 @@ fun MyRoomDialog(s: Student?, admin: Boolean = false, onClose: () -> Unit) {
                 val id = cur?.id ?: return
                 Repo.sellMc(id, k) { g -> reply(JSONObject().put("op", "sellMc").put("ok", g > 0).put("gold", g).put("err", if (g > 0) "" else "팔지 못했어요 (조종 중이면 못 팔아요)")) }
             }
+            @JavascriptInterface fun assetData(k: String) {
+                Repo.myroomAssetData(k) { g, b -> reply(JSONObject().put("op", "asset").put("k", k).put("ok", b != null).put("g", g ?: "").put("b", b ?: "")) }
+            }
             @JavascriptInterface fun addAsset(json: String) {
                 if (!admin) return
                 Repo.addMyRoomAsset(json) { ok -> reply(JSONObject().put("op", "addAsset").put("ok", ok).put("err", if (ok) "" else "저장하지 못했어요 (너무 크면 안 돼요)")) }

@@ -17,11 +17,13 @@ object Mc {
 
     fun pull(owned: Collection<String>, n: Int, refundEach: Int): Dress.PullResult {
         val have = owned.toHashSet()
+        // 기본 102명 + 관리자(PC)가 올린 스킨
+        val pool = allKeys + MyRoom.custom.filter { it.optString("type") == "skin" }.map { it.optString("k") }.filter { it.isNotBlank() }
         val keys = ArrayList<String>()
         val fresh = ArrayList<String>()
         var dup = 0
         repeat(n.coerceAtLeast(0)) {
-            val k = allKeys.random()
+            val k = pool.random()
             keys.add(k)
             if (have.add(k)) fresh.add(k) else dup++
         }
