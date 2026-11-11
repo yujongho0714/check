@@ -497,6 +497,7 @@ async function chrImport(fs){ if (CHR.busy) return; CHR.busy = true; const say =
         for (const r of R){ const pn = JAVAMODEL.pair(r, pngs, tidx, c => PNGSZ(files[c])); if (!pn) continue; used.add(pn);
           const g = JSON.stringify(r.geo), b = await blobUrl(new Blob([files[pn]], { type: 'image/png' })); if (g.length + b.length > 950000) continue;
           const id = idFor('j_', packOf[jn[q]], 'bed', r.name.toLowerCase()); out.push({ id, pk: packOf[jn[q]], j: { type: 'fur', fmt: 'bed', k: id, n: r.name.toLowerCase(), r: rRar(), w: 1, d: 1, lazy: 1, src: 'pc' }, data: { g, b, a: r.anim ? JSON.stringify({ __java: r.anim }) : '' } }); if (++nj % 30 === 0) say('자바 모델 바꾸는 중… ' + nj); } } }
+    [...used].filter(x => !x.startsWith('#')).forEach(x => modelDirs.add(x.split('/').slice(0, -1).join('/'))); // 자바 모델 텍스처 폴더도 제외
     let sk = 0, sp = 0;
     for (const n of names.filter(n => /\.png$/i.test(n) && !used.has(n) && !modelDirs.has(n.split('/').slice(0, -1).join('/')))){ const sz = PNGSZ(files[n]); if (!sz) continue; const blob = new Blob([files[n]], { type: 'image/png' });
       const s64 = await skinOf(blob, sz[0], sz[1]).catch(() => null);
