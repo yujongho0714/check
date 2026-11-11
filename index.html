@@ -167,7 +167,7 @@ tr.click:hover{background:#f8fafc;cursor:pointer}
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
-import { getFirestore, collection, doc, onSnapshot, query, where, orderBy, limit, setDoc, updateDoc, addDoc, deleteDoc, getDoc, getDocs, writeBatch, serverTimestamp, deleteField } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+import { getFirestore, collection, doc, onSnapshot, query, where, orderBy, limit, setDoc, updateDoc, addDoc, deleteDoc, getDoc, getDocs, writeBatch, serverTimestamp, deleteField, arrayUnion } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
 /* ═════════════ 기본 도우미 ═════════════ */
 const $ = s => document.querySelector(s);
@@ -849,6 +849,14 @@ async function rCall(p){
   p.querySelectorAll('[data-ca]').forEach(b => b.onclick = () => { AB.pre = b.dataset.ca; document.querySelector('#tabs [data-t=absent]').click(); });
 }
 
+/* 💰 골드 선물: 아이가 다음에 키오스크에서 출결번호를 누르면 한 번 받아요 (앱의 '선물 보내기'와 같은 방식) */
+async function sendGold(list){
+  const v = prompt(`${list.length === 1 ? list[0].name : list.length + '명'}에게 골드를 몇 개 보낼까요? (한 명당 1~9999)\n아이가 다음에 출결번호를 누르면 받아요.`, '10');
+  const n = parseInt(v, 10); if (!n || n < 1 || n > 9999) { if (v != null) toast('1~9999 사이 숫자를 넣어 주세요'); return; }
+  const b = writeBatch(db);
+  list.forEach(s => b.update(doc(db, 'students', s.id), { gifts: arrayUnion('g' + Date.now().toString(36) + Math.floor(Math.random() * 1000) + '|GOLD|any|' + n) }));
+  await b.commit(); toast(`💰 ${list.length}명에게 골드 ${n}씩 보냈어요`);
+}
 function modal(html){ const r = $('#modalRoot'); r.innerHTML = `<div class="modal"><div class="box">${html}</div></div>`; r.querySelector('.modal').onclick = e => { if (e.target.classList.contains('modal')) closeModal(); }; return r; }
 const closeModal = () => { $('#modalRoot').innerHTML = ''; };
 
@@ -875,7 +883,7 @@ function editStudent(s){
       <label>시범단</label><label style="color:var(--ink);font-weight:500"><input type="checkbox" id="fDemo" ${s.demo ? 'checked' : ''}> 시범단</label>
       <label>메모</label><input type="text" id="fMemo" value="${esc(s.memo)}">
     </div>
-    <div class="row" style="margin-top:16px">${isNew ? '' : '<button class="btn ghost" id="fSms">✉️ 이 아이 보호자께 문자</button>'}<div class="grow"></div><button class="btn ghost" id="fCancel">닫기</button><button class="btn" id="fSave">저장</button></div>`);
+    <div class="row" style="margin-top:16px">${isNew ? '' : '<button class="btn ghost" id="fSms">✉️ 이 아이 보호자께 문자</button><button class="btn ghost" id="fGold">💰 골드 보내기</button>'}<div class="grow"></div><button class="btn ghost" id="fCancel">닫기</button><button class="btn" id="fSave">저장</button></div>`);
   const ageIn = r.querySelector('#fAge');
   ageIn.oninput = () => { const a = +ageIn.value || 0; r.querySelector('#fAgeL').textContent = a ? '→ ' + labelOf(a) + ' (해마다 저절로 올라가요)' : '나이를 넣으면 학년이 해마다 저절로 바뀌어요'; };
   r.querySelectorAll('[data-belt]').forEach(b => b.onclick = () => { r.querySelector('#fBelt').value = b.dataset.belt; r.querySelector('#fLock').checked = true; r.querySelectorAll('[data-belt]').forEach(x => x.classList.toggle('on', x === b)); });
@@ -884,6 +892,7 @@ function editStudent(s){
   r.querySelector('#fPhones').onclick = e => { const b = e.target.closest('[data-delp]'); if (b) b.parentElement.remove(); };
   r.querySelector('#fCancel').onclick = closeModal;
   if (!isNew) r.querySelector('#fSms').onclick = () => openChatWith(s);
+  if (!isNew) r.querySelector('#fGold').onclick = () => sendGold([s]);
   r.querySelector('#fSave').onclick = async () => {
     const name = r.querySelector('#fName').value.trim(); if (!name){ toast('이름을 넣어 주세요'); return; }
     const a = +ageIn.value || 0; const gSel = r.querySelector('#fGrade').value;
@@ -939,6 +948,7 @@ function rBulk(p){
         <button class="pill" id="ball">보이는 아이 모두 선택</button><button class="pill" id="bnone">선택 해제</button>
         <button class="pill" id="bdemo">시범단</button>
         <button class="pill" id="bsave">선택을 그룹으로 저장</button>
+        <button class="pill" id="bgold" style="border-color:#f5c518">💰 선택한 아이들에게 골드</button>
       </div>
       <div id="bbar"></div>
       <div class="kids" id="bkids" style="max-height:330px;margin-top:8px"></div>
@@ -971,6 +981,7 @@ function rBulk(p){
   $('#ball').onclick = () => { shownNow().forEach(s => BS.sel.add(s.id)); reb(); };
   $('#bnone').onclick = () => { BS.sel.clear(); BS.kuk.clear(); BS.group = ''; reb(); };
   $('#bdemo').onclick = () => { BS.sel = new Set(kids.filter(s => s.demo).map(s => s.id)); BS.title = BS.title || '시범단'; reb(); };
+  $('#bgold').onclick = () => { const k = kids.filter(s => BS.sel.has(s.id)); if (!k.length) return toast('먼저 아이를 고르세요'); sendGold(k); };
   $('#bsave').onclick = async () => { if (!BS.sel.size) return toast('먼저 아이를 고르세요'); const name = prompt('그룹 이름'); if (!name) return; await addDoc(collection(db, 'groups'), { name: name.trim(), studentIds: [...BS.sel], updatedAt: serverTimestamp() }); toast('그룹을 저장했어요'); };
   $('#btitle').oninput = e => { BS.title = e.target.value; };
   $('#btext').oninput = e => { BS.text = e.target.value; };

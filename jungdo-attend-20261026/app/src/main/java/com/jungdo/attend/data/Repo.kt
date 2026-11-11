@@ -312,6 +312,7 @@ object Repo {
                     val k = (if (fresh.isNotEmpty()) fresh else all).random()
                     if (haveDress.add(k)) gotDress.add(k) else giftGold += Loot.dupRefund.coerceAtLeast(0)
                 }
+                Gifts.GOLD -> giftGold += g.n
                 Gifts.PRIZE -> {
                     val pz = Prizes.list.firstOrNull { it.id == g.arg }
                     if (pz != null) for (i in 1..g.n) gotPrizes.add(pz)

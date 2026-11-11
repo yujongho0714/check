@@ -15,7 +15,10 @@ object Gifts {
     const val PLATE = "PLATE"
     const val DRESS = "DRESS"
     const val PRIZE = "PRIZE"
+    const val GOLD = "GOLD"
     const val MAX_N = 50
+    const val MAX_GOLD = 9999
+    fun maxOf(kind: String) = if (kind == GOLD) MAX_GOLD else MAX_N
 
     class Gift(val id: String, val kind: String, val arg: String, val n: Int)
 
@@ -23,13 +26,13 @@ object Gifts {
     val claimed = HashSet<String>()
 
     fun make(kind: String, arg: String, n: Int): String =
-        "g" + System.currentTimeMillis().toString(36) + (Math.random() * 1000).toInt() + "|" + kind + "|" + arg + "|" + n.coerceIn(1, MAX_N)
+        "g" + System.currentTimeMillis().toString(36) + (Math.random() * 1000).toInt() + "|" + kind + "|" + arg + "|" + n.coerceIn(1, maxOf(kind))
 
     fun parse(raw: String): Gift? {
         val p = raw.split('|')
         if (p.size < 4) return null
         val n = p[3].toIntOrNull() ?: return null
-        return Gift(p[0], p[1], p[2], n.coerceIn(1, MAX_N))
+        return Gift(p[0], p[1], p[2], n.coerceIn(1, maxOf(p[1])))
     }
 
     fun label(raw: String): String {
@@ -38,6 +41,7 @@ object Gifts {
             GEM -> "보석 ${g.n}개" + (Rarity.ofOrNull(g.arg)?.let { " (${it.label})" } ?: " (아무 등급)")
             PLATE -> "네임플레이트 ${g.n}개"
             DRESS -> (if (g.arg in Dress.CATS) Dress.catLabel(g.arg) else "아무 부위") + " 장비 ${g.n}개"
+            GOLD -> "💰 골드 ${g.n}"
             PRIZE -> (Prizes.list.firstOrNull { it.id == g.arg }?.name ?: "상품") + " ${g.n}개"
             else -> "(알 수 없는 선물)"
         }

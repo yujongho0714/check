@@ -147,8 +147,14 @@ let saveT=0;function saveRoom(){clearTimeout(saveT);saveT=setTimeout(()=>{const 
 function modal(html){const m=document.createElement('div');m.className='modal';m.innerHTML='<div class="card get">'+html+'</div>';m.onclick=e=>{if(e.target===m)closeM(m)};document.body.appendChild(m);return m}
 function closeM(m){if(m._P){DLG.splice(DLG.indexOf(m._P),1);m._P.r.dispose();try{m._P.r.forceContextLoss()}catch(e){}}m.classList.add('out');setTimeout(()=>m.remove(),220)}
 function confirmSell(name,pr,yes){const m=modal('<h3>정말로 판매하시겠습니까?</h3><p>「'+name+'」을(를) 팔고 '+pr+'골드를 받아요.<br>판 물건은 사라지고 되돌릴 수 없어요.</p><div class="row"><button class="btn p" id="y">예</button><button class="btn" id="n">아니오</button></div>');m.querySelector('#y').onclick=()=>{closeM(m);yes()};m.querySelector('#n').onclick=()=>closeM(m)}
-function gacha(col,show){const m=modal('<div class="gc" style="--c:'+col+'"><div class="burst"></div><div class="cap"><i class="t"></i><i class="b"></i><b></b></div></div><p>두근두근…</p>');m.onclick=null;
- const g=m.querySelector('.gc');setTimeout(()=>{g.classList.add('open');try{navigator.vibrate&&navigator.vibrate(40)}catch(e){}},1000);setTimeout(()=>{show(m);m.onclick=e=>{if(e.target===m)closeM(m)}},1500)}
+// 뽑기 연출: 두근두근 → 캡슐 열림 → 결과. 결과 그림이 안 그려져도(새 캐릭터 그림·3D 화면 문제) 멈추지 않고 이름으로 보여줘요
+function gacha(col,show,fallback){const m=modal('<div class="gc" style="--c:'+col+'"><div class="burst"></div><div class="cap"><i class="t"></i><i class="b"></i><b></b></div></div><p>두근두근…</p>');m.onclick=null;
+ const g=m.querySelector('.gc');setTimeout(()=>{g.classList.add('open');try{navigator.vibrate&&navigator.vibrate(40)}catch(e){}},1000);
+ setTimeout(()=>{try{show(m)}catch(e){try{console.log('gacha show',e)}catch(_){}
+   m.querySelector('.card').innerHTML='<div class="reveal"><p>🎁 뽑기 결과!</p><h3>'+(fallback||'새 물건')+'</h3><p>가방에 들어갔어요</p><div class="row"><button class="btn" id="ok">확인</button></div></div>';
+   m.querySelector('#ok').onclick=()=>{closeM(m);rBag()}}
+  m.onclick=e=>{if(e.target===m)closeM(m)}},1500)}
+function safePreview(cv,k){try{return preview(cv,k)}catch(e){try{const g=cv.getContext('2d');g.fillStyle='#fff';g.font='bold 120px sans-serif';g.textAlign='center';g.fillText('🧑',cv.width/2,cv.height/2+40)}catch(_){}return null}}
 function myChars(){const L=['B'].filter(()=>!!ST.dress);return L.concat(ST.mc.filter(k=>SKINS[k]))}
 function rBag(){const el=$('bag');el.innerHTML='';$('gold').textContent=ST.gold;
  if(tab==='a'){admin(el);return}
@@ -165,7 +171,7 @@ function itemMenu(b){const f=FUR[b.k],on=placed.some(p=>p.id===b.id),pr=RSELL[f.
  m.querySelector('#m2').onclick=()=>{closeM(m);confirmSell(f.n,pr,()=>{const i=placed.findIndex(p=>p.id===b.id);if(i>=0){S.remove(placed[i].obj);placed.splice(i,1);saveRoom()}call('sellFur',b.id,pr)})}}
 function charMenu(k){const on=PL&&PL.key===k,inRoom=NPC.some(n=>n.key===k);
  const m=modal('<canvas class="big3d" width="440" height="480"></canvas><h3>'+nameOf(k)+'</h3><p>'+(k==='B'?'내가 입은 옷 그대로예요':'마크 캐릭터')+'</p><div class="row"><button class="btn on" id="m1"'+(on?' disabled':'')+'>'+(on?'✔ 조종 중':'🎮 조종하기')+'</button>'+(on?'':'<button class="btn b" id="m4">'+(inRoom?'📦 방에서 빼기':'🏠 방에 놓기 ('+(1+NPC.length)+'/'+MAXC+')')+'</button>')+(k==='B'?'':'<button class="btn p" id="m2"'+(on||inRoom?' disabled':'')+'>판매하기 +'+ST.mcSell+'G</button>')+'<button class="btn" id="m3">닫기</button></div>'+(on?'<p>조종 중인 캐릭터는 팔 수 없어요</p>':inRoom?'<p>방에서 빼면 팔 수 있어요</p>':'<p>방에는 최대 '+MAXC+'명까지 (내 캐릭터 포함)</p>'));
- const P=preview(m.querySelector('canvas'),k);DLG.push(P);m._P=P;
+ const P=safePreview(m.querySelector('canvas'),k);if(P){DLG.push(P);m._P=P}
  m.querySelector('#m3').onclick=()=>closeM(m);
  m.querySelector('#m1').onclick=()=>{closeM(m);const prev=PL.key;if(inRoom){delNpc(k);addNpc(prev)}setCtl(k);if(k!=='B'&&AB)AB.setMcSkin(k);saveRoom();rBag();toast(nameOf(k)+' 조종!')};
  const b4=m.querySelector('#m4');if(b4)b4.onclick=()=>{closeM(m);if(inRoom){delNpc(k);toast('방에서 뺐어요')}else if(1+NPC.length>=MAXC){toast('방에는 '+MAXC+'명까지만 놓을 수 있어요')}else{addNpc(k);toast(nameOf(k)+' 놀러 왔어요!')}saveRoom();rBag()};
@@ -179,10 +185,10 @@ $('cgacha').onclick=()=>{if(ST.gold<ST.mcPrice){toast('골드가 모자라요');
 const PENDING={};function call(op,...a){if(!AB){toast('미리보기에선 저장이 안 돼요');return}AB[op](...a.map(String))}
 window.onBridge=function(r){try{if(typeof r==='string')r=JSON.parse(r)}catch(e){return}if(r.op==='asset'){gotAsset(r);return}
  if(!r.ok){toast(r.err||'다시 해 주세요');return}
- if(r.op==='pullFur'){const f=FUR[r.k];if(f)gacha(RCOL[f.r],m=>{m.querySelector('.card').innerHTML='<div class="reveal"><p>🪑 가구 뽑기 결과!</p><img alt="" src="'+thumb(r.k)+'"><h3>'+f.n+'</h3><span class="shine" style="background:'+RCOL[f.r]+'">'+f.r+'</span><p>가방에 들어갔어요 · 눌러서 방에 놓아 보세요</p><div class="row"><button class="btn on" id="pl">🏠 바로 놓기</button><button class="btn" id="ok">확인</button></div></div>';
-   m.querySelector('#ok').onclick=()=>closeM(m);m.querySelector('#pl').onclick=()=>{closeM(m);const b=(ST.room.fur||[]).slice().reverse().find(x=>x.k===r.k&&!placed.some(p=>p.id===x.id));if(b)itemMenu(b);else toast('잠깐 뒤에 가방에서 눌러 주세요')}})}
+ if(r.op==='pullFur'){const f=FUR[r.k];if(!f){toast('🪑 새 가구를 받았어요! 가방을 봐 주세요');rBag();return}gacha(RCOL[f.r],m=>{m.querySelector('.card').innerHTML='<div class="reveal"><p>🪑 가구 뽑기 결과!</p><img alt="" src="'+thumb(r.k)+'"><h3>'+f.n+'</h3><span class="shine" style="background:'+RCOL[f.r]+'">'+f.r+'</span><p>가방에 들어갔어요 · 눌러서 방에 놓아 보세요</p><div class="row"><button class="btn on" id="pl">🏠 바로 놓기</button><button class="btn" id="ok">확인</button></div></div>';
+   m.querySelector('#ok').onclick=()=>closeM(m);m.querySelector('#pl').onclick=()=>{closeM(m);const b=(ST.room.fur||[]).slice().reverse().find(x=>x.k===r.k&&!placed.some(p=>p.id===x.id));if(b)itemMenu(b);else toast('잠깐 뒤에 가방에서 눌러 주세요')}},f.n)}
  if(r.op==='pullMc'){const k=r.k;gacha(r.dup?'#8a8fa3':'#f5b82e',m=>{m.querySelector('.card').innerHTML='<div class="reveal"><p>🧑 캐릭터 뽑기 결과!</p><canvas class="big3d" width="440" height="480"></canvas><h3>'+nameOf(k)+'</h3><p>'+(r.dup?'이미 있는 캐릭터예요 (골드 조금 돌려받음)':'✨ 새 캐릭터!')+'</p><div class="row"><button class="btn on" id="eq">🎮 바로 조종</button><button class="btn" id="ok">가방에 넣기</button></div></div>';
-   const P=preview(m.querySelector('canvas'),k);DLG.push(P);m._P=P;m.querySelector('#ok').onclick=()=>{closeM(m);tab='c';document.querySelectorAll('[data-t]').forEach(x=>x.classList.toggle('on',x.dataset.t==='c'));rBag()};m.querySelector('#eq').onclick=()=>{closeM(m);setCtl(k);if(AB)AB.setMcSkin(k);saveRoom();rBag();toast(nameOf(k)+' 조종!')}})}
+   const P=safePreview(m.querySelector('canvas'),k);if(P){DLG.push(P);m._P=P}m.querySelector('#ok').onclick=()=>{closeM(m);tab='c';document.querySelectorAll('[data-t]').forEach(x=>x.classList.toggle('on',x.dataset.t==='c'));rBag()};m.querySelector('#eq').onclick=()=>{closeM(m);try{setCtl(k)}catch(e){toast('이 캐릭터는 아직 그림을 받는 중이에요')}if(AB)AB.setMcSkin(k);saveRoom();rBag();toast(nameOf(k)+' 조종!')}},nameOf(k))}
  if(r.op==='sellFur'||r.op==='sellMc')toast('판매했어요 +'+r.gold+'골드');
  if(r.op==='addAsset')toast('추가했어요!');if(r.op==='delAsset')toast('지웠어요')};
 let first=true;

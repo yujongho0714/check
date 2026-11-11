@@ -91,8 +91,8 @@ fun GiftTab(students: List<Student>) {
     val n = countText.toIntOrNull() ?: 0
     val arg = when (kind) { Gifts.DRESS -> dressCat; Gifts.GEM -> gemRar; Gifts.PRIZE -> prizeId; else -> "any" }
     val targets = if (toAll) active else active.filter { it.id in picked }
-    val ready = n in 1..Gifts.MAX_N && targets.isNotEmpty() && (kind != Gifts.PRIZE || prizeId.isNotBlank())
-    val preview = if (n in 1..Gifts.MAX_N) Gifts.label(Gifts.make(kind, arg, n)) else ""
+    val ready = n in 1..Gifts.maxOf(kind) && targets.isNotEmpty() && (kind != Gifts.PRIZE || prizeId.isNotBlank())
+    val preview = if (n in 1..Gifts.maxOf(kind)) Gifts.label(Gifts.make(kind, arg, n)) else ""
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -110,6 +110,7 @@ fun GiftTab(students: List<Student>) {
             GiftChip("보석", kind == Gifts.GEM) { kind = Gifts.GEM }
             GiftChip("네임플레이트", kind == Gifts.PLATE) { kind = Gifts.PLATE }
             GiftChip("상품", kind == Gifts.PRIZE) { kind = Gifts.PRIZE }
+            GiftChip("💰 골드", kind == Gifts.GOLD) { kind = Gifts.GOLD }
         }
         when (kind) {
             Gifts.DRESS -> {
@@ -135,7 +136,7 @@ fun GiftTab(students: List<Student>) {
             }
         }
         OutlinedTextField(
-            countText, { countText = it.filter(Char::isDigit).take(2) }, label = { Text("개수 (한 명당, 1~${Gifts.MAX_N})") }, singleLine = true,
+            countText, { countText = it.filter(Char::isDigit).take(if (kind == Gifts.GOLD) 4 else 2) }, label = { Text(if (kind == Gifts.GOLD) "골드 (한 명당, 1~${Gifts.MAX_GOLD})" else "개수 (한 명당, 1~${Gifts.MAX_N})") }, singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth(),
         )
 
