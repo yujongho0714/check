@@ -402,7 +402,7 @@ async function rChar(p){
     <p class="sub">PC에서 올린 건 처음엔 <b>꺼져</b> 있어요. 그림을 눌러 <b>초록(켬)</b>으로 바꾼 것만 마이룸 뽑기와 제미타에 나와요.</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><select id="chPk">${[...new Set(L.filter(a => a.src === 'pc').map(a => a.pk || '기타'))].map(p => `<option ${CHR.pk===p?'selected':''}>${esc(p)}</option>`).join('')}</select>
       ${[['all','전체'],['bed','🧸 3D'],['skin','🧑 스킨'],['spr','🖼 그림']].map(([k,t]) => `<button data-ck="${k}" style="${(CHR.kind||'all')===k?'background:#ffd23f':''}">${t}</button>`).join('')}
-      <button id="chOnAll">이 목록 전부 켜기</button><button id="chOffAll">전부 끄기</button></div>
+      <button id="chOnAll">이 목록 전부 켜기</button><button id="chOffAll">전부 끄기</button><button id="chDelVis" style="color:#c00">🗑 이 목록 지우기</button></div>
     <div id="chGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;max-height:560px;overflow:auto"></div></div>`;
   $('#chR').onchange = e => CHR.rar = e.target.value;
   const pks = [...new Set(L.filter(a => a.src === 'pc').map(a => a.pk || '기타'))]; if (!CHR.pk || !pks.includes(CHR.pk)) CHR.pk = pks[0] || '';
@@ -416,6 +416,7 @@ async function rChar(p){
   const pkSel = $('#chPk'); if (pkSel) pkSel.onchange = () => { CHR.pk = pkSel.value; drawGrid(); };
   p.querySelectorAll('[data-ck]').forEach(b => b.onclick = () => { CHR.kind = b.dataset.ck; render(); });
   $('#chOnAll').onclick = async () => { const v = vis(); if (!v.length) return; await setOn(v, true); drawGrid(); toast(v.length + '개 켰어요'); };
+  $('#chDelVis').onclick = async () => { const v = vis(); if (!v.length || !confirm('지금 보이는 ' + v.length + '개를 서버에서 지울까요?')) return; let b = writeBatch(db), n = 0; for (const a of v){ b.delete(doc(db, 'myroomAssets', a.id)); b.delete(doc(db, 'myroomAssetData', a.id)); if (++n % 200 === 0){ await b.commit(); b = writeBatch(db); } } await b.commit(); toast(v.length + '개 지웠어요'); CHR.list = null; render(); };
   $('#chOffAll').onclick = async () => { const v = vis(); if (!v.length) return; await setOn(v, false); drawGrid(); toast(v.length + '개 껐어요'); };
   $('#chF').onchange = async e => { const fs = [...e.target.files]; e.target.value = ''; await chrImport(fs); };
   $('#chDel').onclick = async () => { if (!confirm('PC에서 올린 캐릭터·피규어를 모두 지울까요?')) return; const mine = (CHR.list || []).filter(a => a.src === 'pc'); let b = writeBatch(db), n = 0;
@@ -455,12 +456,14 @@ function bedrockPC(json,img){const j=typeof json==='string'?JSON.parse(json):jso
 
 let TR3 = null, TS3 = null, TC3 = null;
 async function thumbOf(a){ const cv = document.createElement('canvas'); cv.width = cv.height = 96; const g = cv.getContext('2d'); g.imageSmoothingEnabled = false;
-  if (a.j.type === 'skin'){ const im = await loadI(await (await fetch(a.j.b)).blob()); g.drawImage(im, 8, 8, 8, 8, 8, 8, 80, 80); g.drawImage(im, 40, 8, 8, 8, 8, 8, 80, 80); return cv.toDataURL('image/png'); }
+  if (a.j.type === 'skin'){ const im = await loadI(await (await fetch(a.j.b)).blob()); const S = im.width / 64, k = 3, ox = 24, oy = 0; const P = (sx, sy, w, h, dx, dy) => g.drawImage(im, sx * S, sy * S, w * S, h * S, ox + dx * k, oy + dy * k, w * k, h * k);
+    P(8, 8, 8, 8, 4, 0); P(20, 20, 8, 12, 4, 8); P(44, 20, 4, 12, 0, 8); P(36, 52, 4, 12, 12, 8); P(4, 20, 4, 12, 4, 20); P(20, 52, 4, 12, 8, 20);
+    P(40, 8, 8, 8, 4, 0); P(20, 36, 8, 12, 4, 8); P(44, 36, 4, 12, 0, 8); P(52, 52, 4, 12, 12, 8); P(4, 36, 4, 12, 4, 20); P(4, 52, 4, 12, 8, 20); return cv.toDataURL('image/png'); }
   if (a.j.fmt === 'spr'){ const im = await loadI(await (await fetch(a.data.b)).blob()); const k = Math.min(96 / im.width, 96 / im.height); g.drawImage(im, (96 - im.width * k) / 2, (96 - im.height * k) / 2, im.width * k, im.height * k); return cv.toDataURL('image/png'); }
   await needThree(); if (!TR3){ TR3 = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true }); TR3.setSize(128, 128); TS3 = new THREE.Scene(); TS3.add(new THREE.HemisphereLight(0xffffff, 0x8090a0, 1)); const d = new THREE.DirectionalLight(0xffffff, .6); d.position.set(2, 4, 3); TS3.add(d); TC3 = new THREE.PerspectiveCamera(30, 1, .01, 100); }
   const im = await loadI(await (await fetch(a.data.b)).blob()); const c2 = document.createElement('canvas'); c2.width = im.width; c2.height = im.height; c2.getContext('2d').drawImage(im, 0, 0);
   const o = bedrockPC(a.data.g, c2); const grp = new THREE.Group(); grp.add(o); grp.rotation.y = Math.PI; const bb = new THREE.Box3().setFromObject(grp), sz = bb.getSize(new THREE.Vector3()), ce = bb.getCenter(new THREE.Vector3()); const r = Math.max(sz.x, sz.y, sz.z) || 1;
-  grp.position.sub(ce); TS3.add(grp); TC3.position.set(r * .9, r * .5, r * 2); TC3.lookAt(0, 0, 0); TR3.render(TS3, TC3); g.drawImage(TR3.domElement, 0, 0, 96, 96); TS3.remove(grp); return cv.toDataURL('image/webp', .8); }
+  grp.position.sub(ce); TS3.add(grp); TC3.position.set(r * .9, r * .5, r * 2); TC3.lookAt(0, 0, 0); TR3.render(TS3, TC3); g.drawImage(TR3.domElement, 0, 0, 96, 96); TS3.remove(grp); grp.traverse(o => { if (o.geometry) o.geometry.dispose(); const ms = o.material ? [].concat(o.material) : []; ms.forEach(m => { if (m.map) m.map.dispose(); m.dispose(); }); }); TR3.renderLists && TR3.renderLists.dispose(); return cv.toDataURL('image/webp', .8); }
 async function chrImport(fs){ if (CHR.busy) return; CHR.busy = true; const say = t => { CHR.log = t; const el = $('#chLog'); if (el) el.textContent = t; };
   try {
     const { unzipSync } = await import('https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js');
@@ -474,24 +477,34 @@ async function chrImport(fs){ if (CHR.busy) return; CHR.busy = true; const say =
     const animFor = s => { if (ANIMS[s]) return JSON.stringify(ANIMS[s]); const b = Object.keys(ANIMS).filter(x => s.startsWith(x)).sort((a, b) => b.length - a.length)[0]; return b ? JSON.stringify(ANIMS[b]) : ''; };
     if (!CHR.list) await chrList(); const have = new Set(CHR.list.map(a => a.id)); const used = new Set(); const out = []; // {id, j, data}
     const uniq = id => { let k = id, i = 2; while (have.has(k)) k = id + '_' + (i++); have.add(k); return k; };
+    const OLD = new Map(); CHR.list.filter(a => a.src === 'pc').forEach(a => OLD.set((a.pk || '기타') + '|' + (a.type === 'skin' ? 'skin' : a.fmt) + '|' + a.n, a)); const keepOn = {};
+    const idFor = (pre, pk, kind, n) => { const o = OLD.get((pk || '기타') + '|' + kind + '|' + n); if (o && !used.has('#' + o.id)){ used.add('#' + o.id); if (o.on) keepOn[o.id] = 1; return o.id; } return uniq(pre + slug(n)); };
+    const GEO = new Set(names.filter(n => /\.geo\.json$/i.test(n)).map(stem));
     for (const n of names.filter(n => /\.json$/i.test(n))){ const txt = new TextDecoder().decode(files[n]); if (!/"bones"/.test(txt) || !/geometry/.test(txt)) continue; const s = stem(n);
       let pn = (pngBy.get(s) || [])[0] || (pngBy.get(s.replace(/_(male|female)$/, '')) || [])[0]; if (!pn){ const dir = (n.split('/').slice(-2, -1)[0] || '').replace(/^\d+_/, ''); pn = (pngBy.get(dir) || [])[0]; }
       if (!pn) continue; used.add(pn); const b = await blobUrl(new Blob([files[pn]], { type: 'image/png' })); if (txt.length + b.length > 950000) continue;
-      const id = uniq('b_' + slug(s)); { const an = animFor(s); out.push({ id, pk: packOf[n], j: { type: 'fur', fmt: 'bed', k: id, n: s, r: rRar(), w: 1, d: 1, lazy: 1, src: 'pc' }, data: { g: txt, b, a: (txt.length + b.length + an.length < 950000) ? an : '' } }); } if (out.length % 50 === 0) say('3D 모델 찾는 중… ' + out.length); }
+      const id = idFor('b_', packOf[n], 'bed', s); { const an = animFor(s); out.push({ id, pk: packOf[n], j: { type: 'fur', fmt: 'bed', k: id, n: s, r: rRar(), w: 1, d: 1, lazy: 1, src: 'pc' }, data: { g: txt, b, a: (txt.length + b.length + an.length < 950000) ? an : '' } }); } 
+      { const dirP = pn.split('/').slice(0, -1).join('/'), ps = stem(pn); const an = animFor(s);
+        for (const v of names){ if (used.has(v) || !/\.png$/i.test(v) || v.split('/').slice(0, -1).join('/') !== dirP) continue; const vs = stem(v); if (!vs.startsWith(ps + '_') || GEO.has(vs)) continue; used.add(v);
+          if (/(emissive|glow|_eyes?$|_mask|_overlay|_light|_e$)/.test(vs)) continue; const vb = await blobUrl(new Blob([files[v]], { type: 'image/png' })); if (txt.length + vb.length > 950000) continue;
+          const vid = idFor('b_', packOf[v], 'bed', vs); out.push({ id: vid, pk: packOf[v], j: { type: 'fur', fmt: 'bed', k: vid, n: vs, r: rRar(), w: 1, d: 1, lazy: 1, src: 'pc' }, data: { g: txt, b: vb, a: (txt.length + vb.length + an.length < 950000) ? an : '' } }); } }
+      if (out.length % 50 === 0) say('3D 모델 찾는 중… ' + out.length); }
+    const modelDirs = new Set([...used].filter(x => !x.startsWith('#')).map(x => x.split('/').slice(0, -1).join('/')));
+
     // 자바 모드(.java 안의 3D 모델 코드) → 베드락 모델로 바꿔서
     { const pngs = names.filter(n => /\.png$/i.test(n)); let nj = 0; const jn = names.filter(n => /\.java$/i.test(n)); const texts = jn.map(n => new TextDecoder().decode(files[n])); const tidx = JAVAMODEL.texIndex(texts);
       for (let q = 0; q < jn.length; q++){ let R = []; try { R = JAVAMODEL.fromJava(texts[q], jn[q]); } catch(e){}
         for (const r of R){ const pn = JAVAMODEL.pair(r, pngs, tidx, c => PNGSZ(files[c])); if (!pn) continue; used.add(pn);
           const g = JSON.stringify(r.geo), b = await blobUrl(new Blob([files[pn]], { type: 'image/png' })); if (g.length + b.length > 950000) continue;
-          const id = uniq('j_' + slug(r.name)); out.push({ id, pk: packOf[jn[q]], j: { type: 'fur', fmt: 'bed', k: id, n: r.name.toLowerCase(), r: rRar(), w: 1, d: 1, lazy: 1, src: 'pc' }, data: { g, b, a: r.anim ? JSON.stringify({ __java: r.anim }) : '' } }); if (++nj % 30 === 0) say('자바 모델 바꾸는 중… ' + nj); } } }
+          const id = idFor('j_', packOf[jn[q]], 'bed', r.name.toLowerCase()); out.push({ id, pk: packOf[jn[q]], j: { type: 'fur', fmt: 'bed', k: id, n: r.name.toLowerCase(), r: rRar(), w: 1, d: 1, lazy: 1, src: 'pc' }, data: { g, b, a: r.anim ? JSON.stringify({ __java: r.anim }) : '' } }); if (++nj % 30 === 0) say('자바 모델 바꾸는 중… ' + nj); } } }
     let sk = 0, sp = 0;
-    for (const n of names.filter(n => /\.png$/i.test(n) && !used.has(n))){ const sz = PNGSZ(files[n]); if (!sz) continue; const blob = new Blob([files[n]], { type: 'image/png' });
+    for (const n of names.filter(n => /\.png$/i.test(n) && !used.has(n) && !modelDirs.has(n.split('/').slice(0, -1).join('/')))){ const sz = PNGSZ(files[n]); if (!sz) continue; const blob = new Blob([files[n]], { type: 'image/png' });
       const s64 = await skinOf(blob, sz[0], sz[1]).catch(() => null);
-      if (s64){ const id = uniq('s_' + slug(stem(n))); out.push({ id, pk: packOf[n], j: { type: 'skin', k: id, n: stem(n), b: s64, src: 'pc' } }); sk++; }
-      else { const dir = n.split('/').slice(0, -1).join('/'); if (SPR_DIR.test(dir) && !SKIP_DIR.test(dir) && sz[0] >= 24 && sz[1] >= 24 && sz[0] <= 512 && sz[1] <= 512){ const id = uniq('p_' + slug(stem(n))); out.push({ id, pk: packOf[n], j: { type: 'fur', fmt: 'spr', k: id, n: stem(n), r: rRar(), w: 1, d: 1, lazy: 1, src: 'pc' }, data: { b: await blobUrl(blob) } }); sp++; } }
+      if (s64){ const id = idFor('s_', packOf[n], 'skin', stem(n)); out.push({ id, pk: packOf[n], j: { type: 'skin', k: id, n: stem(n), b: s64, src: 'pc' } }); sk++; }
+      else { const dir = n.split('/').slice(0, -1).join('/'); if (SPR_DIR.test(dir) && !SKIP_DIR.test(dir) && sz[0] >= 24 && sz[1] >= 24 && sz[0] <= 512 && sz[1] <= 512){ const id = idFor('p_', packOf[n], 'spr', stem(n)); out.push({ id, pk: packOf[n], j: { type: 'fur', fmt: 'spr', k: id, n: stem(n), r: rRar(), w: 1, d: 1, lazy: 1, src: 'pc' }, data: { b: await blobUrl(blob) } }); sp++; } }
       if ((sk + sp) % 80 === 0) say('그림 찾는 중… 스킨 ' + sk + ' · 그림 ' + sp); }
     if (!out.length){ say('쓸 수 있는 캐릭터를 못 찾았어요 (.geo.json+.png 모델, 64×64 스킨, 캐릭터 그림 png)'); return; }
-    say('미리보기 그림 만드는 중…'); for (let i = 0; i < out.length; i++){ const a = out[i]; a.j.on = false; a.j.pk = a.pk || '기타'; try { a.j.t = await thumbOf(a); } catch(e){} if (i % 25 === 0) say('미리보기 그림 만드는 중… ' + i + ' / ' + out.length); }
+    say('미리보기 그림 만드는 중…'); for (let i = 0; i < out.length; i++){ const a = out[i]; a.j.on = !!keepOn[a.id]; a.j.pk = a.pk || '기타'; try { a.j.t = await thumbOf(a); } catch(e){} if (i % 25 === 0) say('미리보기 그림 만드는 중… ' + i + ' / ' + out.length); }
     say(out.length + '개 서버에 올리는 중…'); let b = writeBatch(db), n = 0, sizeAcc = 0;
     for (const a of out){ b.set(doc(db, 'myroomAssets', a.id), { j: JSON.stringify(a.j), at: Date.now() }); if (a.data) b.set(doc(db, 'myroomAssetData', a.id), a.data);
       sizeAcc += (a.data ? (a.data.g || '').length + (a.data.b || '').length : 0) + (a.j.b || '').length; n++;
