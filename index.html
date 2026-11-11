@@ -310,6 +310,50 @@ document.addEventListener('focusout', () => { S.busyInput = false; });
    · 사람 모양 스킨(64×64 등) → 마이룸 캐릭터 뽑기에 · 제미타 캐릭터로
    · 몬스터·캐릭터 그림 폴더의 png → 세워 놓는 그림 카드로
    목록(가벼운 것)은 myroomAssets, 큰 데이터는 myroomAssetData 에 따로 저장해요 */
+// ===== 자바(포지) 마크 모드의 3D 모델 코드 → 베드락 .geo.json 으로 바꾸기 =====
+// ModelRenderer / ModelPart 의 addBox · ModelBox · setRotationPoint · setRotationAngle · addChild 를 읽어요.
+// 자바 모델은 y 가 아래로(바닥 = 24), 베드락은 y 가 위로 → by = 24 - y, 회전은 (rx, -ry, -rz) 로 맞춰요.
+const JAVAMODEL=(()=>{
+const num=s=>{s=String(s).trim().replace(/\(float\)|\(double\)/g,'').replace(/(\d)[FfDd]\b/g,'$1').replace(/Math\.PI/g,'('+Math.PI+')').replace(/Math\.toRadians\(([^)]*)\)/g,'(($1)*'+Math.PI/180+')');
+  if(!/^[-+*/().\d\seE]*$/.test(s)||!s.trim())return 0;try{const v=Function('return ('+s+')')();return isFinite(v)?v:0}catch(e){return 0}};
+const args=s=>{const out=[];let d=0,cur='';for(const ch of s){if(ch==='('){d++;cur+=ch}else if(ch===')'){d--;cur+=ch}else if(ch===','&&d===0){out.push(cur);cur=''}else cur+=ch}if(cur.trim())out.push(cur);return out.map(x=>x.trim())};
+// 괄호 짝 맞춰서 함수 호출 인자 꺼내기
+function calls(src,name){const out=[];let i=0;const re=new RegExp('([\\w.\\[\\]]+)\\s*\\.\\s*'+name+'\\s*\\(','g');let m;while((m=re.exec(src))){let j=re.lastIndex,d=1;while(j<src.length&&d){if(src[j]==='(')d++;else if(src[j]===')')d--;j++}out.push({obj:m[1].replace(/^this\./,''),a:args(src.slice(re.lastIndex,j-1)),at:m.index});i=j}return out}
+function parseClass(name,src){const P={},order=[];let tw=64,th=64;const T=src.match(/texture(?:Width)\s*=\s*([\d.]+)/),U=src.match(/texture(?:Height)\s*=\s*([\d.]+)/);if(T)tw=+T[1];if(U)th=+U[1];
+  const part=n=>{n=n.replace(/^this\./,'');if(!P[n]){P[n]={n,pv:[0,0,0],rot:[0,0,0],cubes:[],kids:[],par:null,uv:[0,0],mir:false};order.push(n)}return P[n]};
+  // 새 부위
+  for(const m of src.matchAll(/([\w.]+)\s*=\s*new\s+(?:ModelRenderer|ModelPart|RendererModel|AdvancedModelBox|AdvancedModelRenderer)\s*\(([^;]*?)\)\s*;/g)){const p=part(m[1]);const a=args(m[2]);if(a.length>=3){p.uv=[num(a[a.length-2]),num(a[a.length-1])]}}
+  // 문장 단위로 순서대로 (setTextureOffset 다음 addBox 등)
+  const stm=src.split(/;\s*/);
+  for(const st of stm){const s=st.replace(/\s+/g,' ').trim();if(!s)continue;let m;
+    if((m=s.match(/^([\w.]+)\.(?:setRotationPoint|setPos)\s*\(([^)]*)\)/))){const p=part(m[1]);const a=args(m[2]).map(num);p.pv=[a[0]||0,a[1]||0,a[2]||0]}
+    if((m=s.match(/setRotationAngle\s*\(\s*([\w.]+)\s*,([^;]*)\)\s*$/))){const p=part(m[1]);const a=args(m[2]).map(num);p.rot=[a[0]||0,a[1]||0,a[2]||0]}
+    for(const ax of ['X','Y','Z']){const r=s.match(new RegExp('^([\\w.]+)\\.(?:rotateAngle'+ax+'|'+ax.toLowerCase()+'Rot)\\s*=\\s*(.+)$'));if(r&&!/[a-zA-Z_]\w*\s*\(/.test(r[2].replace(/Math\.PI|Math\.toRadians/g,''))){const p=part(r[1]);p.rot['XYZ'.indexOf(ax)]=num(r[2])}}
+    if((m=s.match(/^([\w.]+)\.mirror\s*=\s*(true|false)/)))part(m[1]).mir=m[2]==='true';
+    if((m=s.match(/^([\w.]+)\.addChild\s*\(\s*([\w.]+)\s*\)/))){const a=part(m[1]),b=part(m[2]);a.kids.push(b.n);b.par=a.n}
+    if((m=s.match(/new\s+ModelBox\s*\(\s*([\w.]+)\s*,(.*)\)\s*\)?$/))){const p=part(m[1]);const a=args(m[2].replace(/\)\s*$/,'')).map(x=>x.trim());const v=a.filter(x=>!/^"/.test(x));// u,v,x,y,z,w,h,d,inflate,mirror
+      if(v.length>=8)p.cubes.push({uv:[num(v[0]),num(v[1])],o:[num(v[2]),num(v[3]),num(v[4])],s:[num(v[5]),num(v[6]),num(v[7])],inf:v[8]&&!/true|false/.test(v[8])?num(v[8]):0,mir:/true/.test(v[9]||v[8]||'')||p.mir})}
+    // 체인: a.setTextureOffset(u,v).addBox(...).setTextureOffset(...).addBox(...)  /  a.texOffs(u,v).addBox(...)
+    if((m=s.match(/^([\w.]+)\s*\.\s*(setTextureOffset|texOffs|addBox)\s*\(/))){const p=part(m[1]);let uv=p.uv.slice();const re=/\.\s*(setTextureOffset|texOffs|addBox|mirror)\s*\(/g;let mm;
+      while((mm=re.exec(s))){let j=re.lastIndex,d=1;while(j<s.length&&d){if(s[j]==='(')d++;else if(s[j]===')')d--;j++}const a=args(s.slice(re.lastIndex,j-1));
+        if(mm[1]==='setTextureOffset'||mm[1]==='texOffs'){uv=[num(a[0]),num(a[1])]}
+        else if(mm[1]==='addBox'){let v=a.filter(x=>!/^"/.test(x));if(v.length>=6){const b={uv:uv.slice(),o:[num(v[0]),num(v[1]),num(v[2])],s:[num(v[3]),num(v[4]),num(v[5])],inf:0,mir:p.mir};
+          if(v.length>=7&&!/true|false/.test(v[6]))b.inf=num(v[6]);if(v.some(x=>x==='true'))b.mir=true;if(v.length>=9&&a.length===9&&/^"/.test(a[0])){}p.cubes.push(b)}}re.lastIndex=j}
+      if(m[2]==='setTextureOffset'||m[2]==='texOffs')p.uv=uv}}
+  const L=order.map(n=>P[n]).filter(p=>p.cubes.length||p.kids.length);if(!L.some(p=>p.cubes.length))return null;
+  // 절대 위치 (자바: 자식 피벗은 부모 피벗 기준)
+  const abs=p=>{let a=p.pv.slice(),q=p;while(q.par&&P[q.par]){q=P[q.par];a=[a[0]+q.pv[0],a[1]+q.pv[1],a[2]+q.pv[2]]}return a};const R=180/Math.PI;
+  const bones=L.map(p=>{const A=abs(p);const b={name:p.n,pivot:[A[0],24-A[1],A[2]],cubes:p.cubes.map(c=>({origin:[A[0]+c.o[0],24-(A[1]+c.o[1]+c.s[1]),A[2]+c.o[2]],size:c.s,uv:c.uv,inflate:c.inf||undefined,mirror:c.mir||undefined}))};
+    if(p.rot.some(v=>v))b.rotation=[p.rot[0]*R,-p.rot[1]*R,-p.rot[2]*R];if(p.par&&P[p.par])b.parent=p.par;return b});
+  return{name,tw,th,geo:{format_version:'1.12.0','minecraft:geometry':[{description:{identifier:'geometry.'+name.toLowerCase(),texture_width:tw,texture_height:th},bones}]}}}
+// 자바 파일 하나 → 모델 여러 개 (+ 그 파일에 적힌 텍스처 경로들)
+function fromJava(src,file){src=src.replace(/\/\*[\s\S]*?\*\//g,'').replace(/\/\/[^\n]*/g,'');if(!/addBox|ModelBox/.test(src))return[];
+  const tex=[...src.matchAll(/["']([\w\-]+:)?(textures\/[\w\/\-.]+\.png)["']/g)].map(m=>m[2]);const out=[];
+  const re=/class\s+(\w+)\s+extends\s+(\w+(?:<[^>]*>)?)/g;const marks=[];let m;while((m=re.exec(src)))marks.push({n:m[1],at:m.index,base:m[2]});
+  marks.forEach((k,i)=>{if(!/Model|Entity|Biped/.test(k.base))return;const seg=src.slice(k.at,i+1<marks.length?marks[i+1].at:src.length);if(!/addBox|ModelBox/.test(seg))return;const r=parseClass(k.n.replace(/^Model/,'')||k.n,seg);if(r){r.tex=tex;r.file=file;out.push(r)}});
+  return out}
+return{fromJava}})();
+
 const CHR = { busy:false, log:'', rar:'랜덤', list:null };
 const RARS = ['노말','레어','에픽','유니크','레전드리'];
 function rRar(){ if (CHR.rar !== '랜덤') return CHR.rar; const r = Math.random(); return r < .03 ? '레전드리' : r < .10 ? '유니크' : r < .25 ? '에픽' : r < .55 ? '레어' : '노말'; }
@@ -320,7 +364,7 @@ async function rChar(p){
   const L = CHR.list || []; const by = t => L.filter(t).length;
   p.innerHTML = `<div class="card"><h2 style="margin-top:0">🧸 캐릭터·피규어 넣기</h2>
     <p class="sub">ZIP 파일을 <b>통째로</b> 넣으면 안에서 쓸 수 있는 걸 알아서 찾아요. (리소스팩·모드 ZIP 그대로 OK)<br>
-    · 3D 모델(.geo.json + .png) → 마이룸 <b>가구 뽑기</b>에 피규어로 · 제미타 몬스터로<br>· 사람 스킨(64×64) → 마이룸 <b>캐릭터 뽑기</b>에 · 제미타 캐릭터로<br>· 몬스터·캐릭터 그림(png) → 세워 놓는 그림 카드로<br>
+    · 3D 모델(.geo.json + .png · 자바 모드의 모델 코드도 바꿔서) → 마이룸 <b>가구 뽑기</b>에 피규어로 · 제미타 몬스터로<br>· 사람 스킨(64×64) → 마이룸 <b>캐릭터 뽑기</b>에 · 제미타 캐릭터로<br>· 몬스터·캐릭터 그림(png) → 세워 놓는 그림 카드로<br>
     올린 건 도장 계정으로 로그인한 기기에서만 보여요. 제미타는 [🧪 타격 실험실 → ☁ 출결 서버에서 받기]로 가져가요.</p>
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:10px 0">
       <label class="btn" style="background:var(--blue);color:#fff;padding:10px 16px;border-radius:10px;cursor:pointer">📦 ZIP · 파일 고르기<input id="chF" type="file" multiple accept=".zip,.json,.png" hidden></label>
@@ -349,7 +393,7 @@ async function chrImport(fs){ if (CHR.busy) return; CHR.busy = true; const say =
   try {
     const { unzipSync } = await import('https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js');
     const files = {}; // 경로 → Uint8Array
-    for (const f of fs){ if (/\.zip$/i.test(f.name)){ say(f.name + ' 여는 중… (' + Math.round(f.size / 1e6) + 'MB)'); const z = unzipSync(new Uint8Array(await f.arrayBuffer()), { filter: x => /\.(json|png)$/i.test(x.name) && !/__MACOSX/.test(x.name) }); Object.assign(files, z); }
+    for (const f of fs){ if (/\.zip$/i.test(f.name)){ say(f.name + ' 여는 중… (' + Math.round(f.size / 1e6) + 'MB)'); const z = unzipSync(new Uint8Array(await f.arrayBuffer()), { filter: x => /\.(json|png|java)$/i.test(x.name) && !/__MACOSX/.test(x.name) }); Object.assign(files, z); }
       else files[f.name] = new Uint8Array(await f.arrayBuffer()); }
     const names = Object.keys(files), base = n => n.split('/').pop(), stem = n => base(n).replace(/(\.geo)?\.(json|png)$/i, '').toLowerCase();
     const pngBy = new Map(); names.filter(n => /\.png$/i.test(n)).forEach(n => { const s = stem(n); if (!pngBy.has(s)) pngBy.set(s, []); pngBy.get(s).push(n); });
@@ -359,6 +403,13 @@ async function chrImport(fs){ if (CHR.busy) return; CHR.busy = true; const say =
       let pn = (pngBy.get(s) || [])[0] || (pngBy.get(s.replace(/_(male|female)$/, '')) || [])[0]; if (!pn){ const dir = (n.split('/').slice(-2, -1)[0] || '').replace(/^\d+_/, ''); pn = (pngBy.get(dir) || [])[0]; }
       if (!pn) continue; used.add(pn); const b = await blobUrl(new Blob([files[pn]], { type: 'image/png' })); if (txt.length + b.length > 950000) continue;
       const id = uniq('b_' + slug(s)); out.push({ id, j: { type: 'fur', fmt: 'bed', k: id, n: s, r: rRar(), w: 1, d: 1, lazy: 1, src: 'pc' }, data: { g: txt, b } }); if (out.length % 50 === 0) say('3D 모델 찾는 중… ' + out.length); }
+    // 자바 모드(.java 안의 3D 모델 코드) → 베드락 모델로 바꿔서
+    { const pngs = names.filter(n => /\.png$/i.test(n)); let nj = 0;
+      for (const n of names.filter(n => /\.java$/i.test(n))){ let R = []; try { R = JAVAMODEL.fromJava(new TextDecoder().decode(files[n]), n); } catch(e){}
+        for (const r of R){ let cand = r.tex.map(t => pngs.find(p => p.endsWith(t))).filter(Boolean); if (!cand.length){ const k2 = r.name.toLowerCase(); cand = pngs.filter(p => /textures\/(entity|entities|models|mobs?)\//i.test(p) && stem(p).includes(k2)); }
+          let pn = null; for (const c of cand){ const sz = PNGSZ(files[c]); if (sz && sz[0] / sz[1] === r.tw / r.th){ pn = c; break; } } pn = pn || cand[0] || null; if (!pn) continue; used.add(pn);
+          const g = JSON.stringify(r.geo), b = await blobUrl(new Blob([files[pn]], { type: 'image/png' })); if (g.length + b.length > 950000) continue;
+          const id = uniq('j_' + slug(r.name)); out.push({ id, j: { type: 'fur', fmt: 'bed', k: id, n: r.name.toLowerCase(), r: rRar(), w: 1, d: 1, lazy: 1, src: 'pc' }, data: { g, b } }); if (++nj % 30 === 0) say('자바 모델 바꾸는 중… ' + nj); } } }
     let sk = 0, sp = 0;
     for (const n of names.filter(n => /\.png$/i.test(n) && !used.has(n))){ const sz = PNGSZ(files[n]); if (!sz) continue; const blob = new Blob([files[n]], { type: 'image/png' });
       const s64 = await skinOf(blob, sz[0], sz[1]).catch(() => null);
