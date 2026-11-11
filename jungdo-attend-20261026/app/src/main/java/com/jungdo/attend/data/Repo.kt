@@ -788,6 +788,12 @@ object Repo {
     // ---------- 마이룸 ----------
     fun myroomDoc() = db.collection("config").document("myroom")
     fun myroomAssets() = db.collection("myroomAssets")
+    /** PC에서 올린 3D 피규어·그림 카드의 큰 데이터 (g = .geo.json 글자, b = png 그림 data URL) */
+    fun myroomAssetData(k: String, onDone: (String?, String?) -> Unit) {
+        db.collection("myroomAssetData").document(k).get()
+            .addOnSuccessListener { d -> onDone(d.getString("g"), d.getString("b")) }
+            .addOnFailureListener { onDone(null, null) }
+    }
 
     /** 마이룸 켜기/끄기 · 가구 드롭 확률 + 관리자가 추가한 가구·캐릭터를 계속 받아 둠 */
     fun startMyRoomSync(): List<ListenerRegistration> = listOf(

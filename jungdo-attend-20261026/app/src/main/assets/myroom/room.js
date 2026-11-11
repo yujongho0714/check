@@ -31,7 +31,36 @@ function mbGeo(b64){const u=Uint8Array.from(atob(b64),c=>c.charCodeAt(0));const 
  for(let i=0;i<n*3;i++){const a=i%3;pos[i]=mn[a]+(q[i]+32768)/65535*rg[a];col[i]=Math.pow(c[i]/255,2.2)}
  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));g.setAttribute('color',new THREE.BufferAttribute(col,3));g.computeVertexNormals();g.computeBoundingBox();return g}
 const VMAT=new THREE.MeshLambertMaterial({vertexColors:true});const GEO={};
-function defFur(f){FUR[f.k]={n:f.n,r:f.r,w:f.w,d:f.d,custom:!!f.custom,mk:()=>{const g=GEO[f.k]||(GEO[f.k]=mbGeo(f.b));const m=new THREE.Mesh(g,VMAT);m.castShadow=m.receiveShadow=true;const bb=g.boundingBox;const s=1/1.6;m.scale.setScalar(s);
+// ---------- PC에서 올린 3D 피규어(.geo.json)·그림 카드 : 큰 데이터는 필요할 때 서버에서 받아요 ----------
+function bedrock(json,img){const j=typeof json==='string'?JSON.parse(json):json;let geo=null,tw=64,th=64;
+  if(j['minecraft:geometry']){geo=j['minecraft:geometry'][0];tw=geo.description&&geo.description.texture_width||64;th=geo.description&&geo.description.texture_height||64}
+  else{const k=Object.keys(j).find(k=>k.startsWith('geometry'));geo=j[k];tw=geo&&geo.texturewidth||64;th=geo&&geo.textureheight||64}
+  if(!geo||!geo.bones)throw new Error('뼈대(bones)가 없어요');
+  let tex=null;if(img){tex=new THREE.CanvasTexture(img);tex.magFilter=THREE.NearestFilter;tex.minFilter=THREE.NearestFilter;tex.encoding=THREE.sRGBEncoding}
+  const mat=new THREE.MeshLambertMaterial({map:tex,color:tex?0xffffff:0xd0a070,alphaTest:.4,side:THREE.DoubleSide});const root=new THREE.Group(),G={},D=Math.PI/180;
+  const faceUV=(gm,fi,u,v,w,h,fx)=>{const uv=gm.attributes.uv;const u0=u/tw,u1=(u+w)/tw,v0=1-v/th,v1=1-(v+h)/th;const a=fx?[u1,u0]:[u0,u1];uv.setXY(fi*4,a[0],v0);uv.setXY(fi*4+1,a[1],v0);uv.setXY(fi*4+2,a[0],v1);uv.setXY(fi*4+3,a[1],v1)};
+  geo.bones.forEach(b=>{const g=new THREE.Group();g.name=b.name;const pv=b.pivot||[0,0,0];g.userData.pv=pv;G[b.name]=g;
+    (b.cubes||[]).forEach(c=>{const [w,h,d]=c.size||[1,1,1],o=c.origin||[0,0,0],inf=c.inflate||0;const gm=new THREE.BoxGeometry(Math.max(w+inf*2,.001)/16,Math.max(h+inf*2,.001)/16,Math.max(d+inf*2,.001)/16);
+      if(Array.isArray(c.uv)){const [u,v]=c.uv;const W=Math.floor(w),H=Math.floor(h),Dd=Math.floor(d);faceUV(gm,0,u+Dd+W,v+Dd,Dd,H,c.mirror);faceUV(gm,1,u,v+Dd,Dd,H,c.mirror);faceUV(gm,2,u+Dd,v,W,Dd);faceUV(gm,3,u+Dd+W,v,W,Dd);faceUV(gm,4,u+Dd+W+Dd,v+Dd,W,H,c.mirror);faceUV(gm,5,u+Dd,v+Dd,W,H,c.mirror)}
+      else if(c.uv){const F=c.uv;['west','east','up','down','south','north'].forEach((n,i)=>{const f=F[n];if(f&&f.uv){const s=f.uv_size||[0,0];faceUV(gm,i,Math.min(f.uv[0],f.uv[0]+s[0]),Math.min(f.uv[1],f.uv[1]+s[1]),Math.abs(s[0]),Math.abs(s[1]),s[0]<0)}})}
+      const m=new THREE.Mesh(gm,mat);m.castShadow=true;const cx=-(o[0]+w/2),cy=o[1]+h/2,cz=o[2]+d/2;
+      if(c.rotation){const cp=c.pivot||[0,0,0];const sub=new THREE.Group();sub.position.set(-cp[0]/16,cp[1]/16,cp[2]/16);sub.rotation.set(-c.rotation[0]*D,c.rotation[1]*D,-c.rotation[2]*D,'ZYX');m.position.set((cx+cp[0])/16,(cy-cp[1])/16,(cz-cp[2])/16);sub.add(m);sub.userData.abs=1;g.add(sub)}
+      else{m.position.set(cx/16,cy/16,cz/16);m.userData.abs=1;g.add(m)}});
+    if(b.rotation)g.userData.rot=b.rotation});
+  geo.bones.forEach(b=>{const g=G[b.name],pv=g.userData.pv;const par=b.parent&&G[b.parent];const ppv=par?par.userData.pv:[0,0,0];
+    g.position.set(-(pv[0]-ppv[0])/16,(pv[1]-ppv[1])/16,(pv[2]-ppv[2])/16);g.children.forEach(ch=>{if(ch.userData.abs)ch.position.sub(new THREE.Vector3(-pv[0]/16,pv[1]/16,pv[2]/16))});
+    if(g.userData.rot){const r=g.userData.rot;g.rotation.set(-r[0]*D,r[1]*D,-r[2]*D,'ZYX')}(par||root).add(g)});
+  return root}
+
+const ASSET={},AWAIT={};
+function needAsset(k){if(ASSET[k]||AWAIT[k])return;AWAIT[k]=[];try{AB&&AB.assetData(k)}catch(e){}}
+function gotAsset(r){const k=r.k;if(!r.ok){delete AWAIT[k];return}const img=new Image();img.onload=()=>{ASSET[k]={g:r.g,img};const L=AWAIT[k]||[];delete AWAIT[k];L.forEach(fill);delete THUMB[k];try{rBag()}catch(e){}};img.src=r.b}
+function fill(o){const k=o.userData.ak,a=ASSET[k],f=FUR[k];if(!a||!f)return;let m;try{m=f.fmt==='bed'?bedrock(a.g,a.img):(()=>{const t=new THREE.CanvasTexture(a.img);t.magFilter=THREE.NearestFilter;const ar=a.img.width/a.img.height;const pl=new THREE.Mesh(new THREE.PlaneGeometry(ar,1),new THREE.MeshLambertMaterial({map:t,alphaTest:.4,side:THREE.DoubleSide}));pl.position.y=.5;pl.rotation.y=Math.PI/4;const g=new THREE.Group();g.add(pl);return g})()}catch(e){return}
+  // 크기 · 바닥 맞추기 (한 칸 크기 피규어)
+  const b=new THREE.Box3().setFromObject(m),sz=b.getSize(new THREE.Vector3());const s=Math.min(1.25/Math.max(sz.y,1e-4),1.1/Math.max(sz.x,sz.z,1e-4));m.scale.multiplyScalar(s);const b2=new THREE.Box3().setFromObject(m),c=b2.getCenter(new THREE.Vector3());m.position.set(f.w/2-c.x,-b2.min.y,f.d/2-c.z);
+  m.traverse(x=>{if(x.isMesh){x.castShadow=true;x.receiveShadow=true}});while(o.children.length)o.remove(o.children[0]);o.add(m)}
+function defFur(f){if(f.fmt==='bed'||f.fmt==='spr'){FUR[f.k]={n:f.n,r:f.r||'노말',w:1,d:1,custom:1,fmt:f.fmt,mk:()=>{const o=new THREE.Group();o.userData.ak=f.k;if(ASSET[f.k])fill(o);else{needAsset(f.k);(AWAIT[f.k]||[]).push(o);const ph=new THREE.Mesh(new THREE.BoxGeometry(.5,.5,.5),new THREE.MeshLambertMaterial({color:0xffe08a,transparent:true,opacity:.6}));ph.position.set(.5,.25,.5);o.add(ph)}return o}};return}
+  FUR[f.k]={n:f.n,r:f.r,w:f.w,d:f.d,custom:!!f.custom,mk:()=>{const g=GEO[f.k]||(GEO[f.k]=mbGeo(f.b));const m=new THREE.Mesh(g,VMAT);m.castShadow=m.receiveShadow=true;const bb=g.boundingBox;const s=1/1.6;m.scale.setScalar(s);
   m.position.set(-(bb.min.x+bb.max.x)/2*s+f.w/2,-bb.min.y*s,-(bb.min.z+bb.max.z)/2*s+f.d/2);const o=new THREE.Group();o.add(m);return o}}}
 // 썸네일
 const TR=new THREE.WebGLRenderer({antialias:true,alpha:true,preserveDrawingBuffer:true});TR.setSize(128,128);const TS=new THREE.Scene();TS.add(new THREE.HemisphereLight(0xffffff,0xbfa98a,.9));const tl=new THREE.DirectionalLight(0xffffff,.6);tl.position.set(4,8,3);TS.add(tl);
@@ -148,7 +177,7 @@ $('gacha').onclick=()=>{if(ST.gold<ST.furPrice){toast('골드가 모자라요');
 $('cgacha').onclick=()=>{if(ST.gold<ST.mcPrice){toast('골드가 모자라요');return}call('pullMc')};
 // ---------- 앱 다리 ----------
 const PENDING={};function call(op,...a){if(!AB){toast('미리보기에선 저장이 안 돼요');return}AB[op](...a.map(String))}
-window.onBridge=function(r){try{if(typeof r==='string')r=JSON.parse(r)}catch(e){return}
+window.onBridge=function(r){try{if(typeof r==='string')r=JSON.parse(r)}catch(e){return}if(r.op==='asset'){gotAsset(r);return}
  if(!r.ok){toast(r.err||'다시 해 주세요');return}
  if(r.op==='pullFur'){const f=FUR[r.k];if(f)gacha(RCOL[f.r],m=>{m.querySelector('.card').innerHTML='<div class="reveal"><p>🪑 가구 뽑기 결과!</p><img alt="" src="'+thumb(r.k)+'"><h3>'+f.n+'</h3><span class="shine" style="background:'+RCOL[f.r]+'">'+f.r+'</span><p>가방에 들어갔어요 · 눌러서 방에 놓아 보세요</p><div class="row"><button class="btn on" id="pl">🏠 바로 놓기</button><button class="btn" id="ok">확인</button></div></div>';
    m.querySelector('#ok').onclick=()=>closeM(m);m.querySelector('#pl').onclick=()=>{closeM(m);const b=(ST.room.fur||[]).slice().reverse().find(x=>x.k===r.k&&!placed.some(p=>p.id===x.id));if(b)itemMenu(b);else toast('잠깐 뒤에 가방에서 눌러 주세요')}})}

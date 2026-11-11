@@ -157,6 +157,7 @@ tr.click:hover{background:#f8fafc;cursor:pointer}
     <button data-t="absent">결석 · 받은 문자</button>
     <button data-t="call">📞 전화 대상</button>
     <button data-t="msg">문자 문구 · 오늘 안내</button>
+    <button data-t="char">🧸 캐릭터 넣기</button>
   </nav>
   <main><div class="panel" id="panel"></div></main>
 </div>
@@ -297,10 +298,81 @@ function renderDev(){
 $('#tabs').onclick = e => { const b = e.target.closest('button'); if (!b) return; S.tab = b.dataset.t; document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b)); render(); };
 function rerender(tabs){ if (!tabs.includes(S.tab)) return; if (S.tab === 'chat') { drawChat(); return; } if (!S.busyInput) render(); }
 function updChatBadge(){ const n = S.inbox.filter(x => !x.handled).length; const b = document.querySelector('#tabs [data-t=chat]'); if (b) b.innerHTML = '💬 문자' + (n ? ` <span class="cbadge">${n}</span>` : ''); }
-function render(){ const p = $('#panel'); ({ today: rToday, chat: rChat, roster: rRoster, bulk: rBulk, month: rMonth, absent: rAbsent, msg: rMsg, call: rCall })[S.tab](p); }
+function render(){ const p = $('#panel'); ({ today: rToday, chat: rChat, roster: rRoster, bulk: rBulk, month: rMonth, absent: rAbsent, msg: rMsg, call: rCall, char: rChar })[S.tab](p); }
 // 글 쓰는 중에는 실시간 갱신으로 화면을 다시 그리지 않음
 document.addEventListener('focusin', e => { if (e.target.matches('#panel input[type=text], #panel textarea')) S.busyInput = true; });
 document.addEventListener('focusout', () => { S.busyInput = false; });
+
+
+/* ─── 🧸 캐릭터 넣기 (마이룸 · 제미타 공용) ───
+   ZIP 을 통째로 넣으면 안에서 쓸 수 있는 걸 알아서 찾아서 서버(도장 계정만 볼 수 있음)에 올려요.
+   · 베드락 3D 모델(.geo.json + 같은 이름 .png) → 마이룸 가구 뽑기에 "피규어"로 · 제미타 게임 몬스터로
+   · 사람 모양 스킨(64×64 등) → 마이룸 캐릭터 뽑기에 · 제미타 캐릭터로
+   · 몬스터·캐릭터 그림 폴더의 png → 세워 놓는 그림 카드로
+   목록(가벼운 것)은 myroomAssets, 큰 데이터는 myroomAssetData 에 따로 저장해요 */
+const CHR = { busy:false, log:'', rar:'랜덤', list:null };
+const RARS = ['노말','레어','에픽','유니크','레전드리'];
+function rRar(){ if (CHR.rar !== '랜덤') return CHR.rar; const r = Math.random(); return r < .03 ? '레전드리' : r < .10 ? '유니크' : r < .25 ? '에픽' : r < .55 ? '레어' : '노말'; }
+const slug = s => String(s).toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'x';
+async function chrList(){ const qs = await getDocs(collection(db, 'myroomAssets')); CHR.list = qs.docs.map(d => { let j = {}; try { j = JSON.parse(d.data().j || '{}'); } catch(e){} return { id: d.id, ...j }; }); }
+async function rChar(p){
+  if (!CHR.list && !CHR.busy){ p.innerHTML = '<div class="card">불러오는 중…</div>'; try { await chrList(); } catch(e){ CHR.list = []; } }
+  const L = CHR.list || []; const by = t => L.filter(t).length;
+  p.innerHTML = `<div class="card"><h2 style="margin-top:0">🧸 캐릭터·피규어 넣기</h2>
+    <p class="sub">ZIP 파일을 <b>통째로</b> 넣으면 안에서 쓸 수 있는 걸 알아서 찾아요. (리소스팩·모드 ZIP 그대로 OK)<br>
+    · 3D 모델(.geo.json + .png) → 마이룸 <b>가구 뽑기</b>에 피규어로 · 제미타 몬스터로<br>· 사람 스킨(64×64) → 마이룸 <b>캐릭터 뽑기</b>에 · 제미타 캐릭터로<br>· 몬스터·캐릭터 그림(png) → 세워 놓는 그림 카드로<br>
+    올린 건 도장 계정으로 로그인한 기기에서만 보여요. 제미타는 [🧪 타격 실험실 → ☁ 출결 서버에서 받기]로 가져가요.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:10px 0">
+      <label class="btn" style="background:var(--blue);color:#fff;padding:10px 16px;border-radius:10px;cursor:pointer">📦 ZIP · 파일 고르기<input id="chF" type="file" multiple accept=".zip,.json,.png" hidden></label>
+      등급 <select id="chR">${['랜덤',...RARS].map(r => `<option ${CHR.rar===r?'selected':''}>${r}</option>`).join('')}</select>
+      <button id="chDel" style="margin-left:auto">PC에서 올린 것 모두 지우기</button></div>
+    <div id="chLog" class="sub" style="white-space:pre-wrap;min-height:22px">${esc(CHR.log)}</div></div>
+    <div class="card"><h3 style="margin-top:0">지금 서버에 있는 것 (${L.length})</h3>
+    <p class="sub">3D 피규어 ${by(a => a.fmt === 'bed')} · 그림 카드 ${by(a => a.fmt === 'spr')} · 사람 스킨 ${by(a => a.type === 'skin')} · 복셀 가구 ${by(a => a.type === 'fur' && !a.fmt)}</p>
+    <div style="max-height:360px;overflow:auto;font-size:13px">${L.slice(0, 600).map(a => `<span style="display:inline-block;margin:2px;padding:3px 8px;border-radius:8px;background:var(--chip)">${a.type === 'skin' ? '🧑' : a.fmt === 'bed' ? '🧸' : a.fmt === 'spr' ? '🖼' : '🪑'} ${esc(a.n || a.id)} <small>${esc(a.r || '')}</small> <a href="#" data-cdel="${esc(a.id)}" style="color:var(--bad)">✕</a></span>`).join('')}${L.length > 600 ? ' …' : ''}</div></div>`;
+  $('#chR').onchange = e => CHR.rar = e.target.value;
+  $('#chF').onchange = async e => { const fs = [...e.target.files]; e.target.value = ''; await chrImport(fs); };
+  $('#chDel').onclick = async () => { if (!confirm('PC에서 올린 캐릭터·피규어를 모두 지울까요?')) return; const mine = (CHR.list || []).filter(a => a.src === 'pc'); let b = writeBatch(db), n = 0;
+    for (const a of mine){ b.delete(doc(db, 'myroomAssets', a.id)); b.delete(doc(db, 'myroomAssetData', a.id)); if (++n % 200 === 0){ await b.commit(); b = writeBatch(db); } } await b.commit(); CHR.log = mine.length + '개 지웠어요'; CHR.list = null; render(); };
+  p.querySelectorAll('[data-cdel]').forEach(a => a.onclick = async e => { e.preventDefault(); const id = a.dataset.cdel; await deleteDoc(doc(db, 'myroomAssets', id)); await deleteDoc(doc(db, 'myroomAssetData', id)).catch(() => {}); CHR.list = CHR.list.filter(x => x.id !== id); render(); });
+}
+const PNGSZ = u => u.length > 24 && u[0] === 0x89 && u[1] === 0x50 ? [(u[16]<<24|u[17]<<16|u[18]<<8|u[19])>>>0, (u[20]<<24|u[21]<<16|u[22]<<8|u[23])>>>0] : null;
+const blobUrl = b => new Promise(r => { const f = new FileReader(); f.onload = () => r(f.result); f.readAsDataURL(b); });
+const loadI = b => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(b); });
+function coverOf(img, x, y, w, h, S){ const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; const g = c.getContext('2d'); g.drawImage(img, 0, 0); const d = g.getImageData(x*S, y*S, w*S, h*S).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 200) n++; return n / (d.length / 4); }
+async function skinOf(blob, w, h){ if (!((w === 64 && (h === 64 || h === 32)) || (w === 128 && (h === 128 || h === 64)))) return null; const img = await loadI(blob); const S = w / 64;
+  if (!(coverOf(img, 8, 8, 8, 8, S) > .92 && coverOf(img, 20, 20, 8, 12, S) > .85 && coverOf(img, 0, 0, 8, 8, S) < .5)) return null;
+  const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(img, 0, 0, w, Math.min(h, 64*S), 0, 0, 64, Math.min(h, 64*S) / S);
+  if (h / S === 32){ g.drawImage(c, 0, 16, 16, 16, 16, 48, 16, 16); g.drawImage(c, 40, 16, 16, 16, 32, 48, 16, 16); } return c.toDataURL('image/png'); }
+const SPR_DIR = /(pokemon|monster|creature|mob|sprite|character|chara|pet|enemy|entity|entities)/i, SKIP_DIR = /(item|icon|gui|\bui\b|font|ribbon|symbol|mark|badge|type|particle|block|terrain|environment|armor|shiny|back|footprint|menu|button)/i;
+async function chrImport(fs){ if (CHR.busy) return; CHR.busy = true; const say = t => { CHR.log = t; const el = $('#chLog'); if (el) el.textContent = t; };
+  try {
+    const { unzipSync } = await import('https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js');
+    const files = {}; // 경로 → Uint8Array
+    for (const f of fs){ if (/\.zip$/i.test(f.name)){ say(f.name + ' 여는 중… (' + Math.round(f.size / 1e6) + 'MB)'); const z = unzipSync(new Uint8Array(await f.arrayBuffer()), { filter: x => /\.(json|png)$/i.test(x.name) && !/__MACOSX/.test(x.name) }); Object.assign(files, z); }
+      else files[f.name] = new Uint8Array(await f.arrayBuffer()); }
+    const names = Object.keys(files), base = n => n.split('/').pop(), stem = n => base(n).replace(/(\.geo)?\.(json|png)$/i, '').toLowerCase();
+    const pngBy = new Map(); names.filter(n => /\.png$/i.test(n)).forEach(n => { const s = stem(n); if (!pngBy.has(s)) pngBy.set(s, []); pngBy.get(s).push(n); });
+    if (!CHR.list) await chrList(); const have = new Set(CHR.list.map(a => a.id)); const used = new Set(); const out = []; // {id, j, data}
+    const uniq = id => { let k = id, i = 2; while (have.has(k)) k = id + '_' + (i++); have.add(k); return k; };
+    for (const n of names.filter(n => /\.json$/i.test(n))){ const txt = new TextDecoder().decode(files[n]); if (!/"bones"/.test(txt) || !/geometry/.test(txt)) continue; const s = stem(n);
+      let pn = (pngBy.get(s) || [])[0] || (pngBy.get(s.replace(/_(male|female)$/, '')) || [])[0]; if (!pn){ const dir = (n.split('/').slice(-2, -1)[0] || '').replace(/^\d+_/, ''); pn = (pngBy.get(dir) || [])[0]; }
+      if (!pn) continue; used.add(pn); const b = await blobUrl(new Blob([files[pn]], { type: 'image/png' })); if (txt.length + b.length > 950000) continue;
+      const id = uniq('b_' + slug(s)); out.push({ id, j: { type: 'fur', fmt: 'bed', k: id, n: s, r: rRar(), w: 1, d: 1, lazy: 1, src: 'pc' }, data: { g: txt, b } }); if (out.length % 50 === 0) say('3D 모델 찾는 중… ' + out.length); }
+    let sk = 0, sp = 0;
+    for (const n of names.filter(n => /\.png$/i.test(n) && !used.has(n))){ const sz = PNGSZ(files[n]); if (!sz) continue; const blob = new Blob([files[n]], { type: 'image/png' });
+      const s64 = await skinOf(blob, sz[0], sz[1]).catch(() => null);
+      if (s64){ const id = uniq('s_' + slug(stem(n))); out.push({ id, j: { type: 'skin', k: id, n: stem(n), b: s64, src: 'pc' } }); sk++; }
+      else { const dir = n.split('/').slice(0, -1).join('/'); if (SPR_DIR.test(dir) && !SKIP_DIR.test(dir) && sz[0] >= 24 && sz[1] >= 24 && sz[0] <= 512 && sz[1] <= 512){ const id = uniq('p_' + slug(stem(n))); out.push({ id, j: { type: 'fur', fmt: 'spr', k: id, n: stem(n), r: rRar(), w: 1, d: 1, lazy: 1, src: 'pc' }, data: { b: await blobUrl(blob) } }); sp++; } }
+      if ((sk + sp) % 80 === 0) say('그림 찾는 중… 스킨 ' + sk + ' · 그림 ' + sp); }
+    if (!out.length){ say('쓸 수 있는 캐릭터를 못 찾았어요 (.geo.json+.png 모델, 64×64 스킨, 캐릭터 그림 png)'); return; }
+    say(out.length + '개 서버에 올리는 중…'); let b = writeBatch(db), n = 0, sizeAcc = 0;
+    for (const a of out){ b.set(doc(db, 'myroomAssets', a.id), { j: JSON.stringify(a.j), at: Date.now() }); if (a.data) b.set(doc(db, 'myroomAssetData', a.id), a.data);
+      sizeAcc += (a.data ? (a.data.g || '').length + (a.data.b || '').length : 0) + (a.j.b || '').length; n++;
+      if (n % 150 === 0 || sizeAcc > 8e6){ await b.commit(); b = writeBatch(db); sizeAcc = 0; say('올리는 중… ' + n + ' / ' + out.length); } }
+    await b.commit(); const nb = out.filter(a => a.j.fmt === 'bed').length;
+    say('다 올렸어요! 3D 피규어 ' + nb + ' · 사람 스킨 ' + sk + ' · 그림 카드 ' + sp + '\n출결 앱 마이룸 뽑기에 바로 나오고, 제미타는 타격 실험실에서 ☁ 받기를 누르면 돼요.'); CHR.list = null; render();
+  } catch(e){ say('실패했어요: ' + e.message); } finally { CHR.busy = false; } }
 
 /* ─── 오늘 출결 ─── */
 const ST = { PENDING:['대기','t-wait'], SENDING:['보내는 중','t-wait'], SENT:['문자 보냄','t-ok'], FAILED:['실패','t-bad'], EXPIRED:['늦어서 안 보냄','t-gray'] };
