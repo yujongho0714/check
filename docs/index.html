@@ -381,7 +381,7 @@ function fromJava(src,file){src=src.replace(/\/\*[\s\S]*?\*\//g,'').replace(/\/\
   return out}
 return{fromJava,texIndex,pair}})();
 
-const CHR = { busy:false, log:'', rar:'랜덤', list:null };
+const CHR = { busy:false, log:'', rar:'랜덤', list:null, pk:'', kind:'all' };
 const RARS = ['노말','레어','에픽','유니크','레전드리'];
 function rRar(){ if (CHR.rar !== '랜덤') return CHR.rar; const r = Math.random(); return r < .03 ? '레전드리' : r < .10 ? '유니크' : r < .25 ? '에픽' : r < .55 ? '레어' : '노말'; }
 const slug = s => String(s).toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'x';
@@ -398,10 +398,25 @@ async function rChar(p){
       등급 <select id="chR">${['랜덤',...RARS].map(r => `<option ${CHR.rar===r?'selected':''}>${r}</option>`).join('')}</select>
       <button id="chDel" style="margin-left:auto">PC에서 올린 것 모두 지우기</button></div>
     <div id="chLog" class="sub" style="white-space:pre-wrap;min-height:22px">${esc(CHR.log)}</div></div>
-    <div class="card"><h3 style="margin-top:0">지금 서버에 있는 것 (${L.length})</h3>
-    <p class="sub">3D 피규어 ${by(a => a.fmt === 'bed')} · 그림 카드 ${by(a => a.fmt === 'spr')} · 사람 스킨 ${by(a => a.type === 'skin')} · 복셀 가구 ${by(a => a.type === 'fur' && !a.fmt)}</p>
-    <div style="max-height:360px;overflow:auto;font-size:13px">${L.slice(0, 600).map(a => `<span style="display:inline-block;margin:2px;padding:3px 8px;border-radius:8px;background:var(--chip)">${a.type === 'skin' ? '🧑' : a.fmt === 'bed' ? '🧸' : a.fmt === 'spr' ? '🖼' : '🪑'} ${esc(a.n || a.id)} <small>${esc(a.r || '')}</small> <a href="#" data-cdel="${esc(a.id)}" style="color:var(--bad)">✕</a></span>`).join('')}${L.length > 600 ? ' …' : ''}</div></div>`;
+    <div class="card"><h3 style="margin-top:0">✅ 쓸 캐릭터 고르기 <small class="sub">(서버에 ${L.length}개 · 켠 것 ${L.filter(a => a.src !== 'pc' || a.on).length}개)</small></h3>
+    <p class="sub">PC에서 올린 건 처음엔 <b>꺼져</b> 있어요. 그림을 눌러 <b>초록(켬)</b>으로 바꾼 것만 마이룸 뽑기와 제미타에 나와요.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><select id="chPk">${[...new Set(L.filter(a => a.src === 'pc').map(a => a.pk || '기타'))].map(p => `<option ${CHR.pk===p?'selected':''}>${esc(p)}</option>`).join('')}</select>
+      ${[['all','전체'],['bed','🧸 3D'],['skin','🧑 스킨'],['spr','🖼 그림']].map(([k,t]) => `<button data-ck="${k}" style="${(CHR.kind||'all')===k?'background:#ffd23f':''}">${t}</button>`).join('')}
+      <button id="chOnAll">이 목록 전부 켜기</button><button id="chOffAll">전부 끄기</button></div>
+    <div id="chGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;max-height:560px;overflow:auto"></div></div>`;
   $('#chR').onchange = e => CHR.rar = e.target.value;
+  const pks = [...new Set(L.filter(a => a.src === 'pc').map(a => a.pk || '기타'))]; if (!CHR.pk || !pks.includes(CHR.pk)) CHR.pk = pks[0] || '';
+  const vis = () => L.filter(a => a.src === 'pc' && (a.pk || '기타') === CHR.pk && ((CHR.kind || 'all') === 'all' || (CHR.kind === 'skin' ? a.type === 'skin' : a.fmt === CHR.kind)));
+  const setOn = async (arr, on) => { let b = writeBatch(db), n = 0; for (const a of arr){ a.on = on; const j = { ...a }; delete j.id; b.update(doc(db, 'myroomAssets', a.id), { j: JSON.stringify(j) }); if (++n % 300 === 0){ await b.commit(); b = writeBatch(db); } } await b.commit(); };
+  const drawGrid = () => { const G = $('#chGrid'); if (!G) return; G.innerHTML = vis().slice(0, 1500).map(a => `<div data-cid="${esc(a.id)}" style="cursor:pointer;border-radius:12px;padding:6px;text-align:center;background:${a.on ? '#dcfce7' : '#f3f4f6'};border:3px solid ${a.on ? '#16a34a' : 'transparent'}">
+      <div style="height:96px;display:flex;align-items:center;justify-content:center">${a.t ? `<img src="${a.t}" style="max-width:96px;max-height:96px;image-rendering:pixelated">` : '<span class="sub">그림 없음</span>'}</div>
+      <div style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.on ? '✅ ' : ''}${esc(a.n || a.id)}</div></div>`).join('') || '<p class="sub">여기엔 아직 없어요</p>';
+    G.querySelectorAll('[data-cid]').forEach(el => el.onclick = async () => { const a = L.find(x => x.id === el.dataset.cid); if (!a) return; await setOn([a], !a.on); drawGrid(); }); };
+  drawGrid();
+  const pkSel = $('#chPk'); if (pkSel) pkSel.onchange = () => { CHR.pk = pkSel.value; drawGrid(); };
+  p.querySelectorAll('[data-ck]').forEach(b => b.onclick = () => { CHR.kind = b.dataset.ck; render(); });
+  $('#chOnAll').onclick = async () => { const v = vis(); if (!v.length) return; await setOn(v, true); drawGrid(); toast(v.length + '개 켰어요'); };
+  $('#chOffAll').onclick = async () => { const v = vis(); if (!v.length) return; await setOn(v, false); drawGrid(); toast(v.length + '개 껐어요'); };
   $('#chF').onchange = async e => { const fs = [...e.target.files]; e.target.value = ''; await chrImport(fs); };
   $('#chDel').onclick = async () => { if (!confirm('PC에서 올린 캐릭터·피규어를 모두 지울까요?')) return; const mine = (CHR.list || []).filter(a => a.src === 'pc'); let b = writeBatch(db), n = 0;
     for (const a of mine){ b.delete(doc(db, 'myroomAssets', a.id)); b.delete(doc(db, 'myroomAssetData', a.id)); if (++n % 200 === 0){ await b.commit(); b = writeBatch(db); } } await b.commit(); CHR.log = mine.length + '개 지웠어요'; CHR.list = null; render(); };
@@ -416,39 +431,73 @@ async function skinOf(blob, w, h){ if (!((w === 64 && (h === 64 || h === 32)) ||
   const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(img, 0, 0, w, Math.min(h, 64*S), 0, 0, 64, Math.min(h, 64*S) / S);
   if (h / S === 32){ g.drawImage(c, 0, 16, 16, 16, 16, 48, 16, 16); g.drawImage(c, 40, 16, 16, 16, 32, 48, 16, 16); } return c.toDataURL('image/png'); }
 const SPR_DIR = /(pokemon|monster|creature|mob|sprite|character|chara|pet|enemy|entity|entities)/i, SKIP_DIR = /(item|icon|gui|\bui\b|font|ribbon|symbol|mark|badge|type|particle|block|terrain|environment|armor|shiny|back|footprint|menu|button)/i;
+
+let THREE_OK = null; function needThree(){ return THREE_OK || (THREE_OK = new Promise((res, rej) => { if (window.THREE) return res(); const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'; sc.onload = res; sc.onerror = rej; document.head.appendChild(sc); })); }
+function bedrockPC(json,img){const j=typeof json==='string'?JSON.parse(json):json;let geo=null,tw=64,th=64;
+  if(j['minecraft:geometry']){geo=j['minecraft:geometry'][0];tw=geo.description&&geo.description.texture_width||64;th=geo.description&&geo.description.texture_height||64}
+  else{const k=Object.keys(j).find(k=>k.startsWith('geometry'));geo=j[k];tw=geo&&geo.texturewidth||64;th=geo&&geo.textureheight||64}
+  if(!geo||!geo.bones)throw new Error('뼈대(bones)가 없어요');
+  let tex=null;if(img){tex=new THREE.CanvasTexture(img);tex.magFilter=THREE.NearestFilter;tex.minFilter=THREE.NearestFilter;tex.encoding=THREE.sRGBEncoding}
+  const mat=new THREE.MeshLambertMaterial({map:tex,color:tex?0xffffff:0xd0a070,alphaTest:.4,side:THREE.DoubleSide});const root=new THREE.Group(),G={},D=Math.PI/180;
+  const faceUV=(gm,fi,u,v,w,h,fx)=>{const uv=gm.attributes.uv;const u0=u/tw,u1=(u+w)/tw,v0=1-v/th,v1=1-(v+h)/th;const a=fx?[u1,u0]:[u0,u1];uv.setXY(fi*4,a[0],v0);uv.setXY(fi*4+1,a[1],v0);uv.setXY(fi*4+2,a[0],v1);uv.setXY(fi*4+3,a[1],v1)};
+  geo.bones.forEach(b=>{const g=new THREE.Group();g.name=b.name;const pv=b.pivot||[0,0,0];g.userData.pv=pv;G[b.name]=g;
+    (b.cubes||[]).forEach(c=>{const [w,h,d]=c.size||[1,1,1],o=c.origin||[0,0,0],inf=c.inflate||0;const gm=new THREE.BoxGeometry(Math.max(w+inf*2,.001)/16,Math.max(h+inf*2,.001)/16,Math.max(d+inf*2,.001)/16);
+      if(Array.isArray(c.uv)){const [u,v]=c.uv;const W=Math.floor(w),H=Math.floor(h),Dd=Math.floor(d);faceUV(gm,0,u+Dd+W,v+Dd,Dd,H,c.mirror);faceUV(gm,1,u,v+Dd,Dd,H,c.mirror);faceUV(gm,2,u+Dd,v,W,Dd);faceUV(gm,3,u+Dd+W,v,W,Dd);faceUV(gm,4,u+Dd+W+Dd,v+Dd,W,H,c.mirror);faceUV(gm,5,u+Dd,v+Dd,W,H,c.mirror)}
+      else if(c.uv){const F=c.uv;['west','east','up','down','south','north'].forEach((n,i)=>{const f=F[n];if(f&&f.uv){const s=f.uv_size||[0,0];faceUV(gm,i,Math.min(f.uv[0],f.uv[0]+s[0]),Math.min(f.uv[1],f.uv[1]+s[1]),Math.abs(s[0]),Math.abs(s[1]),s[0]<0)}})}
+      const m=new THREE.Mesh(gm,mat);m.castShadow=true;const cx=-(o[0]+w/2),cy=o[1]+h/2,cz=o[2]+d/2;
+      if(c.rotation){const cp=c.pivot||[0,0,0];const sub=new THREE.Group();sub.position.set(-cp[0]/16,cp[1]/16,cp[2]/16);sub.rotation.set(-c.rotation[0]*D,c.rotation[1]*D,-c.rotation[2]*D,'ZYX');m.position.set((cx+cp[0])/16,(cy-cp[1])/16,(cz-cp[2])/16);sub.add(m);sub.userData.abs=1;g.add(sub)}
+      else{m.position.set(cx/16,cy/16,cz/16);m.userData.abs=1;g.add(m)}});
+    if(b.rotation)g.userData.rot=b.rotation});
+  geo.bones.forEach(b=>{const g=G[b.name],pv=g.userData.pv;const par=b.parent&&G[b.parent];const ppv=par?par.userData.pv:[0,0,0];
+    g.position.set(-(pv[0]-ppv[0])/16,(pv[1]-ppv[1])/16,(pv[2]-ppv[2])/16);g.children.forEach(ch=>{if(ch.userData.abs)ch.position.sub(new THREE.Vector3(-pv[0]/16,pv[1]/16,pv[2]/16))});
+    if(g.userData.rot){const r=g.userData.rot;g.rotation.set(-r[0]*D,r[1]*D,-r[2]*D,'ZYX')}(par||root).add(g)});
+  return root}
+
+let TR3 = null, TS3 = null, TC3 = null;
+async function thumbOf(a){ const cv = document.createElement('canvas'); cv.width = cv.height = 96; const g = cv.getContext('2d'); g.imageSmoothingEnabled = false;
+  if (a.j.type === 'skin'){ const im = await loadI(await (await fetch(a.j.b)).blob()); g.drawImage(im, 8, 8, 8, 8, 8, 8, 80, 80); g.drawImage(im, 40, 8, 8, 8, 8, 8, 80, 80); return cv.toDataURL('image/png'); }
+  if (a.j.fmt === 'spr'){ const im = await loadI(await (await fetch(a.data.b)).blob()); const k = Math.min(96 / im.width, 96 / im.height); g.drawImage(im, (96 - im.width * k) / 2, (96 - im.height * k) / 2, im.width * k, im.height * k); return cv.toDataURL('image/png'); }
+  await needThree(); if (!TR3){ TR3 = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true }); TR3.setSize(128, 128); TS3 = new THREE.Scene(); TS3.add(new THREE.HemisphereLight(0xffffff, 0x8090a0, 1)); const d = new THREE.DirectionalLight(0xffffff, .6); d.position.set(2, 4, 3); TS3.add(d); TC3 = new THREE.PerspectiveCamera(30, 1, .01, 100); }
+  const im = await loadI(await (await fetch(a.data.b)).blob()); const c2 = document.createElement('canvas'); c2.width = im.width; c2.height = im.height; c2.getContext('2d').drawImage(im, 0, 0);
+  const o = bedrockPC(a.data.g, c2); const grp = new THREE.Group(); grp.add(o); grp.rotation.y = Math.PI; const bb = new THREE.Box3().setFromObject(grp), sz = bb.getSize(new THREE.Vector3()), ce = bb.getCenter(new THREE.Vector3()); const r = Math.max(sz.x, sz.y, sz.z) || 1;
+  grp.position.sub(ce); TS3.add(grp); TC3.position.set(r * .9, r * .5, r * 2); TC3.lookAt(0, 0, 0); TR3.render(TS3, TC3); g.drawImage(TR3.domElement, 0, 0, 96, 96); TS3.remove(grp); return cv.toDataURL('image/webp', .8); }
 async function chrImport(fs){ if (CHR.busy) return; CHR.busy = true; const say = t => { CHR.log = t; const el = $('#chLog'); if (el) el.textContent = t; };
   try {
     const { unzipSync } = await import('https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js');
     const files = {}; // 경로 → Uint8Array
-    for (const f of fs){ if (/\.zip$/i.test(f.name)){ say(f.name + ' 여는 중… (' + Math.round(f.size / 1e6) + 'MB)'); const z = unzipSync(new Uint8Array(await f.arrayBuffer()), { filter: x => /\.(json|png|java)$/i.test(x.name) && !/__MACOSX/.test(x.name) }); Object.assign(files, z); }
-      else files[f.name] = new Uint8Array(await f.arrayBuffer()); }
+    const packOf = {};
+    for (const f of fs){ if (/\.zip$/i.test(f.name)){ say(f.name + ' 여는 중… (' + Math.round(f.size / 1e6) + 'MB)'); const z = unzipSync(new Uint8Array(await f.arrayBuffer()), { filter: x => /\.(json|png|java)$/i.test(x.name) && !/__MACOSX/.test(x.name) }); Object.assign(files, z); const pk = f.name.replace(/\.zip$/i, ''); for (const k in z) packOf[k] = pk; }
+      else { files[f.name] = new Uint8Array(await f.arrayBuffer()); packOf[f.name] = '낱개 파일'; } }
     const names = Object.keys(files), base = n => n.split('/').pop(), stem = n => base(n).replace(/(\.geo)?\.(json|png)$/i, '').toLowerCase();
     const pngBy = new Map(); names.filter(n => /\.png$/i.test(n)).forEach(n => { const s = stem(n); if (!pngBy.has(s)) pngBy.set(s, []); pngBy.get(s).push(n); });
+    const ANIMS = {}; for (const n of names.filter(n => /\.animation\.json$/i.test(n))){ try { const A = JSON.parse(new TextDecoder().decode(files[n])).animations || {}; for (const k in A){ const m = k.match(/^animation\.([^.]+)\.(.+)$/); if (m) (ANIMS[m[1].toLowerCase()] || (ANIMS[m[1].toLowerCase()] = {}))[m[2]] = A[k]; } } catch(e){} }
+    const animFor = s => { if (ANIMS[s]) return JSON.stringify(ANIMS[s]); const b = Object.keys(ANIMS).filter(x => s.startsWith(x)).sort((a, b) => b.length - a.length)[0]; return b ? JSON.stringify(ANIMS[b]) : ''; };
     if (!CHR.list) await chrList(); const have = new Set(CHR.list.map(a => a.id)); const used = new Set(); const out = []; // {id, j, data}
     const uniq = id => { let k = id, i = 2; while (have.has(k)) k = id + '_' + (i++); have.add(k); return k; };
     for (const n of names.filter(n => /\.json$/i.test(n))){ const txt = new TextDecoder().decode(files[n]); if (!/"bones"/.test(txt) || !/geometry/.test(txt)) continue; const s = stem(n);
       let pn = (pngBy.get(s) || [])[0] || (pngBy.get(s.replace(/_(male|female)$/, '')) || [])[0]; if (!pn){ const dir = (n.split('/').slice(-2, -1)[0] || '').replace(/^\d+_/, ''); pn = (pngBy.get(dir) || [])[0]; }
       if (!pn) continue; used.add(pn); const b = await blobUrl(new Blob([files[pn]], { type: 'image/png' })); if (txt.length + b.length > 950000) continue;
-      const id = uniq('b_' + slug(s)); out.push({ id, j: { type: 'fur', fmt: 'bed', k: id, n: s, r: rRar(), w: 1, d: 1, lazy: 1, src: 'pc' }, data: { g: txt, b } }); if (out.length % 50 === 0) say('3D 모델 찾는 중… ' + out.length); }
+      const id = uniq('b_' + slug(s)); { const an = animFor(s); out.push({ id, pk: packOf[n], j: { type: 'fur', fmt: 'bed', k: id, n: s, r: rRar(), w: 1, d: 1, lazy: 1, src: 'pc' }, data: { g: txt, b, a: (txt.length + b.length + an.length < 950000) ? an : '' } }); } if (out.length % 50 === 0) say('3D 모델 찾는 중… ' + out.length); }
     // 자바 모드(.java 안의 3D 모델 코드) → 베드락 모델로 바꿔서
     { const pngs = names.filter(n => /\.png$/i.test(n)); let nj = 0; const jn = names.filter(n => /\.java$/i.test(n)); const texts = jn.map(n => new TextDecoder().decode(files[n])); const tidx = JAVAMODEL.texIndex(texts);
       for (let q = 0; q < jn.length; q++){ let R = []; try { R = JAVAMODEL.fromJava(texts[q], jn[q]); } catch(e){}
         for (const r of R){ const pn = JAVAMODEL.pair(r, pngs, tidx, c => PNGSZ(files[c])); if (!pn) continue; used.add(pn);
           const g = JSON.stringify(r.geo), b = await blobUrl(new Blob([files[pn]], { type: 'image/png' })); if (g.length + b.length > 950000) continue;
-          const id = uniq('j_' + slug(r.name)); out.push({ id, j: { type: 'fur', fmt: 'bed', k: id, n: r.name.toLowerCase(), r: rRar(), w: 1, d: 1, lazy: 1, src: 'pc' }, data: { g, b } }); if (++nj % 30 === 0) say('자바 모델 바꾸는 중… ' + nj); } } }
+          const id = uniq('j_' + slug(r.name)); out.push({ id, pk: packOf[jn[q]], j: { type: 'fur', fmt: 'bed', k: id, n: r.name.toLowerCase(), r: rRar(), w: 1, d: 1, lazy: 1, src: 'pc' }, data: { g, b, a: r.anim ? JSON.stringify({ __java: r.anim }) : '' } }); if (++nj % 30 === 0) say('자바 모델 바꾸는 중… ' + nj); } } }
     let sk = 0, sp = 0;
     for (const n of names.filter(n => /\.png$/i.test(n) && !used.has(n))){ const sz = PNGSZ(files[n]); if (!sz) continue; const blob = new Blob([files[n]], { type: 'image/png' });
       const s64 = await skinOf(blob, sz[0], sz[1]).catch(() => null);
-      if (s64){ const id = uniq('s_' + slug(stem(n))); out.push({ id, j: { type: 'skin', k: id, n: stem(n), b: s64, src: 'pc' } }); sk++; }
-      else { const dir = n.split('/').slice(0, -1).join('/'); if (SPR_DIR.test(dir) && !SKIP_DIR.test(dir) && sz[0] >= 24 && sz[1] >= 24 && sz[0] <= 512 && sz[1] <= 512){ const id = uniq('p_' + slug(stem(n))); out.push({ id, j: { type: 'fur', fmt: 'spr', k: id, n: stem(n), r: rRar(), w: 1, d: 1, lazy: 1, src: 'pc' }, data: { b: await blobUrl(blob) } }); sp++; } }
+      if (s64){ const id = uniq('s_' + slug(stem(n))); out.push({ id, pk: packOf[n], j: { type: 'skin', k: id, n: stem(n), b: s64, src: 'pc' } }); sk++; }
+      else { const dir = n.split('/').slice(0, -1).join('/'); if (SPR_DIR.test(dir) && !SKIP_DIR.test(dir) && sz[0] >= 24 && sz[1] >= 24 && sz[0] <= 512 && sz[1] <= 512){ const id = uniq('p_' + slug(stem(n))); out.push({ id, pk: packOf[n], j: { type: 'fur', fmt: 'spr', k: id, n: stem(n), r: rRar(), w: 1, d: 1, lazy: 1, src: 'pc' }, data: { b: await blobUrl(blob) } }); sp++; } }
       if ((sk + sp) % 80 === 0) say('그림 찾는 중… 스킨 ' + sk + ' · 그림 ' + sp); }
     if (!out.length){ say('쓸 수 있는 캐릭터를 못 찾았어요 (.geo.json+.png 모델, 64×64 스킨, 캐릭터 그림 png)'); return; }
+    say('미리보기 그림 만드는 중…'); for (let i = 0; i < out.length; i++){ const a = out[i]; a.j.on = false; a.j.pk = a.pk || '기타'; try { a.j.t = await thumbOf(a); } catch(e){} if (i % 25 === 0) say('미리보기 그림 만드는 중… ' + i + ' / ' + out.length); }
     say(out.length + '개 서버에 올리는 중…'); let b = writeBatch(db), n = 0, sizeAcc = 0;
     for (const a of out){ b.set(doc(db, 'myroomAssets', a.id), { j: JSON.stringify(a.j), at: Date.now() }); if (a.data) b.set(doc(db, 'myroomAssetData', a.id), a.data);
       sizeAcc += (a.data ? (a.data.g || '').length + (a.data.b || '').length : 0) + (a.j.b || '').length; n++;
       if (n % 150 === 0 || sizeAcc > 8e6){ await b.commit(); b = writeBatch(db); sizeAcc = 0; say('올리는 중… ' + n + ' / ' + out.length); } }
     await b.commit(); const nb = out.filter(a => a.j.fmt === 'bed').length;
-    say('다 올렸어요! 3D 피규어 ' + nb + ' · 사람 스킨 ' + sk + ' · 그림 카드 ' + sp + '\n출결 앱 마이룸 뽑기에 바로 나오고, 제미타는 타격 실험실에서 ☁ 받기를 누르면 돼요.'); CHR.list = null; render();
+    say('다 올렸어요! 3D 피규어 ' + nb + ' · 사람 스킨 ' + sk + ' · 그림 카드 ' + sp + '\n아래에서 그림을 보고 눌러서 켠 것만 마이룸 뽑기·제미타에 나와요.'); CHR.list = null; render();
   } catch(e){ say('실패했어요: ' + e.message); } finally { CHR.busy = false; } }
 
 /* ─── 오늘 출결 ─── */
