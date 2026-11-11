@@ -844,6 +844,9 @@ object Repo {
         myroomAssets().addSnapshotListener { qs, _ ->
             if (qs == null) return@addSnapshotListener
             MyRoom.custom = qs.documents.mapNotNull { d -> runCatching { org.json.JSONObject(d.getString("j") ?: "") }.getOrNull() }
+                // PC에서 올린 캐릭터는 관리자가 켠 것(on=true)만 씀. 꺼진 건 뽑기·마이룸·캐릭터 목록에 안 나옴
+                .filter { it.optString("src") != "pc" || it.optBoolean("on", false) }
+                .onEach { it.remove("t") }
         },
     )
 
