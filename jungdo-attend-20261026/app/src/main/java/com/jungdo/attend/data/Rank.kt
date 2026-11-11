@@ -101,7 +101,8 @@ object Rank {
         val after = (s.exp + base + bonus).coerceAtMost(MAX_EXP)
 
         val f = HashMap<String, Any>()
-        f["exp"] = after
+        // 올리는 만큼만 더함 (화면에 있던 값이 조금 낡았어도 경험치가 거꾸로 내려가지 않게)
+        f["exp"] = com.google.firebase.firestore.FieldValue.increment((after - s.exp).toLong())
         f["streak"] = streak
         if (!off) f["streakDay"] = today
         f[if (type == EventType.IN) "inDay" else "outDay"] = today

@@ -346,13 +346,40 @@ function parseClass(name,src){const P={},order=[];let tw=64,th=64;const T=src.ma
   const bones=L.map(p=>{const A=abs(p);const b={name:p.n,pivot:[A[0],24-A[1],A[2]],cubes:p.cubes.map(c=>({origin:[A[0]+c.o[0],24-(A[1]+c.o[1]+c.s[1]),A[2]+c.o[2]],size:c.s,uv:c.uv,inflate:c.inf||undefined,mirror:c.mir||undefined}))};
     if(p.rot.some(v=>v))b.rotation=[p.rot[0]*R,-p.rot[1]*R,-p.rot[2]*R];if(p.par&&P[p.par])b.parent=p.par;return b});
   return{name,tw,th,geo:{format_version:'1.12.0','minecraft:geometry':[{description:{identifier:'geometry.'+name.toLowerCase(),texture_width:tw,texture_height:th},bones}]}}}
+
+// 1.17 이후 방식: parent.addOrReplaceChild("이름", CubeListBuilder.create().texOffs(u,v).addBox(...), PartPose.offset(...) / offsetAndRotation(...))
+function parseNew(name,src){let tw=64,th=64;const lc=src.match(/LayerDefinition\.create\s*\(\s*\w+\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*\)/);if(lc){tw=+lc[1];th=+lc[2]}
+  const P={},order=[],V={};const re=/(?:PartDefinition\s+(\w+)\s*=\s*)?([\w.]+)\s*\.\s*addOrReplaceChild\s*\(/g;let m;
+  while((m=re.exec(src))){let j=re.lastIndex,d=1;while(j<src.length&&d){if(src[j]==='(')d++;else if(src[j]===')')d--;j++}const a=args(src.slice(re.lastIndex,j-1));re.lastIndex=j;
+    const pn=(a[0]||'').replace(/^"|"$/g,'')||('p'+order.length);const parVar=m[2].replace(/^this\./,'');const par=V[parVar]||null;
+    const p={n:pn,pv:[0,0,0],rot:[0,0,0],cubes:[],par};let uv=[0,0],mir=false;const b=a[1]||'';const cr=/\.\s*(texOffs|addBox|mirror)\s*\(/g;let c;
+    while((c=cr.exec(b))){let k=cr.lastIndex,dd=1;while(k<b.length&&dd){if(b[k]==='(')dd++;else if(b[k]===')')dd--;k++}const ca=args(b.slice(cr.lastIndex,k-1));cr.lastIndex=k;
+      if(c[1]==='texOffs')uv=[num(ca[0]),num(ca[1])];else if(c[1]==='mirror')mir=!/false/.test(ca[0]||'');
+      else{const v=ca.filter(x=>!/^"/.test(x));if(v.length>=6){let inf=0;const cd=v.find(x=>/CubeDeformation/.test(x));if(cd){const q=cd.match(/\(([^)]*)\)/);inf=q?num(q[1]):0}else if(v[6]&&!/true|false/.test(v[6]))inf=num(v[6]);
+        p.cubes.push({uv:uv.slice(),o:[num(v[0]),num(v[1]),num(v[2])],s:[num(v[3]),num(v[4]),num(v[5])],inf,mir})}}}
+    const pose=a[2]||'';const po=pose.match(/offsetAndRotation\s*\(([^)]*)\)/)||pose.match(/offset\s*\(([^)]*)\)/);if(po){const q=args(po[1]).map(num);p.pv=[q[0]||0,q[1]||0,q[2]||0];if(q.length>=6)p.rot=[q[3]||0,q[4]||0,q[5]||0]}
+    let key=pn,i=2;while(P[key])key=pn+'_'+(i++);p.n=key;P[key]=p;order.push(key);if(m[1])V[m[1]]=key}
+  const L=order.map(n=>P[n]);if(!L.some(p=>p.cubes.length))return null;
+  const abs=p=>{let a=p.pv.slice(),q=p;while(q.par&&P[q.par]){q=P[q.par];a=[a[0]+q.pv[0],a[1]+q.pv[1],a[2]+q.pv[2]]}return a};const R=180/Math.PI;
+  const bones=L.map(p=>{const A=abs(p);const b={name:p.n,pivot:[A[0],24-A[1],A[2]],cubes:p.cubes.map(c=>({origin:[A[0]+c.o[0],24-(A[1]+c.o[1]+c.s[1]),A[2]+c.o[2]],size:c.s,uv:c.uv,inflate:c.inf||undefined,mirror:c.mir||undefined}))};
+    if(p.rot.some(v=>v))b.rotation=[p.rot[0]*R,-p.rot[1]*R,-p.rot[2]*R];if(p.par)b.parent=p.par;return b});
+  return{name,tw,th,geo:{format_version:'1.12.0','minecraft:geometry':[{description:{identifier:'geometry.'+name.toLowerCase(),texture_width:tw,texture_height:th},bones}]}}}
+// 다른 파일(렌더러)에서 "이 모델엔 이 그림" 연결 찾기
+function texIndex(javaTexts){const idx={};for(const src of javaTexts){const tex=[...src.matchAll(/["']([\w\-]+:)?(textures\/[\w\/\-.]+\.png)["']/g)].map(m=>m[2]);
+    const tex2=[...src.matchAll(/ResourceLocation\s*\(\s*[\w.]+\s*,\s*"([^"]+\.png)"\s*\)/g)].map(m=>m[1]);const T=tex.concat(tex2);if(!T.length)continue;
+    for(const m of src.matchAll(/\b(\w*Model\w*)\b/g)){const k=m[1];(idx[k]||(idx[k]=[])).push(...T)}}return idx}
+function pair(r,pngs,idx,sizeOf){const stem=n=>n.split('/').pop().replace(/\.png$/i,'').toLowerCase();const k2=r.name.toLowerCase();
+  let cand=r.tex.concat(idx[r.cls]||[]).map(t=>pngs.find(p=>p.endsWith(t))).filter(Boolean);
+  if(!cand.length)cand=pngs.filter(p=>/textures\/(entity|entities|models|mobs?|armor)\//i.test(p)&&(stem(p)===k2||stem(p).replace(/_/g,'')===k2||stem(p).includes(k2)));
+  if(!cand.length)cand=pngs.filter(p=>/textures\//i.test(p)&&stem(p).replace(/_/g,'')===k2);
+  for(const c of cand){const z=sizeOf(c);if(z&&Math.abs(z[0]/z[1]-r.tw/r.th)<.01)return c}return cand[0]||null}
 // 자바 파일 하나 → 모델 여러 개 (+ 그 파일에 적힌 텍스처 경로들)
 function fromJava(src,file){src=src.replace(/\/\*[\s\S]*?\*\//g,'').replace(/\/\/[^\n]*/g,'');if(!/addBox|ModelBox/.test(src))return[];
   const tex=[...src.matchAll(/["']([\w\-]+:)?(textures\/[\w\/\-.]+\.png)["']/g)].map(m=>m[2]);const out=[];
-  const re=/class\s+(\w+)\s+extends\s+(\w+(?:<[^>]*>)?)/g;const marks=[];let m;while((m=re.exec(src)))marks.push({n:m[1],at:m.index,base:m[2]});
-  marks.forEach((k,i)=>{if(!/Model|Entity|Biped/.test(k.base))return;const seg=src.slice(k.at,i+1<marks.length?marks[i+1].at:src.length);if(!/addBox|ModelBox/.test(seg))return;const r=parseClass(k.n.replace(/^Model/,'')||k.n,seg);if(r){r.tex=tex;r.file=file;out.push(r)}});
+  const re=/class\s+(\w+)\s*(?:<[^{]*?>)?\s+extends\s+(\w+)/g;const marks=[];let m;while((m=re.exec(src)))marks.push({n:m[1],at:m.index,base:m[2]});
+  marks.forEach((k,i)=>{if(!/Model|Entity|Biped/.test(k.base))return;const seg=src.slice(k.at,i+1<marks.length?marks[i+1].at:src.length);if(!/addBox|ModelBox/.test(seg))return;const nm=k.n.replace(/^Model/,'').replace(/Model$/,'')||k.n;const r=/addOrReplaceChild/.test(seg)?parseNew(nm,seg):parseClass(nm,seg);if(r){r.tex=tex;r.file=file;r.cls=k.n;out.push(r)}});
   return out}
-return{fromJava}})();
+return{fromJava,texIndex,pair}})();
 
 const CHR = { busy:false, log:'', rar:'랜덤', list:null };
 const RARS = ['노말','레어','에픽','유니크','레전드리'];
@@ -404,10 +431,9 @@ async function chrImport(fs){ if (CHR.busy) return; CHR.busy = true; const say =
       if (!pn) continue; used.add(pn); const b = await blobUrl(new Blob([files[pn]], { type: 'image/png' })); if (txt.length + b.length > 950000) continue;
       const id = uniq('b_' + slug(s)); out.push({ id, j: { type: 'fur', fmt: 'bed', k: id, n: s, r: rRar(), w: 1, d: 1, lazy: 1, src: 'pc' }, data: { g: txt, b } }); if (out.length % 50 === 0) say('3D 모델 찾는 중… ' + out.length); }
     // 자바 모드(.java 안의 3D 모델 코드) → 베드락 모델로 바꿔서
-    { const pngs = names.filter(n => /\.png$/i.test(n)); let nj = 0;
-      for (const n of names.filter(n => /\.java$/i.test(n))){ let R = []; try { R = JAVAMODEL.fromJava(new TextDecoder().decode(files[n]), n); } catch(e){}
-        for (const r of R){ let cand = r.tex.map(t => pngs.find(p => p.endsWith(t))).filter(Boolean); if (!cand.length){ const k2 = r.name.toLowerCase(); cand = pngs.filter(p => /textures\/(entity|entities|models|mobs?)\//i.test(p) && stem(p).includes(k2)); }
-          let pn = null; for (const c of cand){ const sz = PNGSZ(files[c]); if (sz && sz[0] / sz[1] === r.tw / r.th){ pn = c; break; } } pn = pn || cand[0] || null; if (!pn) continue; used.add(pn);
+    { const pngs = names.filter(n => /\.png$/i.test(n)); let nj = 0; const jn = names.filter(n => /\.java$/i.test(n)); const texts = jn.map(n => new TextDecoder().decode(files[n])); const tidx = JAVAMODEL.texIndex(texts);
+      for (let q = 0; q < jn.length; q++){ let R = []; try { R = JAVAMODEL.fromJava(texts[q], jn[q]); } catch(e){}
+        for (const r of R){ const pn = JAVAMODEL.pair(r, pngs, tidx, c => PNGSZ(files[c])); if (!pn) continue; used.add(pn);
           const g = JSON.stringify(r.geo), b = await blobUrl(new Blob([files[pn]], { type: 'image/png' })); if (g.length + b.length > 950000) continue;
           const id = uniq('j_' + slug(r.name)); out.push({ id, j: { type: 'fur', fmt: 'bed', k: id, n: r.name.toLowerCase(), r: rRar(), w: 1, d: 1, lazy: 1, src: 'pc' }, data: { g, b } }); if (++nj % 30 === 0) say('자바 모델 바꾸는 중… ' + nj); } } }
     let sk = 0, sp = 0;

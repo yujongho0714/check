@@ -108,6 +108,7 @@ object Repo {
             gifts = strList(d.get("gifts")),
             mcSkins = strList(d.get("mcSkins")),
             mcSkin = d.getString("mcSkin") ?: "",
+            charTab = d.getString("charTab") ?: "",
             myroom = d.getString("myroom") ?: "",
             belt = d.getString("belt") ?: "",
             jumpGrade = d.getString("jumpGrade") ?: "",
@@ -396,6 +397,44 @@ object Repo {
     /** 키오스크에서 본인이 네임플레이트 바꾸기 ("" 이면 안 씀) */
     fun setPlate(id: String, plateId: String) {
         students().document(id).update(mapOf("plate" to plateId))
+    }
+
+    /** 출석 기록(events)으로 경험치를 처음부터 다시 계산해서, 지금보다 높으면 그만큼 올려 줌 (레벨이 떨어진 아이 복구). 내리지는 않음 */
+    fun restoreExpFromHistory(onDone: (fixed: Int, checked: Int, err: String?) -> Unit) {
+        students().get().addOnSuccessListener { sq ->
+            val cur = sq.documents.associate { it.id to ((it.getLong("exp") ?: 0L).toInt()) }
+            val names = sq.documents.associate { it.id to (it.getString("name") ?: "") }
+            events().get().addOnSuccessListener { qs ->
+                val by = qs.documents.mapNotNull { d ->
+                    val sid = d.getString("studentId") ?: return@mapNotNull null
+                    val t = d.getString("type") ?: return@mapNotNull null
+                    if (t != EventType.IN && t != EventType.OUT) return@mapNotNull null
+                    val ms = d.getLong("clientTime") ?: 0L
+                    Triple(sid, t, ms)
+                }.groupBy { it.first }
+                var fixed = 0; var checked = 0
+                val batch = db.batch()
+                for ((sid, list) in by) {
+                    val now = cur[sid] ?: continue
+                    checked++
+                    var st = Student(id = sid, name = names[sid] ?: "")
+                    for ((_, t, ms) in list.sortedBy { it.third }) {
+                        val day = dayOf(ms)
+                        val p = Rank.plan(st, t, day)
+                        if (p.fields.isEmpty()) continue
+                        st = st.copy(
+                            exp = p.result.expAfter,
+                            streak = (p.fields["streak"] as? Int) ?: st.streak,
+                            streakDay = (p.fields["streakDay"] as? String) ?: st.streakDay,
+                            inDay = if (t == EventType.IN) day else st.inDay,
+                            outDay = if (t == EventType.OUT) day else st.outDay,
+                        )
+                    }
+                    if (st.exp > now) { batch.update(students().document(sid), mapOf<String, Any>("exp" to st.exp.coerceAtMost(Rank.MAX_EXP))); fixed++ }
+                }
+                batch.commit().addOnSuccessListener { onDone(fixed, checked, null) }.addOnFailureListener { onDone(0, checked, it.message) }
+            }.addOnFailureListener { onDone(0, 0, it.message) }
+        }.addOnFailureListener { onDone(0, 0, it.message) }
     }
 
     /** 관장님이 경험치를 직접 고칠 때 */
@@ -879,6 +918,10 @@ object Repo {
     }
 
     /** 마크 캐릭터 장착 ("" 이면 해제 → 드레스업 캐릭터로) */
+    fun setCharTab(id: String, tab: String) {
+        students().document(id).update(mapOf<String, Any>("charTab" to tab))
+    }
+
     fun setMcSkin(id: String, key: String) {
         students().document(id).update(mapOf<String, Any>("mcSkin" to key))
     }

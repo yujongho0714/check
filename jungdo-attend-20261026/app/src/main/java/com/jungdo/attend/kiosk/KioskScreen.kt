@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -327,8 +328,25 @@ fun KioskScreen(onReset: () -> Unit, preview: Boolean = false) {
 
         // 내 캐릭터 (걷기·공격 조작 가능, 조작하는 동안은 창이 안 닫힘) + 크기 막대
         val stageBlock: @Composable () -> Unit = {
-            MyCharacterStage(s, stageWidth = stageW, stageHeight = stageH, charHeight = stageCharH, zoom = lay.char * UiSize.CHAR_BASE, onTouch = { touchTick++ })
-            CharSizeBar(charScale, { charScale = it; touchTick++ }, Modifier.width(stageW))
+            // 2D(바람의나라 옷 입히기) / 3D(마크 복셀) 캐릭터 탭 — 고른 쪽을 기억해요
+            val tab3d = s.charTab == "3d"
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 4.dp)) {
+                GameButton("🧍 2D 캐릭터", onClick = { if (tab3d) Repo.setCharTab(s.id, ""); touchTick++ }, color = if (!tab3d) theme.good else theme.secondary, fontSize = 16.sp, sound = null)
+                GameButton("🧊 3D 캐릭터", onClick = { if (!tab3d) Repo.setCharTab(s.id, "3d"); touchTick++ }, color = if (tab3d) theme.good else theme.secondary, fontSize = 16.sp, sound = null)
+            }
+            if (!tab3d) {
+                MyCharacterStage(s, stageWidth = stageW, stageHeight = stageH, charHeight = stageCharH, zoom = lay.char * UiSize.CHAR_BASE, onTouch = { touchTick++ })
+                CharSizeBar(charScale, { charScale = it; touchTick++ }, Modifier.width(stageW))
+            } else {
+                val mk = com.jungdo.attend.ui.mcKeyOf(s)
+                if (mk.isBlank()) Box(Modifier.size(stageW, stageH), contentAlignment = Alignment.Center) {
+                    Text("아직 3D 캐릭터가 없어요\n🏠 마이룸에서 캐릭터를 뽑아 보세요!", fontSize = 18.sp, color = gameMuted(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                } else {
+                    com.jungdo.attend.ui.McChar3D(mk, Modifier.size(stageW, stageH)) { touchTick++ }
+                    Text("손가락으로 돌려 보고, 누르면 동작을 해요 · 아래에서 골라 입기", fontSize = 13.sp, color = gameMuted())
+                    Box(Modifier.width(stageW)) { com.jungdo.attend.ui.McSkinPicker(s, 40.dp) { k -> Repo.setMcSkin(s.id, k); touchTick++ } }
+                }
+            }
         }
         // 네임플레이트(없으면 이름) → Lv + 계급 그림 (완료 화면과 같은 배치) + 형제 선택
         val infoBlock: @Composable () -> Unit = {
