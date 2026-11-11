@@ -403,13 +403,13 @@ async function rChar(p){
     <div class="card"><h3 style="margin-top:0">✅ 쓸 캐릭터 고르기 <small class="sub">(서버에 ${L.length}개 · 켠 것 ${L.filter(a => a.src !== 'pc' || a.on).length}개)</small></h3>
     <p class="sub">PC에서 올린 건 처음엔 <b>꺼져</b> 있어요. 그림을 눌러 <b>초록(켬)</b>으로 바꾼 것만 마이룸 뽑기와 제미타에 나와요.</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><select id="chPk">${[...new Set(L.filter(a => a.src === 'pc').map(a => a.pk || '기타'))].map(p => `<option ${CHR.pk===p?'selected':''}>${esc(p)}</option>`).join('')}</select>
-      ${[['all','전체'],['bed','🧸 3D'],['skin','🧑 스킨'],['spr','🖼 그림']].map(([k,t]) => `<button data-ck="${k}" style="${(CHR.kind||'all')===k?'background:#ffd23f':''}">${t}</button>`).join('')}
+      ${[['all','전체'],['pmd','🐾 움직이는 포켓몬'],['fxa','✨ 기술'],['bed','🧸 3D'],['skin','🧑 스킨'],['spr','🖼 그림']].map(([k,t]) => `<button data-ck="${k}" style="${(CHR.kind||'all')===k?'background:#ffd23f':''}">${t}</button>`).join('')}
       <button id="chOnAll">이 목록 전부 켜기</button><button id="chOffAll">전부 끄기</button><button id="chDelVis" style="color:#c00">🗑 이 목록 지우기</button></div>
     <div id="chGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;max-height:560px;overflow:auto"></div></div>`;
   $('#chR').onchange = e => CHR.rar = e.target.value;
   { const b = $('#zmCopy'); if (b) b.onclick = () => { navigator.clipboard.writeText($('#zmCode').textContent).then(() => toast('복사했어요')).catch(() => {}); }; }
   const pks = [...new Set(L.filter(a => a.src === 'pc').map(a => a.pk || '기타'))]; if (!CHR.pk || !pks.includes(CHR.pk)) CHR.pk = pks[0] || '';
-  const vis = () => L.filter(a => a.src === 'pc' && (a.pk || '기타') === CHR.pk && ((CHR.kind || 'all') === 'all' || (CHR.kind === 'skin' ? a.type === 'skin' : a.fmt === CHR.kind)));
+  const vis = () => L.filter(a => a.src === 'pc' && (a.pk || '기타') === CHR.pk && ((CHR.kind || 'all') === 'all' || (CHR.kind === 'skin' ? a.type === 'skin' : (CHR.kind === 'pmd' || CHR.kind === 'fxa') ? a.type === CHR.kind : a.fmt === CHR.kind)));
   const setOn = async (arr, on) => { let b = writeBatch(db), n = 0; for (const a of arr){ a.on = on; const j = { ...a }; delete j.id; b.update(doc(db, 'myroomAssets', a.id), { j: JSON.stringify(j) }); if (++n % 300 === 0){ await b.commit(); b = writeBatch(db); } } await b.commit(); };
   const drawGrid = () => { const G = $('#chGrid'); if (!G) return; G.innerHTML = vis().slice(0, 1500).map(a => `<div data-cid="${esc(a.id)}" style="cursor:pointer;border-radius:12px;padding:6px;text-align:center;background:${a.on ? '#dcfce7' : '#f3f4f6'};border:3px solid ${a.on ? '#16a34a' : 'transparent'}">
       <div style="height:96px;display:flex;align-items:center;justify-content:center">${a.t ? `<img src="${a.t}" style="max-width:96px;max-height:96px;image-rendering:pixelated">` : '<span class="sub">그림 없음</span>'}</div>
@@ -459,6 +459,8 @@ function bedrockPC(json,img){const j=typeof json==='string'?JSON.parse(json):jso
 
 let TR3 = null, TS3 = null, TC3 = null;
 async function thumbOf(a){ const cv = document.createElement('canvas'); cv.width = cv.height = 96; const g = cv.getContext('2d'); g.imageSmoothingEnabled = false;
+  if (a.j.type === 'pmd'){ const meta = JSON.parse(a.data.m), A = meta.anims.idle; const im = await loadI(await (await fetch(a.data.s.idle)).blob()); const k = Math.min(96 / A.w, 96 / A.h); g.drawImage(im, 0, 0, A.w, A.h, (96 - A.w * k) / 2, (96 - A.h * k) / 2, A.w * k, A.h * k); return cv.toDataURL('image/png'); }
+  if (a.j.type === 'fxa'){ const meta = JSON.parse(a.data.m), C = meta.cell, f = Math.floor(meta.n / 2); const im = await loadI(await (await fetch(a.data.b)).blob()); g.fillStyle = '#223'; g.fillRect(0, 0, 96, 96); g.drawImage(im, (f % meta.cols) * C, Math.floor(f / meta.cols) * C, C, C, 0, 0, 96, 96); return cv.toDataURL('image/png'); }
   if (a.j.type === 'skin'){ const im = await loadI(await (await fetch(a.j.b)).blob()); const S = im.width / 64, k = 3, ox = 24, oy = 0; const P = (sx, sy, w, h, dx, dy) => g.drawImage(im, sx * S, sy * S, w * S, h * S, ox + dx * k, oy + dy * k, w * k, h * k);
     P(8, 8, 8, 8, 4, 0); P(20, 20, 8, 12, 4, 8); P(44, 20, 4, 12, 0, 8); P(36, 52, 4, 12, 12, 8); P(4, 20, 4, 12, 4, 20); P(20, 52, 4, 12, 8, 20);
     P(40, 8, 8, 8, 4, 0); P(20, 36, 8, 12, 4, 8); P(44, 36, 4, 12, 0, 8); P(52, 52, 4, 12, 12, 8); P(4, 36, 4, 12, 4, 20); P(4, 52, 4, 12, 8, 20); return cv.toDataURL('image/png'); }
@@ -480,8 +482,17 @@ async function chrImport(fs){ if (CHR.busy) return; CHR.busy = true; const say =
     const animFor = s => { if (ANIMS[s]) return JSON.stringify(ANIMS[s]); const b = Object.keys(ANIMS).filter(x => s.startsWith(x)).sort((a, b) => b.length - a.length)[0]; return b ? JSON.stringify(ANIMS[b]) : ''; };
     if (!CHR.list) await chrList(); const have = new Set(CHR.list.map(a => a.id)); const used = new Set(); const out = []; // {id, j, data}
     const uniq = id => { let k = id, i = 2; while (have.has(k)) k = id + '_' + (i++); have.add(k); return k; };
-    const OLD = new Map(); CHR.list.filter(a => a.src === 'pc').forEach(a => OLD.set((a.pk || '기타') + '|' + (a.type === 'skin' ? 'skin' : a.fmt) + '|' + a.n, a)); const keepOn = {};
+    const OLD = new Map(); CHR.list.filter(a => a.src === 'pc').forEach(a => OLD.set((a.pk || '기타') + '|' + (a.type === 'skin' ? 'skin' : (a.type === 'pmd' || a.type === 'fxa') ? a.type : a.fmt) + '|' + a.n, a)); const keepOn = {};
     const idFor = (pre, pk, kind, n) => { const o = OLD.get((pk || '기타') + '|' + kind + '|' + n); if (o && !used.has('#' + o.id)){ used.add('#' + o.id); if (o.on) keepOn[o.id] = 1; return o.id; } return uniq(pre + slug(n)); };
+    // 움직이는 포켓몬(.pmd.json + 동작 그림) · 기술 이펙트(.fxanim.json + 그림 띠)
+    const TDc = new TextDecoder();
+    for (const n of names.filter(n => /\.pmd\.json$/i.test(n))){ try { const meta = JSON.parse(TDc.decode(files[n])); const dir = n.split('/').slice(0, -1).join('/'); const sh = {};
+        for (const st in meta.anims){ const fp = (dir ? dir + '/' : '') + meta.anims[st].f + '-Anim.png'; if (files[fp]){ sh[st] = await blobUrl(new Blob([files[fp]], { type: 'image/png' })); used.add(fp); } }
+        if (!sh.idle) continue; used.add(n); const id = idFor('m_', packOf[n], 'pmd', meta.name || meta.key);
+        out.push({ id, pk: packOf[n], j: { type: 'pmd', k: id, n: meta.name || meta.key, key: meta.key, dex: meta.dex, types: meta.types, src: 'pc' }, data: { m: JSON.stringify(meta), s: sh } });
+        if (out.length % 50 === 0) say('움직이는 포켓몬 찾는 중… ' + out.length); } catch(e){} }
+    for (const n of names.filter(n => /\.fxanim\.json$/i.test(n))){ try { const meta = JSON.parse(TDc.decode(files[n])); const fp = n.replace(/\.fxanim\.json$/i, '.png'); if (!files[fp]) continue; used.add(fp); used.add(n);
+        const id = idFor('x_', packOf[n], 'fxa', meta.name || meta.id); out.push({ id, pk: packOf[n], j: { type: 'fxa', k: id, n: meta.name || meta.id, mid: meta.id, mtype: meta.type, src: 'pc' }, data: { m: JSON.stringify(meta), b: await blobUrl(new Blob([files[fp]], { type: 'image/png' })) } }); } catch(e){} }
     const GEO = new Set(names.filter(n => /\.geo\.json$/i.test(n)).map(stem));
     for (const n of names.filter(n => /\.json$/i.test(n))){ const txt = new TextDecoder().decode(files[n]); if (!/"bones"/.test(txt) || !/geometry/.test(txt)) continue; const s = stem(n);
       let pn = (pngBy.get(s) || [])[0] || (pngBy.get(s.replace(/_(male|female)$/, '')) || [])[0]; if (!pn){ const dir = (n.split('/').slice(-2, -1)[0] || '').replace(/^\d+_/, ''); pn = (pngBy.get(dir) || [])[0]; }
@@ -510,11 +521,11 @@ async function chrImport(fs){ if (CHR.busy) return; CHR.busy = true; const say =
     if (!out.length){ say('쓸 수 있는 캐릭터를 못 찾았어요 (.geo.json+.png 모델, 64×64 스킨, 캐릭터 그림 png)'); return; }
     say('미리보기 그림 만드는 중…'); for (let i = 0; i < out.length; i++){ const a = out[i]; a.j.on = !!keepOn[a.id]; a.j.pk = a.pk || '기타'; try { a.j.t = await thumbOf(a); } catch(e){} if (i % 25 === 0) say('미리보기 그림 만드는 중… ' + i + ' / ' + out.length + ' (' + Math.round(i / out.length * 100) + '%)'); }
     say(out.length + '개 서버에 올리는 중…'); let b = writeBatch(db), n = 0, sizeAcc = 0;
-    for (const a of out){ const sz1 = JSON.stringify(a.j).length + (a.data ? (a.data.g || '').length + (a.data.b || '').length + (a.data.a || '').length : 0);
+    for (const a of out){ const sz1 = JSON.stringify(a.j).length + (a.data ? JSON.stringify(a.data).length : 0);
       if (sizeAcc > 0 && (sizeAcc + sz1 > 3.5e6 || n % 120 === 0)){ await b.commit(); b = writeBatch(db); sizeAcc = 0; say('올리는 중… ' + n + ' / ' + out.length + ' (' + Math.round(n / out.length * 100) + '%)'); }
       b.set(doc(db, 'myroomAssets', a.id), { j: JSON.stringify(a.j), at: Date.now() }); if (a.data) b.set(doc(db, 'myroomAssetData', a.id), a.data); sizeAcc += sz1; n++; }
     await b.commit(); const nb = out.filter(a => a.j.fmt === 'bed').length;
-    say('다 올렸어요! 3D 피규어 ' + nb + ' · 사람 스킨 ' + sk + ' · 그림 카드 ' + sp + '\n아래에서 그림을 보고 눌러서 켠 것만 마이룸 뽑기·제미타에 나와요.'); CHR.list = null; render();
+    say('다 올렸어요! ' + (out.some(a => a.j.type === 'pmd') ? '움직이는 포켓몬 ' + out.filter(a => a.j.type === 'pmd').length + ' · 기술 ' + out.filter(a => a.j.type === 'fxa').length + ' · ' : '') + '3D 피규어 ' + nb + ' · 사람 스킨 ' + sk + ' · 그림 카드 ' + sp + '\n아래에서 그림을 보고 눌러서 켠 것만 마이룸 뽑기·제미타에 나와요.'); CHR.list = null; render();
   } catch(e){ say('실패했어요: ' + e.message); } finally { CHR.busy = false; } }
 
 /* ─── 오늘 출결 ─── */
