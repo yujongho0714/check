@@ -505,11 +505,11 @@ async function chrImport(fs){ if (CHR.busy) return; CHR.busy = true; const say =
       else { const dir = n.split('/').slice(0, -1).join('/'); if (SPR_DIR.test(dir) && !SKIP_DIR.test(dir) && sz[0] >= 24 && sz[1] >= 24 && sz[0] <= 512 && sz[1] <= 512){ const id = idFor('p_', packOf[n], 'spr', stem(n)); out.push({ id, pk: packOf[n], j: { type: 'fur', fmt: 'spr', k: id, n: stem(n), r: rRar(), w: 1, d: 1, lazy: 1, src: 'pc' }, data: { b: await blobUrl(blob) } }); sp++; } }
       if ((sk + sp) % 80 === 0) say('그림 찾는 중… 스킨 ' + sk + ' · 그림 ' + sp); }
     if (!out.length){ say('쓸 수 있는 캐릭터를 못 찾았어요 (.geo.json+.png 모델, 64×64 스킨, 캐릭터 그림 png)'); return; }
-    say('미리보기 그림 만드는 중…'); for (let i = 0; i < out.length; i++){ const a = out[i]; a.j.on = !!keepOn[a.id]; a.j.pk = a.pk || '기타'; try { a.j.t = await thumbOf(a); } catch(e){} if (i % 25 === 0) say('미리보기 그림 만드는 중… ' + i + ' / ' + out.length); }
+    say('미리보기 그림 만드는 중…'); for (let i = 0; i < out.length; i++){ const a = out[i]; a.j.on = !!keepOn[a.id]; a.j.pk = a.pk || '기타'; try { a.j.t = await thumbOf(a); } catch(e){} if (i % 25 === 0) say('미리보기 그림 만드는 중… ' + i + ' / ' + out.length + ' (' + Math.round(i / out.length * 100) + '%)'); }
     say(out.length + '개 서버에 올리는 중…'); let b = writeBatch(db), n = 0, sizeAcc = 0;
-    for (const a of out){ b.set(doc(db, 'myroomAssets', a.id), { j: JSON.stringify(a.j), at: Date.now() }); if (a.data) b.set(doc(db, 'myroomAssetData', a.id), a.data);
-      sizeAcc += (a.data ? (a.data.g || '').length + (a.data.b || '').length : 0) + (a.j.b || '').length; n++;
-      if (n % 150 === 0 || sizeAcc > 8e6){ await b.commit(); b = writeBatch(db); sizeAcc = 0; say('올리는 중… ' + n + ' / ' + out.length); } }
+    for (const a of out){ const sz1 = JSON.stringify(a.j).length + (a.data ? (a.data.g || '').length + (a.data.b || '').length + (a.data.a || '').length : 0);
+      if (sizeAcc > 0 && (sizeAcc + sz1 > 3.5e6 || n % 120 === 0)){ await b.commit(); b = writeBatch(db); sizeAcc = 0; say('올리는 중… ' + n + ' / ' + out.length + ' (' + Math.round(n / out.length * 100) + '%)'); }
+      b.set(doc(db, 'myroomAssets', a.id), { j: JSON.stringify(a.j), at: Date.now() }); if (a.data) b.set(doc(db, 'myroomAssetData', a.id), a.data); sizeAcc += sz1; n++; }
     await b.commit(); const nb = out.filter(a => a.j.fmt === 'bed').length;
     say('다 올렸어요! 3D 피규어 ' + nb + ' · 사람 스킨 ' + sk + ' · 그림 카드 ' + sp + '\n아래에서 그림을 보고 눌러서 켠 것만 마이룸 뽑기·제미타에 나와요.'); CHR.list = null; render();
   } catch(e){ say('실패했어요: ' + e.message); } finally { CHR.busy = false; } }
