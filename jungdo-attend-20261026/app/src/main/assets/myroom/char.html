@@ -1,0 +1,48 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<style>html,body{margin:0;height:100%;overflow:hidden;background:transparent;touch-action:none}canvas{display:block;width:100%;height:100%}
+#nm{position:fixed;left:0;right:0;bottom:6px;text-align:center;font:800 13px system-ui;color:#4a2e14;text-shadow:0 1px 0 #fff8;pointer-events:none}</style></head><body><div id="nm"></div>
+<script src="three.min.js"></script><script>
+// 키오스크 3D 캐릭터 칸: 마크 복셀 캐릭터를 크게 · 손가락으로 돌리기 · 누르면 선생님이 넣은 동작 하나
+const Q=new URLSearchParams(location.search);let SKINS={'000':{u:'../mc/000.png'}};const K0=Q.get('k')||'000';
+try{const c=window.AB&&AB.skin?AB.skin(K0):'';SKINS[K0]={u:c||('../mc/'+K0+'.png')}}catch(e){SKINS[K0]={u:'../mc/'+K0+'.png'}}
+const PI=Math.PI;
+const TXC={};function skinTex(k){if(TXC[k])return TXC[k];const s=SKINS[k]||SKINS['000'];const t=new THREE.TextureLoader().load(s?s.u:'../mc/000.png');t.magFilter=t.minFilter=THREE.NearestFilter;return TXC[k]=t}
+function mcBox(w,h,d,u,v,inf){const s=1/16,e=(inf||0)*s,g=new THREE.BoxGeometry(w*s+e*2,h*s+e*2,d*s+e*2),uv=g.attributes.uv;const Rr=(x,y,ww,hh)=>{const u0=x/64,u1=(x+ww)/64,vt=1-y/64,vb=1-(y+hh)/64;return[[u0,vt],[u1,vt],[u0,vb],[u1,vb]]};
+ const F=[Rr(u+d+w,v+d,d,h),Rr(u,v+d,d,h),Rr(u+d,v,w,d),Rr(u+d+w,v,w,d),Rr(u+d,v+d,w,h),Rr(u+2*d+w,v+d,w,h)];for(let f=0;f<6;f++)for(let k=0;k<4;k++)uv.setXY(f*4+k,F[f][k][0],F[f][k][1]);return g}
+function mkChar(k){const M1=new THREE.MeshLambertMaterial({map:skinTex(k),alphaTest:.5}),M2=new THREE.MeshLambertMaterial({map:skinTex(k),alphaTest:.5,side:THREE.DoubleSide});const C={root:new THREE.Group(),mats:[M1,M2],tips:[]};
+ // 뼈대: 골반(엉덩이 높이) → 다리 · 가슴 → 팔 · 머리. 동작은 골반을 중심으로 돌아서 공중돌기·옆돌기가 자연스러워요
+ const hips=new THREE.Group();hips.position.y=12/16;C.root.add(hips);C.body=hips;const chest=new THREE.Group();hips.add(chest);C.chest=chest;
+ const part=(par,w,h,d,u,v,u2,v2,px,py,pz,oy,tip)=>{const g=new THREE.Group();g.position.set(px/16,py/16,pz/16);const m=new THREE.Mesh(mcBox(w,h,d,u,v),M1);m.position.y=oy/16;m.castShadow=true;g.add(m);const m2=new THREE.Mesh(mcBox(w,h,d,u2,v2,.5),M2);m2.position.y=oy/16;g.add(m2);par.add(g);
+  if(tip!=null){const t=new THREE.Object3D();t.position.y=tip/16;g.add(t);C.tips.push(t)}return g};
+ C.legR=part(hips,4,12,4,0,16,0,32,-2,0,0,-6,-12);C.legL=part(hips,4,12,4,16,48,0,48,2,0,0,-6,-12);part(chest,8,12,4,16,16,16,32,0,0,0,6);
+ C.armR=part(chest,4,12,4,40,16,40,32,-6,10,0,-4,-10);C.armL=part(chest,4,12,4,32,48,48,48,6,10,0,-4,-10);C.head=part(chest,8,8,8,0,0,32,0,0,12,0,4,8);return C}
+// ---------- 동작 (선생님이 메이커에 넣은 모캡 동작을 관절 회전으로 미리 바꿔 둔 것) ----------
+const PZ0={legR:[0,0],legL:[0,0],armR:[0,0],armL:[0,0],lean:0,roll:0};
+const pz=p=>Object.assign({},PZ0,JSON.parse(JSON.stringify(p||{})));
+const L2=(a,b,t)=>a+(b-a)*t;const SC=.75/.825;   // 사람 엉덩이 높이(0.825m) → 마크 엉덩이 높이
+const _qa=new THREE.Quaternion(),_qb=new THREE.Quaternion(),_v=new THREE.Vector3(),_e=new THREE.Euler();
+function clipAt(sk,t){const n=sk.fr.length,x=Math.max(0,Math.min(n-1,t*sk.fps)),i=Math.floor(x),j=Math.min(n-1,i+1),k=x-i;return{A:sk.fr[i],B:sk.fr[j],k,done:t*sk.fps>=n-1}}
+function clipRoot(f){const A=f.A,B=f.B,k=f.k;return[L2(A[28],B[28],k)*SC,L2(A[29],B[29],k)*SC,L2(A[30],B[30],k)*SC]}
+function clipYaw(f){_qa.fromArray(f.A,0);_qb.fromArray(f.B,0);_qa.slerp(_qb,f.k);_e.setFromQuaternion(_qa,'YXZ');return _e.y}
+function applyClip(c,f){const J=[c.body,c.chest,c.head,c.armR,c.armL,c.legR,c.legL];J.forEach((o,m)=>{_qa.fromArray(f.A,m*4);_qb.fromArray(f.B,m*4);o.quaternion.copy(_qa).slerp(_qb,f.k)});
+ const r=clipRoot(f);c.body.position.set(r[0],r[1],r[2]);
+ // 손·발·머리가 바닥 밑으로 들어가지 않게 올려 줌
+ c.root.updateMatrixWorld(true);let mn=1e9;c.tips.forEach(t=>{t.getWorldPosition(_v);mn=Math.min(mn,_v.y)});const by=c.root.getWorldPosition(_v).y;if(mn<by)c.body.position.y+=by-mn}
+function applyPose(c,p){c.body.quaternion.set(0,0,0,1);c.chest.quaternion.set(0,0,0,1);c.head.quaternion.set(0,0,0,1);c.body.position.set(0,12/16,0);
+ c.legR.rotation.set(p.legR[0],0,p.legR[1]);c.legL.rotation.set(p.legL[0],0,-p.legL[1]);c.armR.rotation.set(p.armR[0],0,p.armR[1]);c.armL.rotation.set(p.armL[0],0,-p.armL[1]);c.body.rotation.set(p.lean,0,p.roll)}
+const R=new THREE.WebGLRenderer({antialias:true,alpha:true});R.setPixelRatio(Math.min(2,devicePixelRatio));document.body.appendChild(R.domElement);
+const S=new THREE.Scene();S.add(new THREE.HemisphereLight(0xffffff,0xbfa98a,.95));const dl=new THREE.DirectionalLight(0xffffff,.55);dl.position.set(3,6,5);S.add(dl);
+const cam=new THREE.PerspectiveCamera(30,1,.1,50);cam.position.set(0,1.1,5.2);cam.lookAt(0,1,0);
+const sh=new THREE.Mesh(new THREE.CircleGeometry(.5,24),new THREE.MeshBasicMaterial({color:0,transparent:true,opacity:.18}));sh.rotation.x=-PI/2;S.add(sh);
+const C=mkChar(K0);S.add(C.root);let yaw=.5,vy=0,drag=null,t=0,clip=null,ct=0,CL=[];
+fetch('clips.json').then(r=>r.json()).then(j=>CL=j).catch(()=>{});
+function size(){const w=innerWidth,h=innerHeight;R.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix();const fit=Math.max(2.5/(2*Math.tan(15*PI/180)),1.2/(2*Math.tan(15*PI/180))/cam.aspect);cam.position.z=Math.min(10,fit)}addEventListener('resize',size);size();
+addEventListener('pointerdown',e=>{drag={x:e.clientX,y0:yaw,t:performance.now()};try{AB&&AB.touch&&AB.touch()}catch(_){}});
+addEventListener('pointermove',e=>{if(drag){yaw=drag.y0+(e.clientX-drag.x)*.012}});
+addEventListener('pointerup',e=>{if(drag&&Math.abs(e.clientX-drag.x)<8&&CL.length&&!clip){clip=CL[(Math.random()*CL.length)|0];ct=0;document.getElementById('nm').textContent='🥋 '+clip.n;setTimeout(()=>document.getElementById('nm').textContent='',1800)}drag=null});
+let last=performance.now();(function loop(){requestAnimationFrame(loop);const n=performance.now(),dt=Math.min(.05,(n-last)/1000);last=n;t+=dt;
+  if(!drag&&!clip)yaw+=dt*.35;C.root.rotation.y=yaw;
+  if(clip){ct+=dt;const f=clipAt(clip,ct);if(f.done){clip=null}else applyClip(C,f)}
+  if(!clip){applyPose(C,pz({armR:[Math.sin(t*2)*.08,.06],armL:[-Math.sin(t*2)*.08,-.06]}));C.body.position.y=12/16+Math.sin(t*3)*.012}
+  R.render(S,cam)})();
+</script></body></html>

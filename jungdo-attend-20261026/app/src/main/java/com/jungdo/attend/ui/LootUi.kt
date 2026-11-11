@@ -451,6 +451,10 @@ fun MyRoomSettings() {
             if (msg.isNotBlank()) PixelText(msg, color = OkGreen, fontSize = 13.sp)
         }
         OutlinedButton(onClick = { open = true }) { Text("🔧 복셀 가구 · 캐릭터 추가하기 (지금 ${com.jungdo.attend.data.MyRoom.custom.size}개)") }
+        // 레벨 복구: 출석 기록으로 경험치를 다시 계산해서 떨어진 아이만 올려 줌
+        var fixMsg by remember { mutableStateOf("") }
+        OutlinedButton(onClick = { fixMsg = "출석 기록 읽는 중…"; com.jungdo.attend.data.Repo.restoreExpFromHistory { f, c, e -> fixMsg = if (e != null) "실패: $e" else "원생 ${c}명 확인 · ${f}명 레벨 복구했어요" } }) { Text("📈 출석 기록으로 떨어진 레벨 복구") }
+        if (fixMsg.isNotBlank()) Text(fixMsg, fontSize = 13.sp)
     }
     if (open) MyRoomDialog(null, admin = true) { open = false }
 }

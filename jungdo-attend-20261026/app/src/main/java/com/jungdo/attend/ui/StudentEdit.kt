@@ -50,6 +50,7 @@ fun StudentEditDialog(s: Student, all: List<Student>, onDismiss: () -> Unit) {
     var sibText by remember { mutableStateOf(currentSibs.joinToString(", ")) }
     var memo by remember { mutableStateOf(s.memo) }
     var attendNo by remember { mutableStateOf(s.attendNo) }
+    val exp0 = remember { s.exp }   // 창을 열 때 경험치 (그동안 아이가 출석해서 올라도 덮어쓰지 않게)
     var expText by remember { mutableStateOf(s.exp.toString()) }
     var confirmDel by remember { mutableStateOf(false) }
     var belt by remember { mutableStateOf(s.belt) }
@@ -150,7 +151,7 @@ fun StudentEditDialog(s: Student, all: List<Student>, onDismiss: () -> Unit) {
                 if (s.id.isNotBlank() && (Belts.norm(belt) != s.belt || beltLock != s.beltManual)) Repo.setBelt(s.id, belt, beltLock)
                 if (s.id.isNotBlank() && jump != s.jumpGrade) Repo.setJumpGrade(s.id, jump)
                 if (s.id.isNotBlank() && gender != s.gender) Repo.setGender(s.id, gender)
-                if (s.id.isNotBlank()) expText.toIntOrNull()?.let { e -> if (e != s.exp) Repo.setExp(s.id, e) }
+                if (s.id.isNotBlank()) expText.toIntOrNull()?.let { e -> if (e != exp0) Repo.setExp(s.id, e) }   // 관장님이 숫자를 직접 바꿨을 때만
                 if (updated.id.isNotBlank() && sibNames.isNotEmpty()) {
                     val sibs = all.filter { it.name in sibNames && it.id != s.id && it.status != StudentStatus.LEFT }
                     Repo.linkSiblings(listOf(updated) + sibs)
