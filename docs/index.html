@@ -393,6 +393,8 @@ async function rChar(p){
     <p class="sub">ZIP 파일을 <b>통째로</b> 넣으면 안에서 쓸 수 있는 걸 알아서 찾아요. (리소스팩·모드 ZIP 그대로 OK)<br>
     · 3D 모델(.geo.json + .png · 자바 모드의 모델 코드도 바꿔서) → 마이룸 <b>가구 뽑기</b>에 피규어로 · 제미타 몬스터로<br>· 사람 스킨(64×64) → 마이룸 <b>캐릭터 뽑기</b>에 · 제미타 캐릭터로<br>· 몬스터·캐릭터 그림(png) → 세워 놓는 그림 카드로<br>
     올린 건 도장 계정으로 로그인한 기기에서만 보여요. 제미타는 [🧪 타격 실험실 → ☁ 출결 서버에서 받기]로 가져가요.</p>
+    <div style="background:#eef6ff;border-radius:10px;padding:10px 12px;margin:8px 0"><b>📱 제미타 태블릿 연결 코드</b> <small class="sub">(태블릿에서 ☁ 출결 서버에서 받기를 처음 누르면 물어봐요 · 한 번만 넣으면 돼요)</small><br>
+      <code id="zmCode" style="user-select:all;font-size:15px;word-break:break-all">${(()=>{try{const c=JSON.parse(lsGet('jdpc_cfg')||'null');return c?'JD1-'+btoa(c.projectId+'|'+c.apiKey+'|'+(c.storageBucket||'')).replace(/\+/g,'-').replace(/\//g,'_'):'(없음)'}catch(e){return '(없음)'}})()}</code> <button id="zmCopy">복사</button></div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:10px 0">
       <label class="btn" style="background:var(--blue);color:#fff;padding:10px 16px;border-radius:10px;cursor:pointer">📦 ZIP · 파일 고르기<input id="chF" type="file" multiple accept=".zip,.json,.png" hidden></label>
       등급 <select id="chR">${['랜덤',...RARS].map(r => `<option ${CHR.rar===r?'selected':''}>${r}</option>`).join('')}</select>
@@ -405,6 +407,7 @@ async function rChar(p){
       <button id="chOnAll">이 목록 전부 켜기</button><button id="chOffAll">전부 끄기</button><button id="chDelVis" style="color:#c00">🗑 이 목록 지우기</button></div>
     <div id="chGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;max-height:560px;overflow:auto"></div></div>`;
   $('#chR').onchange = e => CHR.rar = e.target.value;
+  { const b = $('#zmCopy'); if (b) b.onclick = () => { navigator.clipboard.writeText($('#zmCode').textContent).then(() => toast('복사했어요')).catch(() => {}); }; }
   const pks = [...new Set(L.filter(a => a.src === 'pc').map(a => a.pk || '기타'))]; if (!CHR.pk || !pks.includes(CHR.pk)) CHR.pk = pks[0] || '';
   const vis = () => L.filter(a => a.src === 'pc' && (a.pk || '기타') === CHR.pk && ((CHR.kind || 'all') === 'all' || (CHR.kind === 'skin' ? a.type === 'skin' : a.fmt === CHR.kind)));
   const setOn = async (arr, on) => { let b = writeBatch(db), n = 0; for (const a of arr){ a.on = on; const j = { ...a }; delete j.id; b.update(doc(db, 'myroomAssets', a.id), { j: JSON.stringify(j) }); if (++n % 300 === 0){ await b.commit(); b = writeBatch(db); } } await b.commit(); };
