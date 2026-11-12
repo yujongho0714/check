@@ -70,6 +70,7 @@ fun DressRoomPanel(s: Student, modifier: Modifier = Modifier) {
     var action by remember { mutableStateOf(DressAction.STAND) }
     var meSend by remember { mutableStateOf(false) }
     var meMsg by remember { mutableStateOf("") }
+    var meSms by remember { mutableStateOf<String?>(null) }
 
     // 부위별로 가진 옷 (번호 순)
     val owned = remember(s.dress) {
@@ -127,6 +128,7 @@ fun DressRoomPanel(s: Student, modifier: Modifier = Modifier) {
                 color = theme.primary, fontSize = 15.sp, sound = null,
             )
             if (meMsg.isNotBlank()) Text(meMsg, fontSize = 13.sp, color = gameMuted())
+            meSms?.let { SmsStatusText(it) }
         }
     }
 
@@ -146,8 +148,8 @@ fun DressRoomPanel(s: Student, modifier: Modifier = Modifier) {
                 }
             },
             confirmButton = { TextButton(onClick = {
-                val e = com.jungdo.attend.data.MeCode.send(s, phone)
-                if (e != null) err = e else { meSend = false; meMsg = "📩 내 폰으로 캐릭터 링크를 보냈어요!" }
+                val e = com.jungdo.attend.data.MeCode.send(s, phone) { meSms = it }
+                if (e != null) err = e else { meSend = false; meMsg = "📩 문자 보내기를 요청했어요" }
             }) { Text("문자로 받기", fontSize = 17.sp, fontWeight = FontWeight.Bold) } },
             dismissButton = { TextButton(onClick = { meSend = false }) { Text("닫기") } },
         )

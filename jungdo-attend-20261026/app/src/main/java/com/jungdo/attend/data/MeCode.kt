@@ -35,11 +35,11 @@ object MeCode {
             "게임에서 이름과 이 폰 번호로 시작해요. 메뉴 → 👕 옷장에서 가진 옷·무기로 갈아입을 수 있어요.\n(링크가 게임 앱으로 안 열리면, 길게 눌러 복사 → 게임 메뉴 → 👕 옷장에 붙여 넣기)"
 
     /** 본인 폰으로 문자 보내기 (출석 문자 보내는 폰이 보내요) */
-    fun send(s: Student, phone: String): String? {
+    fun send(s: Student, phone: String, onSent: (String) -> Unit = {}): String? {
         val num = phone.filter { it.isDigit() }
         if (num.length < 10 || !num.startsWith("01")) return "휴대폰 번호를 다시 확인해 주세요"
         if (s.dress.isEmpty() && s.dressEquip.isEmpty()) return "아직 가진 옷이 없어요"
-        Bulk.create("내 캐릭터 · ${s.name}", listOf(BulkItem(s.name, num, smsText(s, num))))
+        onSent(Bulk.create("내 캐릭터 · ${s.name}", listOf(BulkItem(s.name, num, smsText(s, num)))))
         return null
     }
 }

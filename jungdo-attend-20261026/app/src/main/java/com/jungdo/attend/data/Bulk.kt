@@ -71,13 +71,15 @@ object Bulk {
         return items to noPhone
     }
 
-    fun create(title: String, items: List<BulkItem>) {
+    fun create(title: String, items: List<BulkItem>): String {
         val now = System.currentTimeMillis()
-        col().add(mapOf(
+        val ref = col().document()
+        ref.set(mapOf(
             "title" to title, "createdMs" to now, "lastMs" to now, "status" to BulkStatus.PENDING,
             "items" to items.map { mapOf("n" to it.names, "p" to it.phone, "t" to it.text) },
             "results" to emptyMap<String, String>(),
         ))
+        return ref.id
     }
 
     /** 실패한 것만 다시 보내기: 실패 기록을 지우고 대기로 되돌리면 서버가 빠진 것만 이어서 보냄 */

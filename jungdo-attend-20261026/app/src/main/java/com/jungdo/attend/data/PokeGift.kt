@@ -96,7 +96,7 @@ object PokeGift {
     }
 
     /** 사용: 본인 번호로 코드를 만들어 가방에 기록하고, 그 번호로 문자를 보냄 (다시 보내기도 같은 함수) */
-    fun send(studentId: String, name: String, raw: String, phone: String, onDone: (String?, String?) -> Unit) {
+    fun send(studentId: String, name: String, raw: String, phone: String, onSent: (String) -> Unit = {}, onDone: (String?, String?) -> Unit) {
         val it = parse(raw) ?: return onDone(null, "가방 정보가 이상해요")
         val num = norm(phone)
         if (num.length < 10 || !num.startsWith("01")) return onDone(null, "휴대폰 번호를 다시 확인해 주세요")
@@ -111,7 +111,7 @@ object PokeGift {
             bag[i] = nw; tx.update(ref, mapOf("pokeBag" to bag)); true
         }.addOnSuccessListener { ok ->
             if (ok != true) { onDone(null, "가방에서 찾지 못했어요"); return@addOnSuccessListener }
-            Bulk.create("포켓몬 선물 · $name", listOf(BulkItem(name, num, smsText(name, it, c))))
+            onSent(Bulk.create("포켓몬 선물 · $name", listOf(BulkItem(name, num, smsText(name, it, c)))))
             onDone(c, null)
         }.addOnFailureListener { onDone(null, "인터넷을 확인하고 다시 눌러 주세요") }
     }
