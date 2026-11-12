@@ -70,7 +70,8 @@ fun MyRoomDialog(s: Student?, admin: Boolean = false, onClose: () -> Unit) {
             o.put("room", MyRoom.parse(st.myroom))
             run {
                 val items = st.pokeBag.mapNotNull { com.jungdo.attend.data.PokeGift.parse(it) }
-                o.put("poke", JSONArray(items.filter { it.kind == "P" }.map { JSONObject().put("dex", it.idx).put("sh", it.sh).put("lv", it.lv).put("rar", it.rar) }))
+                o.put("poke", JSONArray(items.filter { it.kind == "P" }.map { JSONObject().put("dex", it.idx).put("sh", it.sh).put("lv", it.lv).put("rar", it.rar).put("name", com.jungdo.attend.data.PokeGift.MONS.firstOrNull { m -> m.dex == it.idx }?.name ?: "") }))
+                o.put("pfree", st.pokeFree).put("pP", com.jungdo.attend.data.PokeGift.PRICE_P).put("pM", com.jungdo.attend.data.PokeGift.PRICE_M)
                 o.put("pmv", JSONArray(items.filter { it.kind == "M" }.mapNotNull { com.jungdo.attend.data.PokeGift.MOVES.getOrNull(it.idx) }.distinctBy { it.id }.map { JSONObject().put("id", it.id).put("name", it.name) }))
             }
             if (st.dressEquip.isNotEmpty()) o.put("dress", JSONObject(st.dressEquip as Map<*, *>)) else o.put("dress", JSONObject.NULL)
@@ -99,6 +100,17 @@ fun MyRoomDialog(s: Student?, admin: Boolean = false, onClose: () -> Unit) {
                 val id = cur?.id ?: return
                 val g = gold.toIntOrNull() ?: 1
                 Repo.sellFur(id, itemId.toIntOrNull() ?: -1, g) { ok -> reply(JSONObject().put("op", "sellFur").put("ok", ok).put("gold", g).put("err", if (ok) "" else "팔지 못했어요")) }
+            }
+            @JavascriptInterface fun pokePull(kind: String) {
+                val id = cur?.id ?: return
+                com.jungdo.attend.data.PokeGift.pull(id, kind) { r, err ->
+                    val o = JSONObject().put("op", "pokePull").put("ok", r != null).put("err", err ?: "")
+                    if (r != null) {
+                        val nm = if (r.kind == "P") com.jungdo.attend.data.PokeGift.MONS.firstOrNull { it.dex == r.idx }?.name ?: "포켓몬" else com.jungdo.attend.data.PokeGift.MOVES.getOrNull(r.idx)?.name ?: "기술"
+                        o.put("k", r.kind).put("idx", r.idx).put("rar", r.rar).put("sh", r.sh).put("lv", r.lv).put("name", nm)
+                    }
+                    web?.post { reply(o) }
+                }
             }
             @JavascriptInterface fun pullMc() {
                 val id = cur?.id ?: return

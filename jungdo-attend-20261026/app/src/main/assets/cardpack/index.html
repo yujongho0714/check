@@ -1,0 +1,8 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<style>html,body{margin:0;height:100%;background:#05050c;overflow:hidden}</style></head><body><script src="pack.js"></script><script>
+(async()=>{const q=new URLSearchParams(location.search);
+ // 화면 크기가 잡힐 때까지 기다리기 (팝업 안 웹뷰는 처음에 0일 수 있음)
+ for(let i=0;i<40&&(innerWidth<50||innerHeight<50);i++)await new Promise(r=>setTimeout(r,50));
+ await CardPack.open({rar:+q.get('r')||0,sh:+q.get('sh')||0,kind:q.get('k')||'P',name:q.get('n')||'선물',sub:q.get('s')||'',img:q.get('img')||'',base:''});
+ try{Android.packDone()}catch(e){}})();
+</script></body></html>

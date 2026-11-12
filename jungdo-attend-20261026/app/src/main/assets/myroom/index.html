@@ -73,7 +73,7 @@ body{background:#8fc95a url(../game/sprout/bg_grass.png) repeat;background-size:
   <div class="bar">🎒 내 가방</div>
   <div id="bigc"><canvas id="bigcv" width="280" height="320"></canvas><div><b style="font-size:20px">내 캐릭터</b><p class="note" style="padding:0;margin:4px 0">입어 보면 여기서 바로 크게 보여요</p><span id="curName" class="tag"></span></div></div>
   <div class="money">🪙 <b id="gold">0</b> 골드 <button class="btn g" id="gacha">🪑 가구 뽑기 1G</button><button class="btn g" id="cgacha">🧑 캐릭터 뽑기 10G</button></div>
-  <div class="tabs"><button class="btn on" data-t="f">가구</button><button class="btn" data-t="c">캐릭터</button><button class="btn b" data-t="a" id="admTab" hidden>🔧 관리자</button></div>
+  <div class="tabs"><button class="btn on" data-t="f">가구</button><button class="btn" data-t="c">캐릭터</button><button class="btn" data-t="p">⚡ 포켓몬</button><button class="btn b" data-t="a" id="admTab" hidden>🔧 관리자</button></div>
   <div class="bag" id="bag"></div>
   <div class="note">물건을 누르면 <b>방에 놓기 · 판매하기</b>가 나와요. 판매는 한 번 더 물어봐요.<br>가구: MariaIsMe (CC BY 4.0) · UI: Sprout Lands</div>
  </div>
@@ -82,5 +82,6 @@ body{background:#8fc95a url(../game/sprout/bg_grass.png) repeat;background-size:
 <script>(function(){function f(){var h=window.innerHeight||document.documentElement.clientHeight||screen.height;if(h<50)h=screen.height;document.documentElement.style.setProperty("--vh",h/100+"px")}f();addEventListener("resize",f);setInterval(f,1000)})()</script>
 <script src="three.min.js"></script>
 <script src="room.js"></script>
+<script src="../cardpack/pack.js"></script>
 <script src="poke.js"></script>
 </body></html>

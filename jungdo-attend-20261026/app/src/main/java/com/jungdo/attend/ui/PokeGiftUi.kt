@@ -157,44 +157,44 @@ fun PokeGiftPanel(s: Student, modifier: Modifier = Modifier) {
 private fun mask(n: String) = if (n.length >= 10) n.take(3) + "-****-" + n.takeLast(4) else n
 
 /**
- * 뽑기 직후 카드팩 뜯기 연출 (게임 사이트의 pack.html을 그대로 사용 — 게임과 똑같은 연출)
- * 인터넷이 안 되거나 페이지가 안 뜨면(화면이 까맣게 멈추는 문제) 앱 안의 간단한 연출로 바로 바꿔서 보여줘요.
+ * 뽑기 직후 카드팩 뜯기 연출: 앱 안 assets/cardpack (게임과 같은 연출 · 인터넷 없이 바로 떠요. 초상화만 인터넷)
+ * 혹시 웹뷰가 안 그려지면 앱 안의 간단한 연출(NativePackReveal)로 바꿔요.
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 private fun PackOpenDialog(item: PokeGift.Item, onDone: () -> Unit) {
-    val url = "https://${PokeGift.GAME_URL}/pack.html?k=${item.kind}&id=${item.idx}&r=${item.rar}&sh=${item.sh}&lv=${item.lv}&back=1"
+    fun e(v: String) = java.net.URLEncoder.encode(v, "UTF-8")
+    val name = if (item.kind == "P") PokeGift.MONS.firstOrNull { it.dex == item.idx }?.name ?: "포켓몬" else PokeGift.MOVES.getOrNull(item.idx)?.name ?: "기술"
+    val sub = if (item.kind == "P") "Lv.${item.lv}" else "기술 카드"
+    val img = if (item.kind == "P") "https://${PokeGift.GAME_URL}/pk/portrait/" + item.idx.toString().padStart(4, '0') + "/Normal.png" else ""
+    val url = "https://appassets.androidplatform.net/assets/cardpack/index.html?k=${item.kind}&r=${item.rar}&sh=${item.sh}&n=${e(name)}&s=${e(sub)}&img=${e(img)}"
     var failed by remember { mutableStateOf(false) }
-    Dialog(onDismissRequest = onDone, properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false)) {
+    Dialog(onDismissRequest = onDone, properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false, decorFitsSystemWindows = false)) {
         Box(Modifier.fillMaxSize().background(Color(0xFF05050C))) {
             if (failed) {
                 NativePackReveal(item, onDone)
             } else {
                 AndroidView(modifier = Modifier.fillMaxSize(), factory = { ctx ->
+                    val loader = androidx.webkit.WebViewAssetLoader.Builder()
+                        .addPathHandler("/assets/", androidx.webkit.WebViewAssetLoader.AssetsPathHandler(ctx)).build()
                     WebView(ctx).apply {
-                        var finished = false
+                        layoutParams = android.view.ViewGroup.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)
                         settings.javaScriptEnabled = true
                         settings.domStorageEnabled = true
                         settings.mediaPlaybackRequiresUserGesture = false
                         setBackgroundColor(0xFF05050C.toInt())
                         webViewClient = object : WebViewClient() {
+                            override fun shouldInterceptRequest(v: WebView, r: WebResourceRequest): WebResourceResponse? = loader.shouldInterceptRequest(r.url)
                             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
-                                if (request.isForMainFrame && !finished) failed = true
-                            }
-                            override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, errorResponse: WebResourceResponse) {
-                                if (request.isForMainFrame && !finished) failed = true
+                                if (request.isForMainFrame) failed = true
                             }
                             override fun onPageFinished(view: WebView, u: String?) {
-                                // 페이지는 열렸는데 카드팩 화면(canvas)이 안 그려졌으면 → 앱 연출로 교체
                                 view.postDelayed({
-                                    if (finished) return@postDelayed
-                                    view.evaluateJavascript("(function(){return document.querySelectorAll('canvas').length})()") { r ->
-                                        if (!finished && r?.trim('"') == "0") failed = true
-                                    }
-                                }, 3000)
+                                    view.evaluateJavascript("(function(){return document.querySelectorAll('canvas').length})()") { r -> if (r?.trim('"') == "0") failed = true }
+                                }, 2500)
                             }
                         }
-                        addJavascriptInterface(object { @JavascriptInterface fun packDone() { post { finished = true; onDone() } } }, "Android")
+                        addJavascriptInterface(object { @JavascriptInterface fun packDone() { post { onDone() } } }, "Android")
                         loadUrl(url)
                     }
                 })
@@ -203,6 +203,7 @@ private fun PackOpenDialog(item: PokeGift.Item, onDone: () -> Unit) {
         }
     }
 }
+
 
 /** 인터넷 없이도 보이는 앱 안 카드팩 연출: 팩이 흔들림 → 눌러서 뜯기 → 카드가 튀어나옴 → 눌러서 닫기 */
 @Composable

@@ -66,7 +66,25 @@ function menu(p){unsel();SELP=p;const it=p.it,L=movesOf(p);
   bar.addEventListener('pointerdown',e=>e.stopPropagation());
   bar.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{useMove(p,L[+b.dataset.m])});
   bar.querySelector('#pkX').onclick=unsel;
-  bar.querySelector('#pkF').onclick=()=>{FOL=FOL===p?null:p;lsSet(fkey(),FOL?FOL.it.key:'');unsel();if(FOL){pop(p,'따라갈게!');if(typeof PL==='undefined'||!PL)(window.toast||alert)('캐릭터를 조종하면 졸졸 따라와요')}}}
+  bar.querySelector('#pkF').onclick=()=>{FOL=FOL===p?null:p;lsSet(fkey(),FOL?FOL.it.key:'');unsel();if(FOL){pop(p,'따라갈게!');if(typeof PL==='undefined'||!PL)toast('캐릭터를 조종하면 졸졸 따라와요')}}}
+
+// ---------- 오른쪽 가방: ⚡ 포켓몬 탭 ----------
+let PKBUSY=0;
+window.PKBag=function(el){const fp=!(ST.pfree||'').includes('P'),fm=!(ST.pfree||'').includes('M'),pP=ST.pP||10,pM=ST.pM||5;
+  const L=(ST.poke||[]).slice().sort((a,b)=>(b.rar||0)-(a.rar||0));
+  el.innerHTML=`<div style="grid-column:1/-1;display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px"><button class="btn g" id="pkPullP">⚡ 포켓몬 뽑기 ${fp?'(첫 1회 무료)':pP+'G'}</button><button class="btn g" id="pkPullM">📀 기술 뽑기 ${fm?'(첫 1회 무료)':pM+'G'}</button></div>
+   <div class="note" style="grid-column:1/-1;margin:0 0 6px">포켓몬을 누르면 기술을 쓰고, 따라오게 할 수 있어요. 내 폰 게임으로 받기는 보관함 → ⚡ 포켓몬에서!</div>`+
+   (L.length?'':'<div class="note" style="grid-column:1/-1">아직 포켓몬이 없어요. ⚡ 포켓몬 뽑기를 해 보세요!</div>');
+  L.forEach(it=>{const d=document.createElement('div');d.className='it';const key=it.dex+(it.sh?'s':''),inRoom=PK.find(p=>p.it.key===key);if(FOL&&FOL.it.key===key){d.className+=' placed';d.dataset.b='따라옴'}
+    const d4=String(it.dex).padStart(4,'0');d.innerHTML=`<img src="${HB}pk/portrait/${d4}/Normal.png" style="width:56px;height:56px;image-rendering:pixelated;border-radius:8px;background:#fff" onerror="this.style.visibility='hidden'"><br><b style="color:${RC[it.rar||0]}">${it.sh?'✨':''}${it.name||('No.'+it.dex)}</b><br><small>Lv.${it.lv||5} · ${RAR[it.rar||0]}</small>`;
+    d.onclick=()=>{if(inRoom)menu(inRoom);else toast('방에는 8마리까지 나와요')};el.appendChild(d)});
+  (ST.pmv||[]).forEach(m=>{const d=document.createElement('div');d.className='it';d.innerHTML=`<div style="font-size:36px">📀</div><b>${m.name}</b><br><small>기술 카드 · 포켓몬을 눌러 써요</small>`;el.appendChild(d)});
+  const pull=k=>{if(PKBUSY)return;const free=k==='P'?fp:fm,pr=k==='P'?pP:pM;if(!free&&ST.gold<pr){toast('골드가 모자라요');return}if(!window.AB){toast('미리보기에선 안 돼요');return}PKBUSY=1;AB.pokePull(k);setTimeout(()=>PKBUSY=0,8000)};
+  el.querySelector('#pkPullP').onclick=()=>pull('P');el.querySelector('#pkPullM').onclick=()=>pull('M')};
+window.PKPulled=async function(r){PKBUSY=0;if(!r.ok){toast(r.err||'뽑지 못했어요');return}
+  const d4=String(r.idx).padStart(4,'0');
+  if(window.CardPack)await CardPack.open({rar:r.rar,sh:r.sh,kind:r.k,name:r.name,sub:r.k==='P'?'Lv.'+r.lv:'기술 카드',img:r.k==='P'?HB+'pk/portrait/'+d4+'/Normal.png':'',base:'../cardpack/'});
+  toast('🎒 가방에 들어갔어요! '+r.name)};
 
 // ---------- 연결 ----------
 window.PKTick=function(dt){for(const p of PK)tick(p,dt);tickFx(dt)};

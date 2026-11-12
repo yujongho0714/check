@@ -158,6 +158,7 @@ function safePreview(cv,k){try{return preview(cv,k)}catch(e){try{const g=cv.getC
 function myChars(){const L=['B'].filter(()=>!!ST.dress);return L.concat(ST.mc.filter(k=>SKINS[k]))}
 function rBag(){const el=$('bag');el.innerHTML='';$('gold').textContent=ST.gold;
  if(tab==='a'){admin(el);return}
+ if(tab==='p'){try{window.PKBag&&PKBag(el)}catch(e){}return}
  if(tab==='c'){const L=myChars();if(!L.length)el.innerHTML='<div class="note">아직 캐릭터가 없어요. 🧑 캐릭터 뽑기를 해 보세요!</div>';
   L.forEach(k=>{const rm=NPC.some(n=>n.key===k),on=PL&&PL.key===k;const d=document.createElement('div');d.className='it'+(on||rm?' placed':'');d.dataset.b=rm?'방에 있음':'조종 중';d.innerHTML='<canvas class="px" width="64" height="64"></canvas>'+nameOf(k);const cv=d.querySelector('canvas');
    if(k==='B')drawBrThumb(cv);else{const g=cv.getContext('2d'),im=new Image();im.onload=()=>{g.imageSmoothingEnabled=false;g.drawImage(im,8,8,8,8,8,8,48,48);g.drawImage(im,40,8,8,8,8,8,48,48)};im.src=SKINS[k].u}
@@ -183,7 +184,7 @@ $('gacha').onclick=()=>{if(ST.gold<ST.furPrice){toast('골드가 모자라요');
 $('cgacha').onclick=()=>{if(ST.gold<ST.mcPrice){toast('골드가 모자라요');return}call('pullMc')};
 // ---------- 앱 다리 ----------
 const PENDING={};function call(op,...a){if(!AB){toast('미리보기에선 저장이 안 돼요');return}AB[op](...a.map(String))}
-window.onBridge=function(r){try{if(typeof r==='string')r=JSON.parse(r)}catch(e){return}if(r.op==='asset'){gotAsset(r);return}
+window.onBridge=function(r){try{if(typeof r==='string')r=JSON.parse(r)}catch(e){return}if(r.op==='asset'){gotAsset(r);return}if(r.op==='pokePull'){window.PKPulled&&PKPulled(r);return}
  if(!r.ok){toast(r.err||'다시 해 주세요');return}
  if(r.op==='pullFur'){const f=FUR[r.k];if(!f){toast('🪑 새 가구를 받았어요! 가방을 봐 주세요');rBag();return}gacha(RCOL[f.r],m=>{m.querySelector('.card').innerHTML='<div class="reveal"><p>🪑 가구 뽑기 결과!</p><img alt="" src="'+thumb(r.k)+'"><h3>'+f.n+'</h3><span class="shine" style="background:'+RCOL[f.r]+'">'+f.r+'</span><p>가방에 들어갔어요 · 눌러서 방에 놓아 보세요</p><div class="row"><button class="btn on" id="pl">🏠 바로 놓기</button><button class="btn" id="ok">확인</button></div></div>';
    m.querySelector('#ok').onclick=()=>closeM(m);m.querySelector('#pl').onclick=()=>{closeM(m);const b=(ST.room.fur||[]).slice().reverse().find(x=>x.k===r.k&&!placed.some(p=>p.id===x.id));if(b)itemMenu(b);else toast('잠깐 뒤에 가방에서 눌러 주세요')}},f.n)}
