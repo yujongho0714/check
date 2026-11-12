@@ -270,6 +270,32 @@ object AssetPack {
         }
     }
 
+    /** 올린 그림 전체를 zip 하나로 내보내요 (다시 올릴 수 있는 같은 폴더 구조) */
+    suspend fun exportTo(ctx: Context, out: Uri, say: (String) -> Unit): String = mutex.withLock {
+        withContext(Dispatchers.IO) {
+            try {
+                runCatching { doPull(ctx, force = false, say = say) }
+                val root = dir(ctx)
+                val files = root.walkTopDown().filter { it.isFile }.toList()
+                if (files.isEmpty()) return@withContext "올린 그림이 없어요"
+                val os = ctx.contentResolver.openOutputStream(out) ?: throw IOException("저장할 곳을 열 수 없어요")
+                os.use { o ->
+                    ZipOutputStream(o.buffered()).use { z ->
+                        files.forEachIndexed { i, f ->
+                            if (i % 50 == 0) say("내보내는 중… ${i * 100 / files.size}%")
+                            z.putNextEntry(ZipEntry(f.relativeTo(root).path.replace('\\', '/')))
+                            f.inputStream().use { it.copyTo(z) }
+                            z.closeEntry()
+                        }
+                    }
+                }
+                "✔ 그림 ${files.size}개를 zip 으로 저장했어요"
+            } catch (e: Exception) {
+                "실패: ${e.message ?: e.javaClass.simpleName}"
+            }
+        }
+    }
+
     private fun zipDir(dir: File): ByteArray {
         val bos = ByteArrayOutputStream()
         ZipOutputStream(bos).use { z ->

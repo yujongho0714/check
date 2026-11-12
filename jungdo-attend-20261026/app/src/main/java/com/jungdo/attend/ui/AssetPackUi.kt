@@ -49,6 +49,12 @@ fun AssetPackSettings() {
         }
     }
 
+    val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        busy = true; msg = "내보내는 중…"
+        scope.launch { msg = AssetPack.exportTo(ctx, uri) { msg = it }; busy = false }
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SectionTitle("그림 올리기 (계급 · 보석 · 네임플레이트 · UI · 옷)")
         Text(
@@ -66,6 +72,10 @@ fun AssetPackSettings() {
         }) { Text("그림 zip 올리기") }
 
         OutlinedButton(enabled = !busy && !stats.empty, onClick = { showGallery = true }) { Text("올린 그림 전체 보기 · 골라서 지우기") }
+
+        OutlinedButton(enabled = !busy && !stats.empty, onClick = {
+            saver.launch("jungdo_assetpack_" + java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(java.util.Date()) + ".zip")
+        }) { Text("⬇ 올린 그림 전체 다운로드 (zip)") }
 
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(enabled = !busy, onClick = {
