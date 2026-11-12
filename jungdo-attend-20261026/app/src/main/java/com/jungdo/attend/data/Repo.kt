@@ -114,6 +114,8 @@ object Repo {
             jumpGrade = d.getString("jumpGrade") ?: "",
             beltManual = d.getBoolean("beltManual") ?: false,
             beltAt = d.getLong("beltAt") ?: 0L,
+            pokeBag = strList(d.get("pokeBag")),
+            pokeFree = d.getString("pokeFree") ?: "",
         )
         // 나이가 있으면 올해 학년을 계산해서 보여줌 (저장된 grade 글자는 옛 값일 수 있음)
         if (base.age > 0 && base.ageYear > 0) return base.copy(grade = GradeCalc.labelOf(base.curAge))

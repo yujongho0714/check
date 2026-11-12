@@ -302,6 +302,7 @@ fun CollectionDialog(s: Student, startTab: Int = 0, onClose: () -> Unit) {
                     GamePill("보석 ${s.gems.size}/${maxOf(Loot.enabledCount, s.gems.size)}", tab == 0, 20.sp) { tab = 0 }
                     GamePill("네임플레이트 ${s.plates.size}/${Loot.PLATE_COUNT}", tab == 1, 20.sp) { tab = 1 }
                     GamePill("🎁 뽑기", tab == 2, 20.sp) { tab = 2 }
+                    GamePill("⚡ 포켓몬", tab == 5, 20.sp) { tab = 5 }
                     GamePill("👗 드레스룸", tab == 3, 20.sp) { tab = 3 }
                     GamePill("📖 도감", tab == 4, 20.sp) { tab = 4 }
                     if (com.jungdo.attend.data.MyRoom.enabled) GamePill("🏠 마이룸", false, 20.sp) { showRoom = true }
@@ -372,6 +373,8 @@ fun CollectionDialog(s: Student, startTab: Int = 0, onClose: () -> Unit) {
                     }
                 } else if (tab == 2) {
                     GachaPanel(s, Modifier.weight(1f).fillMaxWidth())   // 10단계: 뽑기
+                } else if (tab == 5) {
+                    PokeGiftPanel(s, Modifier.weight(1f).fillMaxWidth())   // 포켓몬 어드벤처 뽑기
                 } else if (tab == 3) {
                     DressRoomPanel(s, Modifier.weight(1f).fillMaxWidth())   // 11단계: 드레스룸
                 } else {
