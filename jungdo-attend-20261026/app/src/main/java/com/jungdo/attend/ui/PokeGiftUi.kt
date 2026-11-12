@@ -1,6 +1,15 @@
 package com.jungdo.attend.ui
 
+import android.annotation.SuppressLint
+import android.webkit.JavascriptInterface
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -50,6 +59,7 @@ fun PokeGiftPanel(s: Student, modifier: Modifier = Modifier) {
     var msg by remember { mutableStateOf("") }
     var last by remember { mutableStateOf<PokeGift.Item?>(null) }
     var sendRaw by remember { mutableStateOf<String?>(null) }
+    var anim by remember { mutableStateOf<PokeGift.Item?>(null) }
     val freeP = !s.pokeFree.contains("P")
     val freeM = !s.pokeFree.contains("M")
     val bag = s.pokeBag.mapNotNull { r -> PokeGift.parse(r)?.let { r to it } }.sortedWith(compareBy({ it.second.used }, { -it.second.rar }))
@@ -57,7 +67,7 @@ fun PokeGiftPanel(s: Student, modifier: Modifier = Modifier) {
     fun pull(kind: String) {
         if (busy) return
         busy = true; msg = ""
-        PokeGift.pull(s.id, kind) { r, err -> busy = false; last = r; if (err != null) msg = err }
+        PokeGift.pull(s.id, kind) { r, err -> busy = false; last = r; if (err != null) msg = err else if (r != null) anim = r }
     }
 
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
@@ -95,6 +105,8 @@ fun PokeGiftPanel(s: Student, modifier: Modifier = Modifier) {
         }
     }
 
+    anim?.let { a -> PackOpenDialog(a) { anim = null } }
+
     sendRaw?.let { raw ->
         var phone by remember(raw) { mutableStateOf(PokeGift.parse(raw)?.sentTo ?: "") }
         var err by remember(raw) { mutableStateOf("") }
@@ -127,3 +139,26 @@ fun PokeGiftPanel(s: Student, modifier: Modifier = Modifier) {
 }
 
 private fun mask(n: String) = if (n.length >= 10) n.take(3) + "-****-" + n.takeLast(4) else n
+
+/** 뽑기 직후 카드팩 뜯기 연출 (게임 사이트의 pack.html을 그대로 사용 — 게임과 똑같은 연출) */
+@SuppressLint("SetJavaScriptEnabled")
+@Composable
+private fun PackOpenDialog(item: PokeGift.Item, onDone: () -> Unit) {
+    val url = "https://${PokeGift.GAME_URL}/pack.html?k=${item.kind}&id=${item.idx}&r=${item.rar}&sh=${item.sh}&lv=${item.lv}&back=1"
+    Dialog(onDismissRequest = onDone, properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false)) {
+        Box(Modifier.fillMaxSize().background(Color(0xFF05050C))) {
+            AndroidView(modifier = Modifier.fillMaxSize(), factory = { ctx ->
+                WebView(ctx).apply {
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                    settings.mediaPlaybackRequiresUserGesture = false
+                    setBackgroundColor(0xFF05050C.toInt())
+                    webViewClient = WebViewClient()
+                    addJavascriptInterface(object { @JavascriptInterface fun packDone() { post { onDone() } } }, "Android")
+                    loadUrl(url)
+                }
+            })
+            TextButton(onClick = onDone, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) { Text("✕ 닫기", color = Color.White, fontSize = 18.sp) }
+        }
+    }
+}
