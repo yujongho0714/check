@@ -101,7 +101,7 @@ fun PokeGiftPanel(s: Student, modifier: Modifier = Modifier) {
                 enabled = !busy && (freeM || s.gold >= PokeGift.PRICE_M), modifier = Modifier.weight(1f).height(72.dp), color = theme.secondary, fontSize = 19.sp, sound = null)
         }
         Spacer(Modifier.height(6.dp))
-        GameButton("📱 전부 QR로 한 번에 받기 (${bag.size}개)", onClick = { qrAsk = true }, enabled = bag.isNotEmpty(),
+        GameButton("📱 QR로 한 번에 받기 (포켓몬·기술 ${bag.size}개 + 내 캐릭터·장비)", onClick = { qrAsk = true }, enabled = bag.isNotEmpty() || s.dress.isNotEmpty() || s.dressEquip.isNotEmpty(),
             modifier = Modifier.fillMaxWidth().height(56.dp), color = theme.secondary, fontSize = 18.sp, sound = null)
         if (busy) Text("뽑는 중…", color = gameMuted(), fontSize = 14.sp, modifier = Modifier.padding(top = 6.dp))
         if (msg.isNotBlank()) Text(msg, color = BadRed, fontSize = 15.sp, modifier = Modifier.padding(top = 6.dp))
@@ -152,7 +152,12 @@ fun PokeGiftPanel(s: Student, modifier: Modifier = Modifier) {
             dismissButton = { TextButton(onClick = { qrAsk = false }) { Text("닫기") } },
         )
     }
-    qrNum?.let { n -> BulkQrDialog(PokeGift.bulkLink(bag.map { it.second }, n), bag.size) { qrNum = null } }
+    qrNum?.let { n ->
+        val items = bag.map { it.second }
+        val me = if (s.dress.isNotEmpty() || s.dressEquip.isNotEmpty()) com.jungdo.attend.data.MeCode.code(s.dress, s.dressEquip, n) else null
+        val link = if (items.isNotEmpty()) PokeGift.bulkLink(items, n) + (me?.let { "&me=$it" } ?: "") else "https://${PokeGift.GAME_URL}/?me=$me"
+        BulkQrDialog(link, bag.size, me != null) { qrNum = null }
+    }
 
     sendRaw?.let { raw ->
         var phone by remember(raw) { mutableStateOf(PokeGift.parse(raw)?.sentTo ?: "") }
@@ -273,7 +278,7 @@ private fun NativePackReveal(item: PokeGift.Item, onDone: () -> Unit) {
 
 /** 가방 전부를 QR 하나로 (게임: 메뉴 → 🎁 선물 → 📷 QR 찍기, 또는 폰 카메라로 찍기) */
 @Composable
-private fun BulkQrDialog(link: String, count: Int, onDone: () -> Unit) {
+private fun BulkQrDialog(link: String, count: Int, withMe: Boolean, onDone: () -> Unit) {
     val bmp = remember(link) {
         val m = com.google.zxing.qrcode.QRCodeWriter().encode(link, com.google.zxing.BarcodeFormat.QR_CODE, 720, 720,
             mapOf(com.google.zxing.EncodeHintType.MARGIN to 2, com.google.zxing.EncodeHintType.ERROR_CORRECTION to com.google.zxing.qrcode.decoder.ErrorCorrectionLevel.L))
@@ -283,7 +288,7 @@ private fun BulkQrDialog(link: String, count: Int, onDone: () -> Unit) {
     }
     Dialog(onDismissRequest = onDone, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(Modifier.clip(RoundedCornerShape(20.dp)).background(Color.White).padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("📱 포켓몬 · 기술 ${count}개 한 번에 받기", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2C3050))
+            Text("📱 포켓몬·기술 ${count}개" + (if (withMe) " + 내 캐릭터·장비" else "") + " 한 번에 받기", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2C3050))
             Spacer(Modifier.height(8.dp))
             androidx.compose.foundation.Image(bitmap = bmp, contentDescription = "QR", modifier = Modifier.size(340.dp))
             Spacer(Modifier.height(8.dp))

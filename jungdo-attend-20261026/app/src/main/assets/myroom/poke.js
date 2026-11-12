@@ -44,13 +44,22 @@ async function useMove(p,mv,quiet){if(!mv||p.once)return;if(!FXM)FXM=await j(HB+
   if(typeof PL!=='undefined'&&PL&&!quiet){p.face=Math.atan2(cam.position.x-p.x,cam.position.z-p.z)+.9}
   play(p,phys?'attack':'shoot');if(!quiet)pop(p,mv.name+'!');
   const e=FXM[mv.id];if(!e)return;const t0=await fxTex(e[0]);if(!t0)return;const t=t0.clone();t.needsUpdate=true;const [c,r]=[e[1],e[2]];t.repeat.set(1/c,1/r);
-  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:t,transparent:true,depthWrite:false,depthTest:false,blending:THREE.AdditiveBlending}));
-  const dist=phys?1.3:3,s=(phys?3.6:5.2)*(quiet?.8:1);sp.scale.set(s,s,1);sp.position.set(p.x+Math.sin(p.face)*dist,p.H*.5,p.z+Math.cos(p.face)*dist);sp.renderOrder=20;S.add(sp);
-  FXL.push({sp,t,n:c*r,c,r,k:0,fps:20,del:phys?.15:.25})}
-function tickFx(dt){for(let i=FXL.length-1;i>=0;i--){const F=FXL[i];if(F.del>0){F.del-=dt;F.sp.visible=false;continue}F.sp.visible=true;F.k+=dt*F.fps;const k=Math.floor(F.k);if(k>=F.n){S.remove(F.sp);F.sp.material.dispose();F.t.dispose();FXL.splice(i,1);continue}F.t.offset.set((k%F.c)/F.c,1-(Math.floor(k/F.c)+1)/F.r);F.sp.material.opacity=k/F.n>.8?1-(k/F.n-.8)/.2:1}}
+  // 밝은 방바닥에서도 잘 보이게: 원래 색(보통 섞기) + 은은한 빛(더하기) + 바닥 원 + 화면 번쩍
+  const TC={NORMAL:'#a8a878',FIRE:'#ff6a20',WATER:'#3a8cff',ELECTRIC:'#ffd21a',GRASS:'#3cc85a',ICE:'#7ae0ff',FIGHTING:'#d0402a',POISON:'#b040c0',GROUND:'#d8a040',FLYING:'#9a8cff',PSYCHIC:'#ff4a90',BUG:'#a0c020',ROCK:'#b89838',GHOST:'#7050a8',DRAGON:'#6a3cff',DARK:'#584838',STEEL:'#a0a0c8',FAIRY:'#ff90c0'};const col=TC[mv.type]||'#ffffff';
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:t,transparent:true,depthWrite:false,depthTest:false}));
+  const glow=new THREE.Sprite(new THREE.SpriteMaterial({map:t,transparent:true,depthWrite:false,depthTest:false,blending:THREE.AdditiveBlending,opacity:.45,color:new THREE.Color(col)}));
+  const dist=phys?1.3:3,s=(phys?3.6:5.2)*(quiet?.8:1),X=p.x+Math.sin(p.face)*dist,Z=p.z+Math.cos(p.face)*dist;sp.scale.set(s,s,1);glow.scale.set(s*1.15,s*1.15,1);sp.position.set(X,p.H*.5,Z);glow.position.copy(sp.position);sp.renderOrder=21;glow.renderOrder=20;S.add(glow);S.add(sp);
+  const ring=new THREE.Mesh(new THREE.RingGeometry(.2,.45,40),new THREE.MeshBasicMaterial({color:new THREE.Color(col),transparent:true,opacity:.85,depthWrite:false,side:THREE.DoubleSide}));ring.rotation.x=-Math.PI/2;ring.position.set(X,.04,Z);S.add(ring);
+  FXL.push({sp,glow,ring,t,n:c*r,c,r,k:0,fps:20,del:phys?.15:.25});
+  if(!quiet){try{const f=document.createElement('div');f.style.cssText='position:fixed;inset:0;pointer-events:none;z-index:50;background:'+col+';opacity:.35;transition:opacity .35s';document.body.appendChild(f);requestAnimationFrame(()=>f.style.opacity='0');setTimeout(()=>f.remove(),400)}catch(e){}SHAKE=.35}}
+let SHAKE=0;
+let SJX=0,SJZ=0;function tickFx(dt){cam.position.x-=SJX;cam.position.z-=SJZ;SJX=SJZ=0;if(SHAKE>0){SHAKE=Math.max(0,SHAKE-dt);const a=SHAKE*.25;SJX=(Math.random()-.5)*a;SJZ=(Math.random()-.5)*a;cam.position.x+=SJX;cam.position.z+=SJZ}
+  for(let i=FXL.length-1;i>=0;i--){const F=FXL[i];if(F.del>0){F.del-=dt;F.sp.visible=F.glow.visible=false;continue}F.sp.visible=F.glow.visible=true;F.k+=dt*F.fps;const k=Math.floor(F.k);
+    if(k>=F.n){[F.sp,F.glow,F.ring].forEach(o=>{S.remove(o);o.material.dispose()});F.ring.geometry.dispose();F.t.dispose();FXL.splice(i,1);continue}
+    F.t.offset.set((k%F.c)/F.c,1-(Math.floor(k/F.c)+1)/F.r);const fo=k/F.n>.8?1-(k/F.n-.8)/.2:1;F.sp.material.opacity=fo;F.glow.material.opacity=.45*fo;const g=1+F.k/F.n*5;F.ring.scale.set(g,g,g);F.ring.material.opacity=.85*(1-F.k/F.n)}}
 // 머리 위 말풍선
-function pop(p,txt){const c=document.createElement('canvas');c.width=256;c.height=64;const g=c.getContext('2d');g.fillStyle='rgba(0,0,0,.65)';g.beginPath();g.roundRect?g.roundRect(4,8,248,48,20):g.rect(4,8,248,48);g.fill();g.fillStyle='#fff';g.font='900 30px sans-serif';g.textAlign='center';g.textBaseline='middle';g.fillText(txt,128,33,236);
-  const t=new THREE.CanvasTexture(c);const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:t,transparent:true,depthTest:false}));sp.scale.set(2.8,.7,1);sp.position.set(0,p.H+.5,0);sp.renderOrder=30;p.root.add(sp);setTimeout(()=>{p.root.remove(sp);t.dispose();sp.material.dispose()},1400)}
+function pop(p,txt){const c=document.createElement('canvas');c.width=256;c.height=64;const g=c.getContext('2d');g.fillStyle='rgba(20,20,40,.85)';g.strokeStyle='#ffd23f';g.lineWidth=5;g.beginPath();g.roundRect?g.roundRect(4,8,248,48,20):g.rect(4,8,248,48);g.fill();g.stroke();g.fillStyle='#ffd23f';g.font='900 34px sans-serif';g.textAlign='center';g.textBaseline='middle';g.fillText(txt,128,33,236);
+  const t=new THREE.CanvasTexture(c);const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:t,transparent:true,depthTest:false}));sp.scale.set(3.6,.9,1);sp.position.set(0,p.H+.5,0);sp.renderOrder=30;p.root.add(sp);setTimeout(()=>{p.root.remove(sp);t.dispose();sp.material.dispose()},1400)}
 
 // ---------- 누르면 선택: 아래에 기술 버튼이 떠서 여러 번 쓸 수 있어요 ----------
 let SELP=null,BAR=null;
