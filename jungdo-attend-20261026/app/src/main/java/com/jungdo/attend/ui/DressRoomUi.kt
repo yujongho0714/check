@@ -68,6 +68,8 @@ fun DressRoomPanel(s: Student, modifier: Modifier = Modifier) {
     var cat by remember { mutableStateOf(Dress.CATS.first()) }
     var dir by remember { mutableStateOf(DressDir.FRONT) }
     var action by remember { mutableStateOf(DressAction.STAND) }
+    var meSend by remember { mutableStateOf(false) }
+    var meMsg by remember { mutableStateOf("") }
 
     // 부위별로 가진 옷 (번호 순)
     val owned = remember(s.dress) {
@@ -118,7 +120,37 @@ fun DressRoomPanel(s: Student, modifier: Modifier = Modifier) {
                     color = theme.secondary, fontSize = 16.sp, sound = null,
                 )
             }
+            Spacer(Modifier.height(6.dp))
+            GameButton(
+                "🎮 포켓몬 게임으로 내 캐릭터 보내기", onClick = { meSend = true },
+                enabled = s.dress.isNotEmpty() || s.dressEquip.isNotEmpty(), modifier = Modifier.width(if (land) 232.dp else 288.dp).height(48.dp),
+                color = theme.primary, fontSize = 15.sp, sound = null,
+            )
+            if (meMsg.isNotBlank()) Text(meMsg, fontSize = 13.sp, color = gameMuted())
         }
+    }
+
+    if (meSend) {
+        var phone by remember { mutableStateOf(s.pokeBag.mapNotNull { com.jungdo.attend.data.PokeGift.parse(it)?.sentTo }.firstOrNull { it.isNotBlank() } ?: "") }
+        var err by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { meSend = false },
+            title = { Text("내 휴대폰 번호", fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("내 폰으로 게임 링크가 가요. (부모님 번호 말고 내 번호!)\n게임에서도 같은 번호를 써야 해요.", fontSize = 15.sp)
+                    Spacer(Modifier.height(8.dp))
+                    androidx.compose.material3.OutlinedTextField(value = phone, onValueChange = { v -> phone = v.filter { c -> c.isDigit() }.take(11) }, singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone), placeholder = { Text("01012345678") })
+                    if (err.isNotBlank()) Text(err, color = Color(0xFFE5484D), fontSize = 14.sp)
+                }
+            },
+            confirmButton = { TextButton(onClick = {
+                val e = com.jungdo.attend.data.MeCode.send(s, phone)
+                if (e != null) err = e else { meSend = false; meMsg = "📩 내 폰으로 캐릭터 링크를 보냈어요!" }
+            }) { Text("문자로 받기", fontSize = 17.sp, fontWeight = FontWeight.Bold) } },
+            dismissButton = { TextButton(onClick = { meSend = false }) { Text("닫기") } },
+        )
     }
 
     val picker: @Composable (Modifier) -> Unit = { m ->
