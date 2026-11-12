@@ -3,7 +3,22 @@ package com.jungdo.attend.ui
 import android.annotation.SuppressLint
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebViewClient
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -140,25 +155,85 @@ fun PokeGiftPanel(s: Student, modifier: Modifier = Modifier) {
 
 private fun mask(n: String) = if (n.length >= 10) n.take(3) + "-****-" + n.takeLast(4) else n
 
-/** 뽑기 직후 카드팩 뜯기 연출 (게임 사이트의 pack.html을 그대로 사용 — 게임과 똑같은 연출) */
+/**
+ * 뽑기 직후 카드팩 뜯기 연출 (게임 사이트의 pack.html을 그대로 사용 — 게임과 똑같은 연출)
+ * 인터넷이 안 되거나 페이지가 안 뜨면(화면이 까맣게 멈추는 문제) 앱 안의 간단한 연출로 바로 바꿔서 보여줘요.
+ */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 private fun PackOpenDialog(item: PokeGift.Item, onDone: () -> Unit) {
     val url = "https://${PokeGift.GAME_URL}/pack.html?k=${item.kind}&id=${item.idx}&r=${item.rar}&sh=${item.sh}&lv=${item.lv}&back=1"
+    var failed by remember { mutableStateOf(false) }
     Dialog(onDismissRequest = onDone, properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false)) {
         Box(Modifier.fillMaxSize().background(Color(0xFF05050C))) {
-            AndroidView(modifier = Modifier.fillMaxSize(), factory = { ctx ->
-                WebView(ctx).apply {
-                    settings.javaScriptEnabled = true
-                    settings.domStorageEnabled = true
-                    settings.mediaPlaybackRequiresUserGesture = false
-                    setBackgroundColor(0xFF05050C.toInt())
-                    webViewClient = WebViewClient()
-                    addJavascriptInterface(object { @JavascriptInterface fun packDone() { post { onDone() } } }, "Android")
-                    loadUrl(url)
-                }
-            })
+            if (failed) {
+                NativePackReveal(item, onDone)
+            } else {
+                AndroidView(modifier = Modifier.fillMaxSize(), factory = { ctx ->
+                    WebView(ctx).apply {
+                        var finished = false
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        settings.mediaPlaybackRequiresUserGesture = false
+                        setBackgroundColor(0xFF05050C.toInt())
+                        webViewClient = object : WebViewClient() {
+                            override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+                                if (request.isForMainFrame && !finished) failed = true
+                            }
+                            override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, errorResponse: WebResourceResponse) {
+                                if (request.isForMainFrame && !finished) failed = true
+                            }
+                            override fun onPageFinished(view: WebView, u: String?) {
+                                // 페이지는 열렸는데 카드팩 화면(canvas)이 안 그려졌으면 → 앱 연출로 교체
+                                view.postDelayed({
+                                    if (finished) return@postDelayed
+                                    view.evaluateJavascript("(function(){return document.querySelectorAll('canvas').length})()") { r ->
+                                        if (!finished && r?.trim('"') == "0") failed = true
+                                    }
+                                }, 3000)
+                            }
+                        }
+                        addJavascriptInterface(object { @JavascriptInterface fun packDone() { post { finished = true; onDone() } } }, "Android")
+                        loadUrl(url)
+                    }
+                })
+            }
             TextButton(onClick = onDone, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) { Text("✕ 닫기", color = Color.White, fontSize = 18.sp) }
+        }
+    }
+}
+
+/** 인터넷 없이도 보이는 앱 안 카드팩 연출: 팩이 흔들림 → 눌러서 뜯기 → 카드가 튀어나옴 → 눌러서 닫기 */
+@Composable
+private fun NativePackReveal(item: PokeGift.Item, onDone: () -> Unit) {
+    var opened by remember { mutableStateOf(false) }
+    val inf = rememberInfiniteTransition()
+    val wob by inf.animateFloat(-7f, 7f, infiniteRepeatable(tween(240, easing = LinearEasing), RepeatMode.Reverse))
+    val sc = remember { Animatable(0.15f) }
+    LaunchedEffect(opened) { if (opened) sc.animateTo(1f, spring(dampingRatio = 0.4f, stiffness = 170f)) }
+    val col = Color(PokeGift.RARC[item.rar])
+    Box(
+        Modifier.fillMaxSize().clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { if (!opened) opened = true else onDone() },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (!opened) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("🎁", fontSize = 140.sp, modifier = Modifier.graphicsLayer { rotationZ = wob })
+                Text("눌러서 뜯기!", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            }
+        } else {
+            Column(
+                Modifier.graphicsLayer { scaleX = sc.value; scaleY = sc.value }
+                    .clip(RoundedCornerShape(24.dp)).background(Color(0xFF14142A)).border(4.dp, col, RoundedCornerShape(24.dp)).padding(horizontal = 40.dp, vertical = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text("★".repeat(item.rar + 1), color = col, fontSize = 30.sp)
+                Text(if (item.kind == "P") (if (item.sh == 1) "✨" else "⚡") else "📀", fontSize = 100.sp)
+                Text(item.label, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                Text("[${PokeGift.RAR[item.rar]}]", color = col, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(10.dp))
+                Text("가방에 들어갔어요!\n화면을 누르면 닫혀요", color = Color(0xFFCCCCDD), fontSize = 16.sp, textAlign = TextAlign.Center)
+            }
         }
     }
 }
