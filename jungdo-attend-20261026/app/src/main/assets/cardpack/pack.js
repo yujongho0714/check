@@ -14,7 +14,7 @@ const CardPack=(()=>{
 
   async function open(o){
     o=Object.assign({rar:0,sh:0,kind:'P',name:'?',sub:'',img:'',col:'',base:'cardpack/'},o||{});const R=Math.max(0,Math.min(3,o.rar|0));
-    let art=null;const artP=o.img?loadImg(o.img,8000).then(v=>art=v):null;const pk=await loadImg(o.base+'pk'+R+'.webp',800);
+    let art=null;const artP=o.img?loadImg(o.img,8000).then(v=>art=v):null;const pk=await loadImg(o.base+'pk'+R+'.webp',800);let frm=null;loadImg(o.base+'frame'+R+'.webp',4000).then(v=>frm=v);
     return new Promise(done=>{
       const cv=document.createElement('canvas');cv.style.cssText='position:fixed;inset:0;width:100vw;height:100vh;z-index:99999;touch-action:none;background:#000';document.body.appendChild(cv);
       const c=cv.getContext('2d');let W,H,DP;function rs(){DP=Math.min(2,devicePixelRatio||1);W=innerWidth;H=innerHeight;cv.width=W*DP;cv.height=H*DP;c.setTransform(DP,0,0,DP,0,0)}rs();addEventListener('resize',rs);
@@ -36,9 +36,6 @@ const CardPack=(()=>{
         rr(c,0,0,w,h,w*.07);c.fillStyle=g;c.fill();
         if(back){rr(c,w*.05,h*.04,w*.9,h*.92,w*.05);c.fillStyle=C2;c.fill();c.fillStyle='rgba(255,255,255,.9)';c.font=`900 ${w*.22}px sans-serif`;c.textAlign='center';c.textBaseline='middle';c.fillText('?',w/2,h/2);c.restore();return}
         rr(c,w*.05,h*.04,w*.9,h*.92,w*.05);const ig=c.createLinearGradient(0,0,0,h);ig.addColorStop(0,'#fff');ig.addColorStop(1,o.col||'#dfe8f0');c.fillStyle=ig;c.fill();
-        // 이름
-        c.fillStyle='#1b1b28';c.font=`900 ${w*.1}px sans-serif`;c.textAlign='left';c.textBaseline='middle';c.fillText(o.name,w*.1,h*.1,w*.62);
-        c.textAlign='right';c.fillStyle=C2;c.font=`900 ${w*.075}px sans-serif`;c.fillText('★'.repeat(R+1),w*.9,h*.1);
         // 그림 칸
         const ax=w*.1,ay=h*.17,aw=w*.8,ah=h*.5;rr(c,ax,ay,aw,ah,w*.03);const bg=c.createRadialGradient(w/2,ay+ah/2,4,w/2,ay+ah/2,aw*.7);bg.addColorStop(0,'#fff');bg.addColorStop(1,o.col||C);c.fillStyle=bg;c.fill();
         c.save();rr(c,ax,ay,aw,ah,w*.03);c.clip();
@@ -50,6 +47,10 @@ const CardPack=(()=>{
         c.restore();
         c.fillStyle=C2;rr(c,w*.1,h*.7,w*.8,h*.07,h*.035);c.fill();c.fillStyle='#fff';c.font=`900 ${w*.065}px sans-serif`;c.textAlign='center';c.fillText((o.sh?'✨ 이로치 · ':'')+RN[R]+(o.kind==='M'?' 기술 카드':' 포켓몬'),w/2,h*.735);
         c.fillStyle='#333';c.font=`800 ${w*.07}px sans-serif`;c.fillText(o.sub||'',w/2,h*.84,w*.8);
+        if(frm){c.shadowBlur=0;c.drawImage(frm,-w*.07,-h*.055,w*1.14,h*1.11)}
+        // 이름 (프레임 위에 띠로)
+        c.fillStyle='rgba(20,22,40,.82)';rr(c,w*.12,h*.065,w*.76,h*.075,h*.03);c.fill();c.fillStyle='#fff';c.font=`900 ${w*.085}px sans-serif`;c.textAlign='left';c.textBaseline='middle';c.fillText(o.name,w*.16,h*.103,w*.5);
+        c.textAlign='right';c.fillStyle=R>=3?'#ffd060':R>=2?'#e0a0ff':R>=1?'#8fd0ff':'#ccc';c.font=`900 ${w*.065}px sans-serif`;c.fillText('★'.repeat(R+1),w*.85,h*.103);
         c.restore()}
       function frame(now){
         if(closed)return;const e=now-pt;c.save();
@@ -75,7 +76,11 @@ const CardPack=(()=>{
           if(bolts&&(ph==='card'||Math.random()<.04)){c.strokeStyle='rgba(220,180,255,.9)';c.shadowColor='#c070ff';c.shadowBlur=18;for(let i=0;i<2;i++){const a=Math.random()*Math.PI*2;bolt(c,W/2,H*.48,W/2+Math.cos(a)*W*.6,H*.48+Math.sin(a)*H*.5,3)}c.shadowBlur=0;if(Math.random()<.3)S.zap()}
           const cw=Math.min(W*.7,H*.42*.72),chh=cw/.72;let sx=1,y=H*.48+(1-ease)*H*.2,sc=.3+.7*ease;
           if(R==2)sx=Math.cos((1-ease)*Math.PI);if(R>=3)sx=Math.cos((1-ease)*Math.PI*4);
-          c.save();c.translate(W/2,y);c.scale(sc,sc);c.shadowColor=o.sh?'#fff':C;c.shadowBlur=30+R*15;card(0,0,cw,chh,now,sx||.001);c.restore();
+          if(R>=1){c.save();c.translate(W/2,y);c.scale(sc,sc);const pul=.6+.4*Math.sin(now/(R>=3?160:260));
+            const ag=c.createRadialGradient(0,0,cw*.3,0,0,cw*(1+R*.25));const AC=R>=3?'hsla('+((now/6)%360)+',95%,62%,':R>=2?'rgba(190,90,255,':'rgba(70,160,255,';ag.addColorStop(0,AC+(.55*pul)+')');ag.addColorStop(1,AC+'0)');c.fillStyle=ag;c.fillRect(-cw*2,-chh*2,cw*4,chh*4);
+            const n=R*10;for(let i=0;i<n;i++){const a=now/(900-R*150)*(i%2?1:-1)+i*Math.PI*2/n,rx=cw*(.62+.06*Math.sin(now/300+i)),ry=chh*(.6+.05*Math.cos(now/280+i));c.fillStyle=R>=3?'hsl('+((i*36+now/5)%360)+',100%,70%)':R>=2?'#e2b8ff':'#bfe0ff';c.globalAlpha=.5+.5*Math.sin(now/120+i);c.beginPath();c.arc(Math.cos(a)*rx,Math.sin(a)*ry,2+R*1.2,0,7);c.fill()}
+            if(R>=2){c.globalAlpha=.7*pul;c.lineWidth=3+R;c.strokeStyle=R>=3?'hsl('+((now/4)%360)+',100%,65%)':'#c070ff';c.shadowColor=c.strokeStyle;c.shadowBlur=25;rr(c,-cw*.58,-chh*.56,cw*1.16,chh*1.12,cw*.1);c.stroke()}c.restore()}
+          c.save();c.translate(W/2,y);c.scale(sc,sc);c.shadowColor=o.sh?'#fff':R>=3?'#ffd060':C;c.shadowBlur=30+R*25;card(0,0,cw,chh,now,sx||.001);c.restore();
           if(ph==='card'&&k>=1){setPh('show');if(R>=1)burst(20+R*20,4+R,C,60)}
           if(ph==='show'){if(R>=3&&Math.random()<.5)P.push({x:Math.random()*W,y:-10,vx:(Math.random()-.5)*2,vy:2+Math.random()*3,l:200,L:200,s:4+Math.random()*4,c:'hsl('+(Math.random()*360|0)+',90%,60%)',k:'conf'});
             if(R>=1&&Math.random()<.2+R*.1)P.push({x:W/2+(Math.random()-.5)*cw,y:H*.48+(Math.random()-.5)*chh,vx:0,vy:-.3,l:40,L:40,s:3+Math.random()*3,c:'#fff',k:'star'});
