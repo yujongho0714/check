@@ -197,7 +197,7 @@ window.onState=function(s){try{if(typeof s==='string')s=JSON.parse(s)}catch(e){r
  $('title').textContent=(ST.name?ST.name+'의 ':'')+'마이룸';$('admTab').hidden=!ST.admin;
  if(first){first=false;loadRoom()}else{// 판 가구가 방에 남아 있으면 치움
   for(let i=placed.length-1;i>=0;i--)if(!ST.room.fur.some(f=>f.id===placed[i].id)){S.remove(placed[i].obj);placed.splice(i,1)}}
- if(JSON.stringify(ST.dress)!==dressKey)buildBaram();rBag()};
+ if(JSON.stringify(ST.dress)!==dressKey)buildBaram();rBag();try{window.PKSync&&PKSync()}catch(e){}};
 function loadRoom(){const r=ST.room;(r.placed||[]).forEach(p=>{if(FUR[p.k]&&ST.room.fur.some(f=>f.id===p.id)){const q={id:p.id,k:p.k,x:p.x,z:p.z,rot:p.rot||0};placed.push(q);placeObj(q)}});
  let ctl=r.ctl||ST.mcSkin||(ST.mc[0])||(ST.dress?'B':'000');if(ctl==='B'&&!ST.dress)ctl='000';if(ctl!=='B'&&!SKINS[ctl])ctl='000';setCtl(ctl);
  (r.npc||[]).slice(0,MAXC-1).forEach(k=>{if(k!==ctl&&(k==='B'?ST.dress:SKINS[k]))addNpc(k)});$('loading').remove()}
@@ -232,7 +232,7 @@ function saveRoomNow(){clearTimeout(saveT);const r={placed:placed.map(p=>({id:p.
 const ray=new THREE.Raycaster(),nd=new THREE.Vector2(),plane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
 st.addEventListener('pointerdown',e=>{const r=st.getBoundingClientRect();nd.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);ray.setFromCamera(nd,cam);
  if(editing){const hits=ray.intersectObjects(placed.map(p=>p.obj).filter(Boolean),true);if(hits.length){let o=hits[0].object;while(o&&o.userData.pid==null)o=o.parent;const p=o&&placed.find(p=>p.id===o.userData.pid);if(p&&p!==sel){select(p);return}}}
- const pt=new THREE.Vector3();if(!ray.ray.intersectPlane(plane,pt))return;const cx=Math.floor(pt.x+N/2),cz=Math.floor(pt.z+N/2);
+ if(!editing&&window.PKTap&&PKTap(ray))return;const pt=new THREE.Vector3();if(!ray.ray.intersectPlane(plane,pt))return;const cx=Math.floor(pt.x+N/2),cz=Math.floor(pt.z+N/2);
  if(editing&&sel){if(freeAt(sel.k,cx,cz,sel.rot,sel.id)){sel.x=cx;sel.z=cz;placeObj(sel);select(sel)}else toast('거기엔 놓을 수 없어요');return}
  if(PL){PL.tx=Math.max(-N/2+.4,Math.min(N/2-.4,pt.x));PL.tz=Math.max(-N/2+.4,Math.min(N/2-.4,pt.z))}});
 const held={};document.querySelectorAll('[data-d]').forEach(b=>{const d=b.dataset.d;b.addEventListener('pointerdown',e=>{held[d]=1;e.preventDefault()});['pointerup','pointerleave','pointercancel'].forEach(ev=>b.addEventListener(ev,()=>held[d]=0))});
@@ -245,7 +245,7 @@ function loop(now){requestAnimationFrame(loop);const dt=Math.min(.05,(now-last)/
  if(PL){let mx=0,mz=0;if(held.up){mx-=1;mz-=1}if(held.down){mx+=1;mz+=1}if(held.left){mx-=1;mz+=1}if(held.right){mx+=1;mz-=1}if(mx||mz){const l=Math.hypot(mx,mz);PL.tx=PL.x+mx/l*.4;PL.tz=PL.z+mz/l*.4}tickActor(PL,dt,3.2)
   const k2=Math.min(1,dt*4);const tx=ZOOM>4?0:PL.x,tz=ZOOM>4?0:PL.z;camX+=(tx-camX)*k2;camZ+=(tz-camZ)*k2;cam.position.set(10+camX,10.5,10+camZ);cam.lookAt(camX,1.2,camZ)}
  for(const n of NPC){n.wait-=dt;if(!n.sk&&Math.hypot(n.tx-n.x,n.tz-n.z)<.1&&n.wait<=0){n.wait=rnd2(1.5,4);if(CLIPS.length&&Math.random()<.25)doSkill(n,CLIPS[(Math.random()*CLIPS.length)|0]);else for(let k=0;k<8;k++){const tx=rnd2(-N/2+.6,N/2-.6),tz=rnd2(-N/2+.6,N/2-.6);if(!blocked(tx,tz)){n.tx=tx;n.tz=tz;break}}}tickActor(n,dt,1.8)}
- if(sel)selBox.material.opacity=.4+.25*Math.sin(now/180);tickPrev(BIG,dt);DLG.forEach(P=>tickPrev(P,dt));R.render(S,cam)}
+ try{window.PKTick&&PKTick(dt)}catch(e){}if(sel)selBox.material.opacity=.4+.25*Math.sin(now/180);tickPrev(BIG,dt);DLG.forEach(P=>tickPrev(P,dt));R.render(S,cam)}
 // ---------- 시작 ----------
 (async()=>{const [fur,clips]=await Promise.all([fetch('fur.json').then(r=>r.json()),fetch('clips.json').then(r=>r.json())]);fur.forEach(defFur);CLIPS=clips;
  for(let i=0;i<102;i++){const k=String(i).padStart(3,'0');SKINS[k]={n:'캐릭터 '+(i+1),u:'../mc/'+k+'.png'}}

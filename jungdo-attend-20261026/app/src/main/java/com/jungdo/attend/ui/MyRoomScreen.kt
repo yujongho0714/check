@@ -68,6 +68,11 @@ fun MyRoomDialog(s: Student?, admin: Boolean = false, onClose: () -> Unit) {
             o.put("name", st.name); o.put("gold", st.gold)
             o.put("mc", JSONArray(st.mcSkins)); o.put("mcSkin", st.mcSkin)
             o.put("room", MyRoom.parse(st.myroom))
+            run {
+                val items = st.pokeBag.mapNotNull { com.jungdo.attend.data.PokeGift.parse(it) }
+                o.put("poke", JSONArray(items.filter { it.kind == "P" }.map { JSONObject().put("dex", it.idx).put("sh", it.sh).put("lv", it.lv).put("rar", it.rar) }))
+                o.put("pmv", JSONArray(items.filter { it.kind == "M" }.mapNotNull { com.jungdo.attend.data.PokeGift.MOVES.getOrNull(it.idx) }.distinctBy { it.id }.map { JSONObject().put("id", it.id).put("name", it.name) }))
+            }
             if (st.dressEquip.isNotEmpty()) o.put("dress", JSONObject(st.dressEquip as Map<*, *>)) else o.put("dress", JSONObject.NULL)
         } else {
             o.put("name", "관리자"); o.put("gold", 0); o.put("mc", JSONArray()); o.put("room", JSONObject())
