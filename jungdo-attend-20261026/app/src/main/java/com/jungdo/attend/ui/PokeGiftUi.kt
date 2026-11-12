@@ -47,6 +47,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -76,6 +78,8 @@ fun PokeGiftPanel(s: Student, modifier: Modifier = Modifier) {
     var last by remember { mutableStateOf<PokeGift.Item?>(null) }
     var sendRaw by remember { mutableStateOf<String?>(null) }
     var anim by remember { mutableStateOf<PokeGift.Item?>(null) }
+    var qrAsk by remember { mutableStateOf(false) }
+    var qrNum by remember { mutableStateOf<String?>(null) }
     val freeP = !s.pokeFree.contains("P")
     val freeM = !s.pokeFree.contains("M")
     val bag = s.pokeBag.mapNotNull { r -> PokeGift.parse(r)?.let { r to it } }.sortedWith(compareBy({ it.second.used }, { -it.second.rar }))
@@ -96,6 +100,9 @@ fun PokeGiftPanel(s: Student, modifier: Modifier = Modifier) {
             GameButton(if (freeM) "📀 기술 뽑기\n(첫 1회 무료)" else "📀 기술 뽑기\n${PokeGift.PRICE_M}골드", onClick = { pull("M") },
                 enabled = !busy && (freeM || s.gold >= PokeGift.PRICE_M), modifier = Modifier.weight(1f).height(72.dp), color = theme.secondary, fontSize = 19.sp, sound = null)
         }
+        Spacer(Modifier.height(6.dp))
+        GameButton("📱 전부 QR로 한 번에 받기 (${bag.size}개)", onClick = { qrAsk = true }, enabled = bag.isNotEmpty(),
+            modifier = Modifier.fillMaxWidth().height(56.dp), color = theme.secondary, fontSize = 18.sp, sound = null)
         if (busy) Text("뽑는 중…", color = gameMuted(), fontSize = 14.sp, modifier = Modifier.padding(top = 6.dp))
         if (msg.isNotBlank()) Text(msg, color = BadRed, fontSize = 15.sp, modifier = Modifier.padding(top = 6.dp))
         last?.let { it ->
@@ -122,6 +129,30 @@ fun PokeGiftPanel(s: Student, modifier: Modifier = Modifier) {
     }
 
     anim?.let { a -> PackOpenDialog(a) { anim = null } }
+
+    if (qrAsk) {
+        var phone by remember { mutableStateOf(bag.mapNotNull { it.second.sentTo.takeIf { t -> t.isNotBlank() } }.firstOrNull() ?: "") }
+        var err by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { qrAsk = false },
+            title = { Text("내 휴대폰 번호", fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("게임에 넣은 내 번호와 같아야 받을 수 있어요. (부모님 번호 말고 내 번호!)", fontSize = 15.sp)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(value = phone, onValueChange = { v -> phone = v.filter { c -> c.isDigit() }.take(11) }, singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), placeholder = { Text("01012345678") })
+                    if (err.isNotBlank()) Text(err, color = BadRed, fontSize = 14.sp)
+                }
+            },
+            confirmButton = { TextButton(onClick = {
+                val n = PokeGift.norm(phone)
+                if (n.length < 10 || !n.startsWith("01")) err = "휴대폰 번호를 다시 확인해 주세요" else { qrAsk = false; qrNum = n }
+            }) { Text("QR 보기", fontSize = 17.sp, fontWeight = FontWeight.Bold) } },
+            dismissButton = { TextButton(onClick = { qrAsk = false }) { Text("닫기") } },
+        )
+    }
+    qrNum?.let { n -> BulkQrDialog(PokeGift.bulkLink(bag.map { it.second }, n), bag.size) { qrNum = null } }
 
     sendRaw?.let { raw ->
         var phone by remember(raw) { mutableStateOf(PokeGift.parse(raw)?.sentTo ?: "") }
@@ -236,6 +267,29 @@ private fun NativePackReveal(item: PokeGift.Item, onDone: () -> Unit) {
                 Spacer(Modifier.height(10.dp))
                 Text("가방에 들어갔어요!\n화면을 누르면 닫혀요", color = Color(0xFFCCCCDD), fontSize = 16.sp, textAlign = TextAlign.Center)
             }
+        }
+    }
+}
+
+/** 가방 전부를 QR 하나로 (게임: 메뉴 → 🎁 선물 → 📷 QR 찍기, 또는 폰 카메라로 찍기) */
+@Composable
+private fun BulkQrDialog(link: String, count: Int, onDone: () -> Unit) {
+    val bmp = remember(link) {
+        val m = com.google.zxing.qrcode.QRCodeWriter().encode(link, com.google.zxing.BarcodeFormat.QR_CODE, 720, 720,
+            mapOf(com.google.zxing.EncodeHintType.MARGIN to 2, com.google.zxing.EncodeHintType.ERROR_CORRECTION to com.google.zxing.qrcode.decoder.ErrorCorrectionLevel.L))
+        val b = android.graphics.Bitmap.createBitmap(m.width, m.height, android.graphics.Bitmap.Config.RGB_565)
+        for (y in 0 until m.height) for (x in 0 until m.width) b.setPixel(x, y, if (m.get(x, y)) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+        b.asImageBitmap()
+    }
+    Dialog(onDismissRequest = onDone, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Column(Modifier.clip(RoundedCornerShape(20.dp)).background(Color.White).padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("📱 포켓몬 · 기술 ${count}개 한 번에 받기", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2C3050))
+            Spacer(Modifier.height(8.dp))
+            androidx.compose.foundation.Image(bitmap = bmp, contentDescription = "QR", modifier = Modifier.size(340.dp))
+            Spacer(Modifier.height(8.dp))
+            Text("내 폰 포켓몬 게임 → 메뉴 → 🎁 선물 → 📷 QR 찍기\n(또는 폰 카메라로 찍고 뜨는 링크 누르기)", fontSize = 15.sp, textAlign = TextAlign.Center, color = Color(0xFF2C3050))
+            Text("이미 받은 건 다시 안 들어가요. 새로 뽑으면 또 찍으면 돼요!", fontSize = 13.sp, color = Color(0xFF6B7280))
+            TextButton(onClick = onDone) { Text("닫기", fontSize = 18.sp) }
         }
     }
 }

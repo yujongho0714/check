@@ -52,6 +52,18 @@ object PokeGift {
 
     private fun b32(v0: Long, n: Int): String { var v = v0; val sb = StringBuilder(); repeat(n) { sb.insert(0, B32[(v % 32).toInt()]); v /= 32 }; return sb.toString() }
     fun norm(num: String) = num.filter { it.isDigit() }
+    /** 가방 전부를 QR 하나로: 게임주소/?gb=<8글자×n>.<확인 8글자> (게임 src/6f_qr.js 와 같아야 함) */
+    fun payload(it: Item): String {
+        val kind = if (it.kind == "M") 1L else 0L
+        var v = kind; v = v * 2048 + it.idx; v = v * 128 + it.lv.coerceIn(1, 127); v = v * 2 + it.sh; v = v * 4 + it.rar; v = v * 262144 + it.serial
+        return b32(v, 8)
+    }
+    fun bulkLink(items: List<Item>, num: String): String {
+        val p = items.joinToString("") { payload(it) }
+        val h = MessageDigest.getInstance("SHA-256").digest("jungdo2-poke-bulk-v1|${norm(num)}|$p".toByteArray(Charsets.UTF_8))
+        var v = 0L; for (i in 0 until 5) v = v * 256 + (h[i].toInt() and 255)
+        return "https://$GAME_URL/?gb=$p.${b32(v, 8)}"
+    }
     /** 선물 코드 만들기 (본인 번호로 도장) */
     fun code(it: Item, num: String): String {
         val kind = if (it.kind == "M") 1L else 0L
