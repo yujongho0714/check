@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.google.firebase.firestore.Blob
 import com.google.firebase.firestore.FieldValue
@@ -14,6 +15,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
@@ -58,7 +63,15 @@ object AssetPack {
     var version by mutableLongStateOf(0L)
         private set
 
+    /** 자동으로 받는 중일 때 화면에 보여 줄 글 (예: "받는 중… 3/20"). 비어 있으면 쉬는 중 */
+    var status by mutableStateOf("")
+        private set
+    /** 마지막으로 자동 확인한 결과 */
+    var lastCheck by mutableStateOf("")
+        private set
+
     private val mutex = Mutex()
+    private var loop: Job? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val db: FirebaseFirestore get() = FirebaseFirestore.getInstance()
 
@@ -115,7 +128,7 @@ object AssetPack {
         withContext(Dispatchers.IO) {
             try {
                 // 다른 기기에서 먼저 올린 게 있으면 받아서 합친 뒤에 올려요 (덮어써서 사라지는 것 방지)
-                runCatching { doPull(ctx, force = false, say = say) }
+                runCatching { doPull(ctx, force = false, say0 = say) }
                 var files = 0; var skipped = 0
                 uris.forEachIndexed { i, u ->
                     say("zip ${i + 1}/${uris.size} 푸는 중…")
@@ -137,13 +150,29 @@ object AssetPack {
     }
 
     /** 다른 기기에서 올린 최신 그림을 받아요 */
-    suspend fun syncNow(ctx: Context, say: (String) -> Unit): String = mutex.withLock {
-        withContext(Dispatchers.IO) {
-            try {
-                doPull(ctx, force = true, say = say) ?: "이미 최신이에요"
-            } catch (e: Exception) {
-                "실패: ${e.message ?: e.javaClass.simpleName}"
+    suspend fun syncNow(ctx: Context, say: (String) -> Unit): String {
+        if (mutex.isLocked) say("자동으로 받는 중이에요. 끝나면 이어서 확인해요… " + status)
+        // 다른 일이 끝나기를 최대 3분까지만 기다려요 (영원히 '확인하는 중' 으로 멈추지 않게)
+        val got = withTimeoutOrNull(180_000) { mutex.lock(); true } ?: return "다른 받기가 너무 오래 걸려요. 인터넷을 확인하고 앱을 다시 켜 주세요."
+        try {
+            return withContext(Dispatchers.IO) {
+                try {
+                    doPull(ctx, force = true, say0 = say) ?: "계정에 올린 그림이 없어요. 관리자 기기에서 [그림 zip 올리기]를 먼저 해 주세요."
+                } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                    "인터넷이 느려서 못 받았어요. 와이파이를 확인하고 다시 눌러 주세요."
+                } catch (e: Exception) {
+                    errText(e)
+                }
             }
+        } finally { if (got) mutex.unlock(); status = "" }
+    }
+
+    private fun errText(e: Exception): String {
+        val m = e.message ?: e.javaClass.simpleName
+        return when {
+            m.contains("PERMISSION_DENIED", true) -> "실패: 이 계정은 그림을 받을 권한이 없어요. 도장 계정으로 로그인했는지 확인해 주세요."
+            m.contains("offline", true) || m.contains("UNAVAILABLE", true) -> "실패: 인터넷에 연결돼 있지 않아요."
+            else -> "실패: $m"
         }
     }
 
@@ -163,7 +192,7 @@ object AssetPack {
     suspend fun deleteFiles(ctx: Context, paths: Collection<String>): String = mutex.withLock {
         withContext(Dispatchers.IO) {
             try {
-                runCatching { doPull(ctx, force = false, say = {}) }
+                runCatching { doPull(ctx, force = false, say0 = {}) }
                 val base = dir(ctx).canonicalPath + File.separator
                 var n = 0
                 paths.forEach { rel ->
@@ -211,12 +240,34 @@ object AssetPack {
     // ───────────── 자동 동기화 (로그인 후 계속 지켜봐요) ─────────────
     fun startSync(ctx: Context): ListenerRegistration {
         val app = ctx.applicationContext
-        return db.collection(META_COLL).document(META_DOC).addSnapshotListener { snap, _ ->
-            if (snap == null || !snap.exists()) return@addSnapshotListener
-            scope.launch {
-                runCatching { mutex.withLock { withContext(Dispatchers.IO) { doPull(app, force = false, say = {}) } } }
+        // 켤 때 한 번 + 10분마다 한 번 확인 (실시간 알림을 놓쳐도 받아요). 실패하면 1분 뒤 다시
+        loop?.cancel()
+        loop = scope.launch {
+            while (true) {
+                val ok = autoPull(app)
+                delay(if (ok) 600_000L else 60_000L)
             }
         }
+        val reg = db.collection(META_COLL).document(META_DOC).addSnapshotListener { snap, _ ->
+            if (snap == null || !snap.exists() || snap.metadata.isFromCache) return@addSnapshotListener
+            scope.launch { autoPull(app) }
+        }
+        return object : ListenerRegistration {
+            override fun remove() { reg.remove(); loop?.cancel(); loop = null }
+        }
+    }
+
+    private suspend fun autoPull(app: Context): Boolean {
+        if (!mutex.tryLock()) return true // 이미 누가 받는 중
+        return try {
+            val r = withContext(Dispatchers.IO) { doPull(app, force = false, say0 = {}) }
+            lastCheck = now() + (r?.let { " · $it" } ?: " · 최신이에요"); true
+        } catch (e: Exception) {
+            lastCheck = now() + " · " + (if (e is kotlinx.coroutines.TimeoutCancellationException) "인터넷이 느려서 다음에 다시 받아요" else errText(e)); false
+        } finally { mutex.unlock(); status = "" }
+    }
+
+    private fun now() = java.text.SimpleDateFormat("HH:mm", java.util.Locale.KOREA).format(java.util.Date())
     }
 
     // ───────────── 안쪽 일 ─────────────
@@ -274,7 +325,7 @@ object AssetPack {
     suspend fun exportTo(ctx: Context, out: Uri, only: String? = null, say: (String) -> Unit): String = mutex.withLock {
         withContext(Dispatchers.IO) {
             try {
-                runCatching { doPull(ctx, force = false, say = say) }
+                runCatching { doPull(ctx, force = false, say0 = say) }
                 val root = dir(ctx)
                 val files = (if (only != null) File(root, only) else root).walkTopDown().filter { it.isFile }.toList()
                 if (files.isEmpty()) return@withContext "올린 그림이 없어요"
@@ -331,8 +382,9 @@ object AssetPack {
     }
 
     /** 계정의 그림이 이 기기보다 새로우면 받아서 통째로 바꿔요. 받았으면 안내 글, 아니면 null */
-    private suspend fun doPull(ctx: Context, force: Boolean, say: (String) -> Unit): String? {
-        val meta = db.collection(META_COLL).document(META_DOC).get().await()
+    private suspend fun doPull(ctx: Context, force: Boolean, say0: (String) -> Unit): String? {
+        val say: (String) -> Unit = { status = it; say0(it) }
+        val meta = withTimeout(20_000) { db.collection(META_COLL).document(META_DOC).get().await() }
         if (!meta.exists()) return null
 
         // 테마 선택은 그림과 별개로 따라가요
@@ -356,7 +408,7 @@ object AssetPack {
         val bos = ByteArrayOutputStream()
         for (i in 0 until n) {
             say("받는 중… ${i + 1}/$n")
-            val d = db.collection(CHUNK_COLL).document(i.toString()).get().await()
+            val d = withTimeout(60_000) { db.collection(CHUNK_COLL).document(i.toString()).get().await() }
             if (d.getLong("v") != v) throw IOException("다른 기기가 올리는 중이에요. 잠시 뒤에 다시 해 주세요")
             bos.write(d.getBlob("data")?.toBytes() ?: throw IOException("그림 조각을 못 읽었어요"))
         }

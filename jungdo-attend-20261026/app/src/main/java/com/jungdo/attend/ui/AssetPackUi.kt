@@ -68,6 +68,8 @@ fun AssetPackSettings() {
             else "지금: 계급 ${stats.rank}장 · 보석 ${stats.gem}장 · 네임플레이트 ${stats.plate}장 · 옷 그림 ${stats.dress}장 · 테마 ${stats.themes.size}개",
             fontSize = 14.sp,
         )
+        if (AssetPack.status.isNotBlank()) Text("자동으로 받는 중: ${AssetPack.status}", color = Muted, fontSize = 13.sp)
+        else if (AssetPack.lastCheck.isNotBlank()) Text("자동 확인 ${AssetPack.lastCheck}", color = Muted, fontSize = 13.sp)
 
         Button(enabled = !busy, onClick = {
             picker.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream"))
