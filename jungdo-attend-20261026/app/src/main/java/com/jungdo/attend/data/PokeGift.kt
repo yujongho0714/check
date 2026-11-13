@@ -71,6 +71,14 @@ object PokeGift {
         var v = 0L; for (i in 0 until 5) v = v * 256 + (h[i].toInt() and 255)
         return "https://$GAME_URL/?gb=$p.${b32(v, 8)}"
     }
+    /** 도장 연동: 계급 레벨 · 연속 출석 · 띠를 QR 링크에 붙여요 (게임에서 보상 · 내 번호로 도장 찍어서 고칠 수 없어요) */
+    fun dojoParam(level: Int, streak: Int, belt: String, num: String): String {
+        val bc = if (belt.isBlank()) "0" else (Math.abs(belt.hashCode()) % 46656).toString(36).uppercase()
+        val dj = "L${level}S${streak}B$bc"
+        val h = MessageDigest.getInstance("SHA-256").digest("jungdo2-poke-bulk-v1|${norm(num)}|DJ$dj".toByteArray(Charsets.UTF_8))
+        var v = 0L; for (i in 0 until 5) v = v * 256 + (h[i].toInt() and 255)
+        return "dj=$dj.${b32(v, 8)}&bn=" + java.net.URLEncoder.encode(belt, "UTF-8")
+    }
     /** 선물 코드 만들기 (본인 번호로 도장) */
     fun code(it: Item, num: String): String {
         val kind = if (it.kind == "M") 1L else 0L

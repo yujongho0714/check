@@ -125,7 +125,7 @@ fun PokeGiftPanel(s: Student, modifier: Modifier = Modifier) {
         }
         Text("확률: 일반 69.8% · 희귀 22% · 영웅 7% · 전설 1% · 신화(메가진화) 0.2%", color = gameMuted(), fontSize = 12.sp, textAlign = TextAlign.Center)
         Spacer(Modifier.height(6.dp))
-        GameButton("📱 QR로 한 번에 받기 (새 포켓몬·기술 ${newBag.size}개 + 내 캐릭터·장비)", onClick = { qrAsk = true }, enabled = bag.isNotEmpty() || s.dress.isNotEmpty() || s.dressEquip.isNotEmpty(),
+        GameButton("📱 QR로 한 번에 받기 (새 포켓몬·기술 ${newBag.size}개 + 내 캐릭터·장비 + 도장 미션)", onClick = { qrAsk = true },
             modifier = Modifier.fillMaxWidth().height(56.dp), color = theme.secondary, fontSize = 18.sp, sound = null)
         Spacer(Modifier.height(6.dp))
         GameButton("🎮 게임 설치 QR (처음 한 번)", onClick = { instQr = true }, modifier = Modifier.fillMaxWidth().height(50.dp), color = theme.primary, fontSize = 17.sp, sound = null)
@@ -188,7 +188,8 @@ fun PokeGiftPanel(s: Student, modifier: Modifier = Modifier) {
     qrNum?.let { n ->
         val items = bag.map { it.second }
         val me = if (s.dress.isNotEmpty() || s.dressEquip.isNotEmpty()) com.jungdo.attend.data.MeCode.code(s.dress, s.dressEquip, n) else null
-        val link = if (items.isNotEmpty()) PokeGift.bulkLink(items, n) + (me?.let { "&me=$it" } ?: "") else "https://${PokeGift.GAME_URL}/?me=$me"
+        val dj = PokeGift.dojoParam(s.level, s.streak, s.belt, n)
+        val link = (if (items.isNotEmpty()) PokeGift.bulkLink(items, n) + (me?.let { "&me=$it" } ?: "") else "https://${PokeGift.GAME_URL}/?" + (me?.let { "me=$it&" } ?: "")) + (if (items.isNotEmpty()) "&" else "") + dj
         LaunchedEffect(n) { if (items.isNotEmpty()) PokeGift.markQr(s.id, n) }
         BulkQrDialog(link, bag.size, me != null) { qrNum = null }
     }
