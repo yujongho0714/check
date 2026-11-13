@@ -123,7 +123,7 @@ fun PokeGiftPanel(s: Student, modifier: Modifier = Modifier) {
             GameButton("📀 기술 10회\n${PokeGift.PRICE_M * 10}골드", onClick = { pull10("M") },
                 enabled = !busy && s.gold >= PokeGift.PRICE_M * 10, modifier = Modifier.weight(1f).height(64.dp), color = theme.secondary, fontSize = 17.sp, sound = null)
         }
-        Text("확률: 일반 69.8% · 희귀 22% · 영웅 7% · 전설 1% · 신화(메가진화) 0.2%", color = gameMuted(), fontSize = 12.sp, textAlign = TextAlign.Center)
+        Text("무조건 희귀 이상! 희귀 91.8% · 영웅 7% · 전설 1% · 신화(메가진화) 0.2%", color = gameMuted(), fontSize = 12.sp, textAlign = TextAlign.Center)
         Spacer(Modifier.height(6.dp))
         GameButton("📱 QR로 한 번에 받기 (새 포켓몬·기술 ${newBag.size}개 + 내 캐릭터·장비)", onClick = { qrAsk = true }, enabled = bag.isNotEmpty() || s.dress.isNotEmpty() || s.dressEquip.isNotEmpty(),
             modifier = Modifier.fillMaxWidth().height(56.dp), color = theme.secondary, fontSize = 18.sp, sound = null)
