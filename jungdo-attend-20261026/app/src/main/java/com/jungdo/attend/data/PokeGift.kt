@@ -17,12 +17,18 @@ object PokeGift {
     const val PRICE_P = 10
     const val PRICE_M = 5
     const val GAME_URL = "yujongho0714.github.io/attack/poke"
-    val RAR = listOf("일반", "희귀", "영웅", "전설")
-    val RARC = longArrayOf(0xFF8A9AA0, 0xFF4AA8FF, 0xFFC070FF, 0xFFFFB020)
-    private val W = intArrayOf(70, 22, 7, 1)
-    private val LV = intArrayOf(5, 8, 12, 15)
+    val RAR = listOf("일반", "희귀", "영웅", "전설", "신화")
+    val RARC = longArrayOf(0xFF8A9AA0, 0xFF4AA8FF, 0xFFC070FF, 0xFFFFB020, 0xFFFF3B6B)
+    /** 확률 (1000분율): 일반 69.8% · 희귀 22% · 영웅 7% · 전설 1% · 신화(메가진화) 0.2% */
+    private val W = intArrayOf(698, 220, 70, 10, 2)
+    private val LV = intArrayOf(5, 8, 12, 15, 20)
 
     class Mon(val dex: Int, val name: String, val rar: Int)
+    /** 신화 = 메가진화 포켓몬 (게임 src/6fz_mega.js 와 같은 순서) · 코드 번호는 1100 + 순서 */
+    private const val MEGA_RAW = "6:X;65:;80:;94:;115:;142:;150:Y;208:;227:;229:;248:;254:;282:;302:;303:;308:;310:;319:;323:;334:;354:;358:;359:;362:;380:;381:;384:;428:;448:;475:;491:;530:;560:;604:;670:;691:;701:;718:;719:;780:;807:;978:"
+    val MEGA: List<Pair<Int, String>> by lazy { MEGA_RAW.split(';').map { val a = it.split(':'); a[0].toInt() to a.getOrElse(1) { "" } } }
+    fun baseDex(idx: Int): Int = if (idx >= 1100) (MEGA.getOrNull(idx - 1100)?.first ?: idx) else idx
+    fun megaName(idx: Int): String? { val e = MEGA.getOrNull(idx - 1100) ?: return null; return "메가" + (MONS.firstOrNull { it.dex == e.first }?.name ?: "포켓몬") + e.second }
     class Mv(val id: String, val name: String, val rar: Int)
     val MONS: List<Mon> by lazy { M_RAW.split(';').mapNotNull { p -> val a = p.split(':'); if (a.size < 3) null else Mon(a[0].toInt(), a[1], a[2].toInt()) } }
     val MOVES: List<Mv> by lazy { V_RAW.split(';').mapNotNull { p -> val a = p.split(':'); if (a.size < 3) null else Mv(a[0], a[1], a[2].toInt()) } }
@@ -31,7 +37,7 @@ object PokeGift {
     data class Item(val id: String, val kind: String, val idx: Int, val lv: Int, val sh: Int, val rar: Int, val serial: Int, val code: String = "", val sentTo: String = "") {
         fun raw() = listOf(id, kind, idx, lv, sh, rar, serial, code, sentTo).joinToString("|")
         val used get() = code.isNotBlank()
-        val label: String get() = if (kind == "P") (if (sh == 1) "✨이로치 " else "") + (MONS.firstOrNull { it.dex == idx }?.name ?: "포켓몬") + " Lv.$lv" else "📀 기술 카드: " + (MOVES.getOrNull(idx)?.name ?: "?")
+        val label: String get() = if (kind == "P") (if (sh == 1) "✨이로치 " else "") + (megaName(idx) ?: MONS.firstOrNull { it.dex == idx }?.name ?: "포켓몬") + " Lv.$lv" else "📀 기술 카드: " + (MOVES.getOrNull(idx)?.name ?: "?")
     }
     fun parse(raw: String): Item? { val p = raw.split('|'); if (p.size < 7) return null
         return runCatching { Item(p[0], p[1], p[2].toInt(), p[3].toInt(), p[4].toInt(), p[5].toInt(), p[6].toInt(), p.getOrElse(7) { "" }, p.getOrElse(8) { "" }) }.getOrNull() }
@@ -42,10 +48,11 @@ object PokeGift {
         val id = "p" + System.currentTimeMillis().toString(36) + (Math.random() * 1000).toInt()
         val serial = (Math.random() * 262144).toInt()
         return if (kind == "P") {
-            var r = r0; var pool = MONS.filter { it.rar == r }; while (pool.isEmpty() && r > 0) { r--; pool = MONS.filter { it.rar == r } }
+            if (r0 == 4 && MEGA.isNotEmpty()) { val j = MEGA.indices.random(); return Item(id, "P", 1100 + j, LV[4], if (Math.random() < 0.02) 1 else 0, 4, serial) }
+            var r = r0.coerceAtMost(3); var pool = MONS.filter { it.rar == r }; while (pool.isEmpty() && r > 0) { r--; pool = MONS.filter { it.rar == r } }
             val m = pool.random(); Item(id, "P", m.dex, LV[r], if (Math.random() < 0.02) 1 else 0, r, serial)
         } else {
-            var r = r0; var pool = MOVES.withIndex().filter { it.value.rar == r }; while (pool.isEmpty() && r > 0) { r--; pool = MOVES.withIndex().filter { it.value.rar == r } }
+            var r = r0.coerceAtMost(3); var pool = MOVES.withIndex().filter { it.value.rar == r }; while (pool.isEmpty() && r > 0) { r--; pool = MOVES.withIndex().filter { it.value.rar == r } }
             val m = pool.random(); Item(id, "M", m.index, 1, 0, r, serial)
         }
     }
@@ -55,7 +62,7 @@ object PokeGift {
     /** 가방 전부를 QR 하나로: 게임주소/?gb=<8글자×n>.<확인 8글자> (게임 src/6f_qr.js 와 같아야 함) */
     fun payload(it: Item): String {
         val kind = if (it.kind == "M") 1L else 0L
-        var v = kind; v = v * 2048 + it.idx; v = v * 128 + it.lv.coerceIn(1, 127); v = v * 2 + it.sh; v = v * 4 + it.rar; v = v * 262144 + it.serial
+        var v = kind; v = v * 2048 + it.idx; v = v * 128 + it.lv.coerceIn(1, 127); v = v * 2 + it.sh; v = v * 4 + it.rar.coerceAtMost(3); v = v * 262144 + it.serial
         return b32(v, 8)
     }
     fun bulkLink(items: List<Item>, num: String): String {
@@ -67,7 +74,7 @@ object PokeGift {
     /** 선물 코드 만들기 (본인 번호로 도장) */
     fun code(it: Item, num: String): String {
         val kind = if (it.kind == "M") 1L else 0L
-        var v = kind; v = v * 2048 + it.idx; v = v * 128 + it.lv.coerceIn(1, 127); v = v * 2 + it.sh; v = v * 4 + it.rar; v = v * 262144 + it.serial
+        var v = kind; v = v * 2048 + it.idx; v = v * 128 + it.lv.coerceIn(1, 127); v = v * 2 + it.sh; v = v * 4 + it.rar.coerceAtMost(3); v = v * 262144 + it.serial
         val p = b32(v, 8)
         val h = MessageDigest.getInstance("SHA-256").digest("$SEC|${norm(num)}|$p".toByteArray(Charsets.UTF_8))
         val m = ((h[0].toInt() and 255) shl 12) or ((h[1].toInt() and 255) shl 4) or ((h[2].toInt() and 255) shr 4)
@@ -92,6 +99,20 @@ object PokeGift {
             if (free) f["pokeFree"] = (d.getString("pokeFree") ?: "") + kind else f["gold"] = FieldValue.increment(-price.toLong())
             tx.update(ref, f); it
         }.addOnSuccessListener { r -> if (r == null) onDone(null, "골드가 모자라요") else onDone(r, null) }
+         .addOnFailureListener { onDone(null, "인터넷을 확인하고 다시 눌러 주세요") }
+    }
+
+    /** 10회 뽑기: 골드 10번 값 · 한 번에 가방에 10개 */
+    fun pull10(studentId: String, kind: String, onDone: (List<Item>?, String?) -> Unit) {
+        val ref = Repo.students().document(studentId)
+        val price = (if (kind == "P") PRICE_P else PRICE_M) * 10
+        Repo.db.runTransaction { tx ->
+            val d = tx.get(ref)
+            val gold = (d.getLong("gold") ?: 0L).toInt()
+            if (gold < price) return@runTransaction null
+            val L = (1..10).map { roll(kind) }
+            tx.update(ref, mapOf("pokeBag" to FieldValue.arrayUnion(*L.map { it.raw() }.toTypedArray()), "gold" to FieldValue.increment(-price.toLong()))); L
+        }.addOnSuccessListener { r -> if (r == null) onDone(null, "골드가 모자라요 (10회는 ${price}골드)") else onDone(r, null) }
          .addOnFailureListener { onDone(null, "인터넷을 확인하고 다시 눌러 주세요") }
     }
 

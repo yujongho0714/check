@@ -95,6 +95,16 @@ fun PokeGiftPanel(s: Student, modifier: Modifier = Modifier) {
         busy = true; msg = ""
         PokeGift.pull(s.id, kind) { r, err -> busy = false; last = r; if (err != null) msg = err else if (r != null) anim = r }
     }
+    fun pull10(kind: String) {
+        if (busy) return
+        busy = true; msg = ""
+        PokeGift.pull10(s.id, kind) { L, err -> busy = false
+            if (err != null) msg = err else if (L != null) {
+                val best = L.maxWith(compareBy({ it.rar }, { it.sh })); last = best; anim = best
+                val c = L.groupingBy { it.rar }.eachCount()
+                msg = "10회 뽑기 결과: " + c.keys.sortedDescending().joinToString(" · ") { "${PokeGift.RAR[it]} ${c[it]}" } + " · 가방에 10개 넣었어요"
+            } }
+    }
 
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         PixelText("💰 ${s.gold} 골드 · 포켓몬 어드벤처 뽑기", fontWeight = FontWeight.Bold, fontSize = 16.sp)
@@ -106,6 +116,14 @@ fun PokeGiftPanel(s: Student, modifier: Modifier = Modifier) {
             GameButton(if (freeM) "📀 기술 뽑기\n(첫 1회 무료)" else "📀 기술 뽑기\n${PokeGift.PRICE_M}골드", onClick = { pull("M") },
                 enabled = !busy && (freeM || s.gold >= PokeGift.PRICE_M), modifier = Modifier.weight(1f).height(72.dp), color = theme.secondary, fontSize = 19.sp, sound = null)
         }
+        Spacer(Modifier.height(6.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            GameButton("⚡ 포켓몬 10회\n${PokeGift.PRICE_P * 10}골드", onClick = { pull10("P") },
+                enabled = !busy && s.gold >= PokeGift.PRICE_P * 10, modifier = Modifier.weight(1f).height(64.dp), color = theme.primary, fontSize = 17.sp, sound = null)
+            GameButton("📀 기술 10회\n${PokeGift.PRICE_M * 10}골드", onClick = { pull10("M") },
+                enabled = !busy && s.gold >= PokeGift.PRICE_M * 10, modifier = Modifier.weight(1f).height(64.dp), color = theme.secondary, fontSize = 17.sp, sound = null)
+        }
+        Text("확률: 일반 69.8% · 희귀 22% · 영웅 7% · 전설 1% · 신화(메가진화) 0.2%", color = gameMuted(), fontSize = 12.sp, textAlign = TextAlign.Center)
         Spacer(Modifier.height(6.dp))
         GameButton("📱 QR로 한 번에 받기 (새 포켓몬·기술 ${newBag.size}개 + 내 캐릭터·장비)", onClick = { qrAsk = true }, enabled = bag.isNotEmpty() || s.dress.isNotEmpty() || s.dressEquip.isNotEmpty(),
             modifier = Modifier.fillMaxWidth().height(56.dp), color = theme.secondary, fontSize = 18.sp, sound = null)
@@ -216,9 +234,9 @@ private fun mask(n: String) = if (n.length >= 10) n.take(3) + "-****-" + n.takeL
 @Composable
 private fun PackOpenDialog(item: PokeGift.Item, onDone: () -> Unit) {
     fun e(v: String) = java.net.URLEncoder.encode(v, "UTF-8")
-    val name = if (item.kind == "P") PokeGift.MONS.firstOrNull { it.dex == item.idx }?.name ?: "포켓몬" else PokeGift.MOVES.getOrNull(item.idx)?.name ?: "기술"
+    val name = if (item.kind == "P") PokeGift.megaName(item.idx) ?: PokeGift.MONS.firstOrNull { it.dex == item.idx }?.name ?: "포켓몬" else PokeGift.MOVES.getOrNull(item.idx)?.name ?: "기술"
     val sub = if (item.kind == "P") "Lv.${item.lv}" else "기술 카드"
-    val img = if (item.kind == "P") "https://${PokeGift.GAME_URL}/pk/portrait/" + item.idx.toString().padStart(4, '0') + "/Normal.png" else ""
+    val img = if (item.kind == "P") "https://${PokeGift.GAME_URL}/pk/portrait/" + PokeGift.baseDex(item.idx).toString().padStart(4, '0') + "/Normal.png" else ""
     val url = "https://appassets.androidplatform.net/assets/cardpack/index.html?k=${item.kind}&r=${item.rar}&sh=${item.sh}&n=${e(name)}&s=${e(sub)}&img=${e(img)}"
     var failed by remember { mutableStateOf(false) }
     Dialog(onDismissRequest = onDone, properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false, decorFitsSystemWindows = false)) {
