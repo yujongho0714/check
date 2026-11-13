@@ -70,7 +70,7 @@ fun MyRoomDialog(s: Student?, admin: Boolean = false, onClose: () -> Unit) {
             o.put("room", MyRoom.parse(st.myroom))
             run {
                 val items = st.pokeBag.mapNotNull { com.jungdo.attend.data.PokeGift.parse(it) }
-                o.put("poke", JSONArray(items.filter { it.kind == "P" }.map { JSONObject().put("dex", PokeGift.baseDex(it.idx)).put("sh", it.sh).put("lv", it.lv).put("rar", it.rar).put("name", com.jungdo.attend.data.PokeGift.MONS.firstOrNull { m -> m.dex == it.idx }?.name ?: "") }))
+                o.put("poke", JSONArray(items.filter { it.kind == "P" }.map { JSONObject().put("dex", com.jungdo.attend.data.PokeGift.baseDex(it.idx)).put("sh", it.sh).put("lv", it.lv).put("rar", it.rar).put("name", com.jungdo.attend.data.PokeGift.MONS.firstOrNull { m -> m.dex == it.idx }?.name ?: "") }))
                 o.put("pfree", st.pokeFree).put("pP", com.jungdo.attend.data.PokeGift.PRICE_P).put("pM", com.jungdo.attend.data.PokeGift.PRICE_M)
                 o.put("pmv", JSONArray(items.filter { it.kind == "M" }.mapNotNull { com.jungdo.attend.data.PokeGift.MOVES.getOrNull(it.idx) }.distinctBy { it.id }.map { JSONObject().put("id", it.id).put("name", it.name) }))
             }
