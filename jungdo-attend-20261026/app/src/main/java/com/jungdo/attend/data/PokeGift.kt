@@ -96,6 +96,18 @@ object PokeGift {
     }
 
     /** 사용: 본인 번호로 코드를 만들어 가방에 기록하고, 그 번호로 문자를 보냄 (다시 보내기도 같은 함수) */
+    /** QR로 보낸 것들을 가방에서 "QR로 보냄"으로 표시해요 (QR엔 가방 전체가 들어가고, 게임은 이미 받은 건 다시 안 넣어요) */
+    fun markQr(studentId: String, num: String) {
+        val ref = Repo.students().document(studentId)
+        Repo.db.runTransaction { tx ->
+            val d = tx.get(ref)
+            @Suppress("UNCHECKED_CAST") val bag = (d.get("pokeBag") as? List<String>)?.toMutableList() ?: return@runTransaction false
+            var ch = false
+            for (i in bag.indices) { val it = parse(bag[i]) ?: continue; if (!it.used) { bag[i] = it.copy(code = "QR", sentTo = norm(num)).raw(); ch = true } }
+            if (ch) tx.update(ref, mapOf("pokeBag" to bag)); ch
+        }
+    }
+
     fun send(studentId: String, name: String, raw: String, phone: String, onSent: (String) -> Unit = {}, onDone: (String?, String?) -> Unit) {
         val it = parse(raw) ?: return onDone(null, "가방 정보가 이상해요")
         val num = norm(phone)
