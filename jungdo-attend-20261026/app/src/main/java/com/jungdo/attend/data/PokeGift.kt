@@ -19,8 +19,8 @@ object PokeGift {
     const val GAME_URL = "yujongho0714.github.io/attack/poke"
     val RAR = listOf("일반", "희귀", "영웅", "전설", "신화")
     val RARC = longArrayOf(0xFF8A9AA0, 0xFF4AA8FF, 0xFFC070FF, 0xFFFFB020, 0xFFFF3B6B)
-    /** 확률 (1000분율): 무조건 희귀 이상 · 희귀 91.8% · 영웅 7% · 전설 1% · 신화(메가진화) 0.2% */
-    private val W = intArrayOf(0, 918, 70, 10, 2)
+    /** 확률 (1000분율): 일반 69.8% · 희귀 22% · 영웅 7% · 전설 1% · 신화(메가진화) 0.2% */
+    private val W = intArrayOf(698, 220, 70, 10, 2)
     private val LV = intArrayOf(5, 8, 12, 15, 20)
 
     class Mon(val dex: Int, val name: String, val rar: Int)
