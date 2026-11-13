@@ -268,7 +268,6 @@ object AssetPack {
     }
 
     private fun now() = java.text.SimpleDateFormat("HH:mm", java.util.Locale.KOREA).format(java.util.Date())
-    }
 
     // ───────────── 안쪽 일 ─────────────
     private class Counters { var files = 0; var skipped = 0 }
