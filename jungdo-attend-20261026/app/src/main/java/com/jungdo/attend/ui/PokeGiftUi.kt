@@ -86,6 +86,9 @@ fun PokeGiftPanel(s: Student, modifier: Modifier = Modifier) {
     val freeP = !s.pokeFree.contains("P")
     val freeM = !s.pokeFree.contains("M")
     val bag = s.pokeBag.mapNotNull { r -> PokeGift.parse(r)?.let { r to it } }.sortedWith(compareBy({ it.second.used }, { -it.second.rar }))
+    var showGot by remember { mutableStateOf(false) }
+    val newBag = bag.filter { !it.second.used } // 받은 것(QR·문자)은 목록에서 숨겨요
+    val shown = if (showGot) bag else newBag
 
     fun pull(kind: String) {
         if (busy) return
@@ -104,7 +107,7 @@ fun PokeGiftPanel(s: Student, modifier: Modifier = Modifier) {
                 enabled = !busy && (freeM || s.gold >= PokeGift.PRICE_M), modifier = Modifier.weight(1f).height(72.dp), color = theme.secondary, fontSize = 19.sp, sound = null)
         }
         Spacer(Modifier.height(6.dp))
-        GameButton("📱 QR로 한 번에 받기 (포켓몬·기술 ${bag.size}개 + 내 캐릭터·장비)", onClick = { qrAsk = true }, enabled = bag.isNotEmpty() || s.dress.isNotEmpty() || s.dressEquip.isNotEmpty(),
+        GameButton("📱 QR로 한 번에 받기 (새 포켓몬·기술 ${newBag.size}개 + 내 캐릭터·장비)", onClick = { qrAsk = true }, enabled = bag.isNotEmpty() || s.dress.isNotEmpty() || s.dressEquip.isNotEmpty(),
             modifier = Modifier.fillMaxWidth().height(56.dp), color = theme.secondary, fontSize = 18.sp, sound = null)
         Spacer(Modifier.height(6.dp))
         GameButton("🎮 게임 설치 QR (처음 한 번)", onClick = { instQr = true }, modifier = Modifier.fillMaxWidth().height(50.dp), color = theme.primary, fontSize = 17.sp, sound = null)
@@ -116,9 +119,13 @@ fun PokeGiftPanel(s: Student, modifier: Modifier = Modifier) {
             Text("가방에 들어갔어요! 아래에서 [사용]을 눌러 내 폰으로 받으세요.", color = gameMuted(), fontSize = 13.sp)
         }
         Spacer(Modifier.height(8.dp))
-        Text("🎒 포켓몬 가방 ${bag.size}개", fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.fillMaxWidth())
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("🎒 아직 안 받은 것 ${newBag.size}개", fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.weight(1f))
+            if (bag.size > newBag.size) TextButton(onClick = { showGot = !showGot }) { Text(if (showGot) "받은 것 숨기기" else "받은 것 보기 (${bag.size - newBag.size})", fontSize = 15.sp) }
+        }
+        if (shown.isEmpty()) Text("다 받았어요! 새로 뽑으면 여기에 나와요.", color = gameMuted(), fontSize = 14.sp, modifier = Modifier.padding(top = 8.dp))
         LazyColumn(Modifier.weight(1f, fill = true).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(bag, key = { it.second.id }) { (raw, it) ->
+            items(shown, key = { it.second.id }) { (raw, it) ->
                 Row(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (it.used) Color(0x14808080) else Color(0x2222C55E)).padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
