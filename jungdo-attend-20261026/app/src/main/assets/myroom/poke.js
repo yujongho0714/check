@@ -6,11 +6,19 @@ const TL=new THREE.TextureLoader();TL.setCrossOrigin('anonymous');
 const PK=[];let FXM=null,want='',FOL=null;const FXL=[];
 const tex=u=>new Promise(r=>TL.load(u,t=>{t.magFilter=t.minFilter=THREE.NearestFilter;t.generateMipmaps=false;if(THREE.sRGBEncoding)t.encoding=THREE.sRGBEncoding;r(t)},undefined,()=>r(null)));
 const j=u=>fetch(u).then(r=>r.ok?r.json():null).catch(()=>null);
+// 레조넌스 그림(rz): rzmap.json(도감번호→키) · rz/<키>/<키>.pmd.json. pk 폴더가 없어도 그림이 나오게, 없을 때만 예전 pk로 되돌아가요
+let RZM=null;const rzKey=async d4=>{if(!RZM)RZM=j(HB+'rzmap.json').then(m=>m||{});const m=await RZM;return m[d4]||null};
+const FCA={};function faceOf(d4){return FCA[d4]||(FCA[d4]=(async()=>{try{const k=await rzKey(d4);if(!k)return null;const b=HB+'rz/'+k+'/',meta=await j(b+k+'.pmd.json');const A=meta&&meta.anims&&meta.anims.idle;if(!A)return null;
+  const im=await new Promise((ok,no)=>{const i=new Image();i.crossOrigin='anonymous';i.onload=()=>ok(i);i.onerror=no;i.src=b+A.f+'-Anim.png'});
+  const c=document.createElement('canvas');c.width=A.w;c.height=A.h;const g=c.getContext('2d');g.drawImage(im,0,0,A.w,A.h,0,0,A.w,A.h);
+  const D=g.getImageData(0,0,A.w,A.h).data;let x0=A.w,y0=A.h,x1=-1,y1=-1;for(let y=0;y<A.h;y++)for(let x=0;x<A.w;x++)if(D[(y*A.w+x)*4+3]>20){if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y}
+  if(x1<0)return null;const w=x1-x0+1,h=y1-y0+1,S=Math.max(w,h)+4,o=document.createElement('canvas');o.width=o.height=S;o.getContext('2d').drawImage(c,x0,y0,w,h,(S-w)>>1,(S-h)>>1,w,h);return o.toDataURL('image/png')}catch(e){return null}})())}
+const faceUrl=async d4=>(await faceOf(d4))||HB+'pk/portrait/'+d4+'/Normal.png';
 const fkey=()=>'mr-follow:'+(ST&&ST.name||'');
 function lsGet(k){try{return localStorage.getItem(k)||''}catch(e){return ''}}function lsSet(k,v){try{localStorage.setItem(k,v)}catch(e){}}
 const RAR=['일반','희귀','영웅','전설'],RC=['#9aa','#4aa8ff','#c070ff','#ffb020'];
 
-async function mk(it){const d=String(it.dex).padStart(4,'0'),b=HB+'pk/sprite/'+d+'/';const meta=await j(b+'pmd.json');if(!meta)return null;
+async function mk(it){const d=String(it.dex).padStart(4,'0');let b=HB+'pk/sprite/'+d+'/',meta=null;const rk=await rzKey(d);if(rk){const rb=HB+'rz/'+rk+'/';meta=await j(rb+rk+'.pmd.json');if(meta)b=rb}if(!meta){b=HB+'pk/sprite/'+d+'/';meta=await j(b+'pmd.json')}if(!meta)return null;
   const T={};await Promise.all(Object.keys(meta.anims).map(async st=>{const t=await tex(b+meta.anims[st].f+'-Anim.png');if(t)T[st]=t}));if(!T.idle)return null;
   const mat=new THREE.MeshBasicMaterial({map:T.idle,transparent:true,alphaTest:.2,side:THREE.DoubleSide});if(it.sh)mat.color.setHSL(.12,.6,.75);
   const m=new THREE.Mesh(new THREE.PlaneGeometry(1,1),mat);const root=new THREE.Group();root.add(m);
@@ -85,14 +93,14 @@ window.PKBag=function(el){const fp=!(ST.pfree||'').includes('P'),fm=!(ST.pfree||
    <div class="note" style="grid-column:1/-1;margin:0 0 6px">포켓몬을 누르면 기술을 쓰고, 따라오게 할 수 있어요. 내 폰 게임으로 받기는 보관함 → ⚡ 포켓몬에서!</div>`+
    (L.length?'':'<div class="note" style="grid-column:1/-1">아직 포켓몬이 없어요. ⚡ 포켓몬 뽑기를 해 보세요!</div>');
   L.forEach(it=>{const d=document.createElement('div');d.className='it';const key=it.dex+(it.sh?'s':''),inRoom=PK.find(p=>p.it.key===key);if(FOL&&FOL.it.key===key){d.className+=' placed';d.dataset.b='따라옴'}
-    const d4=String(it.dex).padStart(4,'0');d.innerHTML=`<img src="${HB}pk/portrait/${d4}/Normal.png" style="width:56px;height:56px;image-rendering:pixelated;border-radius:8px;background:#fff" onerror="this.style.visibility='hidden'"><br><b style="color:${RC[it.rar||0]}">${it.sh?'✨':''}${it.name||('No.'+it.dex)}</b><br><small>Lv.${it.lv||5} · ${RAR[it.rar||0]}</small>`;
-    d.onclick=()=>{if(inRoom)menu(inRoom);else toast('방에는 8마리까지 나와요')};el.appendChild(d)});
+    const d4=String(it.dex).padStart(4,'0');d.innerHTML=`<img data-f="${d4}" style="width:56px;height:56px;image-rendering:pixelated;border-radius:8px;background:#fff" onerror="this.style.visibility='hidden'"><br><b style="color:${RC[it.rar||0]}">${it.sh?'✨':''}${it.name||('No.'+it.dex)}</b><br><small>Lv.${it.lv||5} · ${RAR[it.rar||0]}</small>`;
+    d.onclick=()=>{if(inRoom)menu(inRoom);else toast('방에는 8마리까지 나와요')};el.appendChild(d);faceUrl(d4).then(u=>{const im=d.querySelector('img');if(im)im.src=u})});
   (ST.pmv||[]).forEach(m=>{const d=document.createElement('div');d.className='it';d.innerHTML=`<div style="font-size:36px">📀</div><b>${m.name}</b><br><small>기술 카드 · 포켓몬을 눌러 써요</small>`;el.appendChild(d)});
   const pull=k=>{if(PKBUSY)return;const free=k==='P'?fp:fm,pr=k==='P'?pP:pM;if(!free&&ST.gold<pr){toast('골드가 모자라요');return}if(!window.AB){toast('미리보기에선 안 돼요');return}PKBUSY=1;AB.pokePull(k);setTimeout(()=>PKBUSY=0,8000)};
   el.querySelector('#pkPullP').onclick=()=>pull('P');el.querySelector('#pkPullM').onclick=()=>pull('M')};
 window.PKPulled=async function(r){PKBUSY=0;if(!r.ok){toast(r.err||'뽑지 못했어요');return}
   const d4=String(r.idx).padStart(4,'0');
-  if(window.CardPack)await CardPack.open({rar:r.rar,sh:r.sh,kind:r.k,name:r.name,sub:r.k==='P'?'Lv.'+r.lv:'기술 카드',img:r.k==='P'?HB+'pk/portrait/'+d4+'/Normal.png':'',base:'../cardpack/'});
+  if(window.CardPack)await CardPack.open({rar:r.rar,sh:r.sh,kind:r.k,name:r.name,sub:r.k==='P'?'Lv.'+r.lv:'기술 카드',img:r.k==='P'?await faceUrl(d4):'',base:'../cardpack/'});
   toast('🎒 가방에 들어갔어요! '+r.name)};
 
 // ---------- 연결 ----------
