@@ -69,6 +69,19 @@ tr.click:hover{background:#f8fafc;cursor:pointer}
 .t-in{background:#dbeafe;color:var(--in)}.t-out{background:#ffedd5;color:var(--out)}
 .t-ok{background:#dcfce7;color:var(--ok)}.t-bad{background:#fee2e2;color:var(--bad)}.t-wait{background:#fef3c7;color:var(--warn)}
 .t-gray{background:#f3f4f6;color:#4b5563}
+.edyear{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(520px,100%),1fr));gap:12px}
+.edmon{border:1px solid var(--line);border-radius:12px;padding:10px}.edmon.cur{border-color:#16a34a;box-shadow:0 0 0 2px #bbf7d0 inset}
+.edmh{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}.edmh b{font-size:16px;color:var(--navy)}
+.edweeks{display:grid;grid-template-columns:repeat(auto-fit,minmax(105px,1fr));gap:8px}
+.edc{all:unset;cursor:pointer;display:flex;flex-direction:column;gap:3px;border:1px solid var(--line);border-radius:10px;padding:6px;background:#fff;min-width:0}
+.edc:hover{border-color:#93c5fd}.edc.now{border-color:#16a34a;box-shadow:0 0 0 2px #bbf7d0}
+.edth{position:relative;aspect-ratio:16/9;border-radius:7px;background:#f1f5f9 center/cover;display:flex;align-items:center;justify-content:center}
+.edc.has .edth{background-color:#1e293b}
+.edplay{width:34px;height:34px;border-radius:50%;background:rgba(220,38,38,.92);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;padding-left:2px;box-sizing:border-box}
+.edico{font-size:26px}.edplus{font-size:24px;color:#94a3b8;font-weight:300}
+.edtt{font-size:12px;font-weight:800;color:var(--sub)}.ednow{background:#16a34a;color:#fff;border-radius:5px;padding:0 5px;font-size:11px}
+.edname{font-size:12.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.edadd5{border:1px dashed var(--line);background:#fff;border-radius:10px;color:var(--sub);font-size:12px}
 #tuBody td{padding:5px 6px;font-size:13.5px}#tuBody th{white-space:nowrap}
 #tuBody input,#tuBody select{padding:5px 6px;font-size:13px;border-radius:7px}
 #tuBody tr.un td:first-child{box-shadow:3px 0 0 var(--bad) inset}#tuBody tr.skip{opacity:.55}
@@ -178,6 +191,7 @@ tr.click:hover{background:#f8fafc;cursor:pointer}
     <button data-t="call">📞 전화 대상</button>
     <button data-t="fee">💰 수련비</button>
     <button data-t="unpaid">미납자 관리</button>
+    <button data-t="edu">📺 인성교육</button>
     <button data-t="msg">문자 문구 · 오늘 안내</button>
     <button data-t="char">🧸 캐릭터 넣기</button>
   </nav>
@@ -323,7 +337,7 @@ function tabFromHash(){ const t = (location.hash || '').slice(1); const b = t &&
 addEventListener('hashchange', () => { if (tabFromHash() && !$('#app').classList.contains('hidden')) render(); });
 function rerender(tabs){ if (!tabs.includes(S.tab)) return; if (S.tab === 'chat') { drawChat(); return; } if (S.tab === 'fee' || S.tab === 'unpaid') { tuRefresh(); return; } if (!S.busyInput) render(); }
 function updChatBadge(){ const n = S.inbox.filter(x => !x.handled).length; const b = document.querySelector('#tabs [data-t=chat]'); if (b) b.innerHTML = '💬 문자' + (n ? ` <span class="cbadge">${n}</span>` : ''); }
-function render(){ const p = $('#panel'); ({ today: rToday, chat: rChat, roster: rRoster, bulk: rBulk, month: rMonth, absent: rAbsent, msg: rMsg, call: rCall, char: rChar, fee: rFee, unpaid: rUnpaid })[S.tab](p); }
+function render(){ const p = $('#panel'); ({ today: rToday, chat: rChat, roster: rRoster, bulk: rBulk, month: rMonth, absent: rAbsent, msg: rMsg, call: rCall, char: rChar, fee: rFee, unpaid: rUnpaid, edu: rEdu })[S.tab](p); }
 // 글 쓰는 중에는 실시간 갱신으로 화면을 다시 그리지 않음
 document.addEventListener('focusin', e => { if (e.target.matches('#panel input[type=text], #panel textarea')) S.busyInput = true; });
 document.addEventListener('focusout', () => { S.busyInput = false; });
@@ -1870,6 +1884,101 @@ async function tuImportOld(){
   render();
   alert(`가져오기 끝\n· ${ms.map(mLabel).join(', ')} 자료 · ${hitAll.size}명${nf ? `\n· 원비 채움 ${nf}명` : ''}${missAll.size ? `\n· 출결 명단에서 못 찾은 이름: ${[...missAll].join(', ')}` : ''}`);
 }
+
+
+/* ═════════════ 📺 인성교육 영상 (해마다 1~12월 × 1~4주차, 5주차는 있을 때만) ═════════════
+   edu/{year} = { "m1w1": { title, url, kind:'youtube'|'drive'|'file'|'link', path, at } } */
+const ED = { year: thisYear(), docs: {}, unsub: null, sub: '' };
+const edKey = (m, w) => `m${m}w${w}`;
+function edWeekNow(){ const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() + 1, w: Math.min(5, Math.ceil(d.getDate() / 7)) }; }
+function edParse(url){
+  url = String(url || '').trim(); let x;
+  if ((x = url.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([\w-]{11})/))) return { kind: 'youtube', id: x[1], embed: `https://www.youtube.com/embed/${x[1]}?rel=0`, thumb: `https://img.youtube.com/vi/${x[1]}/hqdefault.jpg` };
+  if ((x = url.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:.*&)?id=)([\w-]{20,})/))) return { kind: 'drive', embed: `https://drive.google.com/file/d/${x[1]}/preview`, thumb: '' };
+  if (/\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(url) || /firebasestorage\.googleapis\.com/.test(url)) return { kind: 'file', src: url, thumb: '' };
+  if (/^https?:\/\//.test(url)) return { kind: 'link', src: url, thumb: '' };
+  return null;
+}
+function edSubscribe(){
+  const key = String(ED.year); if (ED.sub === key) return; ED.sub = key;
+  if (ED.unsub) ED.unsub();
+  ED.unsub = onSnapshot(doc(db, 'edu', key), d => { ED.docs[key] = d.exists() ? d.data() : {}; if (S.tab === 'edu' && !$('#modalRoot .modal')) render(); }, e => toast('인성교육 영상을 못 읽었어요: ' + (e.code || e.message)));
+}
+function rEdu(p){
+  edSubscribe();
+  const data = ED.docs[String(ED.year)], now = edWeekNow();
+  const cur = data && data[edKey(now.m, now.w)] && now.y === ED.year ? data[edKey(now.m, now.w)] : null;
+  const cell = (m, w) => { const v = data && data[edKey(m, w)], info = v && edParse(v.url), isNow = ED.year === now.y && m === now.m && w === now.w;
+    return `<button class="edc ${v ? 'has' : ''} ${isNow ? 'now' : ''}" data-m="${m}" data-w="${w}">
+      <div class="edth" ${info && info.thumb ? `style="background-image:url('${info.thumb}')"` : ''}>${v ? (info && info.thumb ? '<span class="edplay">▶</span>' : `<span class="edico">${info && info.kind === 'file' ? '🎬' : info && info.kind === 'drive' ? '📁' : '🔗'}</span>`) : '<span class="edplus">＋</span>'}</div>
+      <div class="edtt">${w}주차${isNow ? ' <b class="ednow">이번 주</b>' : ''}</div>
+      <div class="edname">${v ? esc(v.title || '제목 없음') : '<span class="muted">비어 있음</span>'}</div></button>`; };
+  p.innerHTML = `
+    <div class="row" style="margin-bottom:12px">
+      <button class="btn ghost small" id="edPrev">◀</button><h2 style="margin:0">${ED.year}년 인성교육 영상</h2><button class="btn ghost small" id="edNext">▶</button>
+      <div class="grow"></div>
+      ${cur ? `<button class="btn" id="edCur" style="background:#16a34a">▶ 이번 주 영상 틀기 · ${esc(cur.title || '')}</button>` : `<span class="muted">이번 주(${now.m}월 ${now.w}주차) 영상이 아직 없어요</span>`}
+    </div>
+    <p class="muted" style="margin:0 0 12px">칸을 누르면 영상이 나오고, 빈 칸을 누르면 올릴 수 있어요. 유튜브(일부 공개도 돼요)·구글 드라이브 링크를 넣거나 영상 파일을 바로 올리면 돼요.</p>
+    ${!data ? '<p class="muted">불러오는 중…</p>' : `<div class="edyear">${Array.from({ length: 12 }, (_, i) => i + 1).map(m => {
+      const has5 = !!data[edKey(m, 5)];
+      return `<div class="edmon ${ED.year === now.y && m === now.m ? 'cur' : ''}"><div class="edmh"><b>${m}월</b><span class="muted">${[1,2,3,4,5].filter(w => data[edKey(m, w)]).length}개</span></div>
+        <div class="edweeks">${[1, 2, 3, 4].map(w => cell(m, w)).join('')}${has5 ? cell(m, 5) : `<button class="edadd5" data-m="${m}" data-w="5" title="5주차 칸 추가">＋5주차</button>`}</div></div>`; }).join('')}</div>`}`;
+  $('#edPrev').onclick = () => { ED.year--; render(); }; $('#edNext').onclick = () => { ED.year++; render(); };
+  if ($('#edCur')) $('#edCur').onclick = () => edPlay(now.m, now.w);
+  p.querySelectorAll('.edc, .edadd5').forEach(b => b.onclick = () => { const m = +b.dataset.m, w = +b.dataset.w; (data && data[edKey(m, w)]) ? edPlay(m, w) : edEdit(m, w); });
+}
+function edPlay(m, w){
+  const v = (ED.docs[String(ED.year)] || {})[edKey(m, w)]; if (!v) return edEdit(m, w);
+  const info = edParse(v.url) || { kind: 'link', src: v.url };
+  const player = info.kind === 'youtube' || info.kind === 'drive' ? `<iframe src="${info.embed}" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen style="width:100%;aspect-ratio:16/9;border:0;border-radius:10px;background:#000"></iframe>`
+    : info.kind === 'file' ? `<video src="${esc(info.src)}" controls autoplay playsinline style="width:100%;max-height:70vh;border-radius:10px;background:#000"></video>`
+    : `<p>이 링크는 여기서 바로 못 틀어요. <a href="${esc(info.src)}" target="_blank" rel="noopener">새 창에서 열기 ↗</a></p>`;
+  const r = modal(`<div class="row" style="margin-bottom:10px"><h2 style="margin:0">${ED.year}년 ${m}월 ${w}주차 · ${esc(v.title || '')}</h2><div class="grow"></div><button class="btn small ghost" id="edFull">⛶ 크게</button><button class="btn small ghost" id="edEd">✏️ 바꾸기</button><button class="btn small ghost" id="edX">닫기</button></div>${player}`);
+  r.querySelector('.box').style.width = 'min(1100px,100%)';
+  r.querySelector('#edX').onclick = closeModal; r.querySelector('#edEd').onclick = () => { closeModal(); edEdit(m, w); };
+  r.querySelector('#edFull').onclick = () => { const el = r.querySelector('iframe,video'); if (el && el.requestFullscreen) el.requestFullscreen(); };
+}
+function edEdit(m, w){
+  const k = edKey(m, w), v = (ED.docs[String(ED.year)] || {})[k] || {};
+  const r = modal(`<h2>${ED.year}년 ${m}월 ${w}주차 인성교육 영상</h2>
+    <p class="muted" style="margin-top:0">링크를 넣거나 영상 파일을 올리세요. 둘 중 하나만 하면 돼요.</p>
+    <div style="margin-bottom:10px"><div class="muted">제목</div><input type="text" id="edT" value="${esc(v.title || '')}" placeholder="예: 친구에게 먼저 인사해요" style="width:100%"></div>
+    <div style="margin-bottom:10px"><div class="muted">영상 링크 (유튜브 · 구글 드라이브 · 영상 주소)</div><input type="text" id="edU" value="${esc(v.url || '')}" placeholder="https://youtu.be/…" style="width:100%"><div class="muted" id="edUi" style="margin-top:4px"></div></div>
+    <div class="card" style="margin-bottom:10px"><div class="row"><b>또는 영상 파일 올리기</b><div class="grow"></div><input type="file" id="edF" accept="video/*"></div>
+      <div id="edProg" class="muted" style="margin-top:6px">mp4 권장 · 파일이 크면 시간이 걸려요 (유튜브 일부 공개로 올리고 링크를 넣는 게 가장 가볍고 빨라요)</div></div>
+    <div class="row"><button class="btn red small" id="edDel" ${v.url ? '' : 'style="visibility:hidden"'}>이 칸 비우기</button><div class="grow"></div><button class="btn ghost" id="edC">취소</button><button class="btn" id="edS">저장</button></div>`);
+  const ui = () => { const i = edParse(r.querySelector('#edU').value); r.querySelector('#edUi').textContent = !r.querySelector('#edU').value.trim() ? '' : !i ? '⚠ 링크 모양이 아니에요' : ({ youtube: '✔ 유튜브 영상', drive: '✔ 구글 드라이브 영상 (공유: 링크가 있는 모든 사용자)', file: '✔ 영상 파일 주소', link: '△ 일반 링크 — 새 창으로 열려요' })[i.kind]; };
+  r.querySelector('#edU').addEventListener('input', ui); ui();
+  r.querySelector('#edC').onclick = closeModal;
+  let busy = false;
+  const save = async patch => { await setDoc(doc(db, 'edu', String(ED.year)), { [k]: patch }, { merge: true }); };
+  r.querySelector('#edDel').onclick = async () => { if (!confirm('이 칸의 영상을 비울까요?')) return; await setDoc(doc(db, 'edu', String(ED.year)), { [k]: deleteField() }, { merge: true }); if (v.path) edStorageDelete(v.path); closeModal(); toast('비웠어요'); };
+  r.querySelector('#edS').onclick = async () => {
+    if (busy) return; const title = r.querySelector('#edT').value.trim(), file = r.querySelector('#edF').files[0]; let url = r.querySelector('#edU').value.trim(), path = '';
+    if (!file && !url) return toast('링크를 넣거나 파일을 골라 주세요');
+    if (!file && !edParse(url)) return toast('링크 모양을 확인해 주세요');
+    busy = true; r.querySelector('#edS').disabled = true;
+    try {
+      if (file){
+        const st = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js');
+        const ext = (file.name.split('.').pop() || 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp4';
+        path = `edu/${ED.year}/${k}_${Date.now()}.${ext}`;
+        const ref = st.ref(st.getStorage(fb), path);
+        const task = st.uploadBytesResumable(ref, file, { contentType: file.type || 'video/mp4' });
+        await new Promise((res, rej) => task.on('state_changed', s => { r.querySelector('#edProg').textContent = `올리는 중… ${Math.round(s.bytesTransferred / s.totalBytes * 100)}% (${(s.bytesTransferred / 1048576).toFixed(1)} / ${(s.totalBytes / 1048576).toFixed(1)}MB)`; }, rej, res));
+        url = await st.getDownloadURL(ref);
+        if (v.path) edStorageDelete(v.path);
+      }
+      await save({ title: title || (file ? file.name.replace(/\.[^.]+$/, '') : ''), url, kind: (edParse(url) || {}).kind || 'link', path: path || (url === v.url ? (v.path || '') : ''), at: Date.now() });
+      closeModal(); toast('저장했어요');
+    } catch (e){
+      console.error(e); busy = false; r.querySelector('#edS').disabled = false;
+      r.querySelector('#edProg').innerHTML = `<b style="color:var(--bad)">파일을 못 올렸어요 (${esc(e.code || e.message || '')})</b><br>Firebase 저장소(Storage)가 꺼져 있으면 파일은 못 올려요. 유튜브에 <b>일부 공개</b>로 올리고 링크를 넣어 주세요.`;
+    }
+  };
+}
+async function edStorageDelete(path){ try { const st = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js'); await st.deleteObject(st.ref(st.getStorage(fb), path)); } catch(e){} }
 
 function exportXlsx(rows, file, sheet){
   if (!window.XLSX){ toast('엑셀 도구를 못 불러왔어요'); return; }
