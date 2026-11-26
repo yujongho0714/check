@@ -269,10 +269,10 @@ function onAuth(user){
   unsubs.push(onSnapshot(collection(db, 'groups'), snap => { S.groups = snap.docs.map(d => ({ id: d.id, name: d.get('name') || '', ids: d.get('studentIds') || [] })); rerender(['bulk']); }, err));
   unsubs.push(onSnapshot(query(collection(db, 'bulk'), orderBy('createdMs', 'desc'), limit(300)), snap => { S.bulkAll = snap.docs.map(d => ({ id: d.id, ...d.data() })); S.bulk = S.bulkAll.slice(0, 15); rerender(['bulk', 'chat']); }, err));
   unsubs.push(onSnapshot(query(collection(db, 'inbox'), orderBy('at', 'desc'), limit(300)), snap => { S.inbox = snap.docs.map(d => ({ id: d.id, ...d.data() })); rerender(['absent', 'chat']); updChatBadge(); }, () => {}));
-  unsubs.push(onSnapshot(doc(db, 'config', 'pcChat'), d => { S.chatHidden = (d.exists() && d.get('hidden')) || {}; rerender(['chat']); }, () => {}));
+  unsubs.push(onSnapshot(doc(db, 'config', 'pcChat'), d => { S.chatHidden = (d.exists() && d.get('hidden')) || {}; S.chatGone = (d.exists() && d.get('gone')) || {}; rerender(['chat']); }, () => {}));
   ['server', 'kiosk'].forEach(w => unsubs.push(onSnapshot(doc(db, 'status', w), d => { S.dev[w] = d.exists() ? d.data() : null; renderDev(); }, () => {})));
   const t = setInterval(renderDev, 30000); unsubs.push(() => clearInterval(t));
-  render();
+  tabFromHash(); render();
 }
 function toStudent(d){
   const x = d.data();
@@ -296,6 +296,9 @@ function renderDev(){
 
 /* ═════════════ 탭 ═════════════ */
 $('#tabs').onclick = e => { const b = e.target.closest('button'); if (!b) return; S.tab = b.dataset.t; document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b)); render(); };
+// 올인원 바로가기: 주소 끝 #chat · #roster · #call · #bulk · #month · #absent · #msg → 그 탭으로
+function tabFromHash(){ const t = (location.hash || '').slice(1); const b = t && document.querySelector(`#tabs [data-t="${t}"]`); if (b){ S.tab = t; document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b)); } return !!b; }
+addEventListener('hashchange', () => { if (tabFromHash() && !$('#app').classList.contains('hidden')) render(); });
 function rerender(tabs){ if (!tabs.includes(S.tab)) return; if (S.tab === 'chat') { drawChat(); return; } if (!S.busyInput) render(); }
 function updChatBadge(){ const n = S.inbox.filter(x => !x.handled).length; const b = document.querySelector('#tabs [data-t=chat]'); if (b) b.innerHTML = '💬 문자' + (n ? ` <span class="cbadge">${n}</span>` : ''); }
 function render(){ const p = $('#panel'); ({ today: rToday, chat: rChat, roster: rRoster, bulk: rBulk, month: rMonth, absent: rAbsent, msg: rMsg, call: rCall, char: rChar })[S.tab](p); }
@@ -1251,7 +1254,7 @@ function drawRoom(){
     <div class="cinput">
       <div class="row" style="gap:6px;padding:6px 10px 0">${QUICK.map((q, i) => `<button class="pill" data-qt="${i}" style="font-size:12.5px;padding:3px 10px">${esc(q[0])}</button>`).join('')}</div>
       <div class="row" style="padding:8px 10px;gap:8px;align-items:flex-end;flex-wrap:nowrap">
-        <textarea id="ctext" placeholder="문자 입력 (Enter 보내기 · Shift+Enter 줄바꿈)" rows="2"></textarea>
+        <textarea id="ctext" placeholder="문자 입력 (Enter는 줄바꿈 · [전송]을 눌러야 보내져요)" rows="2"></textarea>
         <button class="csend" id="csend">전송</button></div>
       <div class="muted" style="padding:0 12px 8px;font-size:12px" id="clen"></div>
     </div>`;
@@ -1259,7 +1262,6 @@ function drawRoom(){
   const ta = $('#ctext'); const draft = CH.drafts && CH.drafts[p]; if (draft) ta.value = draft;
   const len = () => { const n = [...ta.value].reduce((a, c) => a + (c.charCodeAt(0) > 127 ? 2 : 1), 0); $('#clen').textContent = ta.value ? `${n}바이트 · ${n > 90 ? '장문(LMS)' : '단문(SMS)'}` : ''; };
   ta.oninput = () => { (CH.drafts = CH.drafts || {})[p] = ta.value; len(); }; len();
-  ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing){ e.preventDefault(); sendChat(); } });
   $('#csend').onclick = sendChat;
   room.querySelectorAll('[data-qt]').forEach(b => b.onclick = () => { const o = phoneOwners(p); ta.value = buildReply(QUICK[+b.dataset.qt][1], o.map(x => x.s.name).filter((v, i, a) => a.indexOf(v) === i), o[0] ? o[0].label : ''); ta.oninput(); ta.focus(); });
   bindRead();
@@ -1309,7 +1311,13 @@ function unhideModal(){
   m.querySelector('#uclose').onclick = closeModal;
   m.querySelectorAll('[data-uh]').forEach(b => b.onclick = async () => { await updateDoc(doc(db, 'config', 'pcChat'), { ['hidden.' + b.dataset.uh]: deleteField() }); b.closest('.row').remove(); toast('되살렸어요'); });
 }
-function groupJobs(){ return S.bulkAll.filter(j => (j.items || []).length > 1 && !j.parent && !String(j.title || '').startsWith('💬')); }
+function groupJobs(){ return S.bulkAll.filter(j => (j.items || []).length > 1 && !j.parent && !String(j.title || '').startsWith('💬') && !(S.chatGone || {})[j.id]); }
+/* 단체방 해체: 단체방이 목록에서 완전히 없어져요 (답장은 각 어머님 1:1 대화방에 그대로 남아요). 모든 PC에 똑같이 */
+async function dissolveRoom(j){
+  if (!confirm(`'${j.title || '단체방'}' 방을 해체할까요?\n단체방이 목록에서 없어져요. 받은 답장·보낸 문자는 각 어머님 1:1 대화방에 그대로 남아요.`)) return;
+  await setDoc(doc(db, 'config', 'pcChat'), { gone: { [j.id]: Date.now() } }, { merge: true });
+  CH.cur = ''; toast('단체방을 해체했어요');
+}
 /** 방에 들어갈 것: 내가 보낸 단체 문자 + 보낸 뒤 그 사람들이 보낸 답장 + 내가 그 사람에게 따로 보낸 답장 */
 function groupMsgs(j){
   const phones = new Map((j.items || []).map(it => [normPhone(it.p), it.n]));
@@ -1359,14 +1367,14 @@ function drawGroupRoom(room){
   const unreadIds = out.filter(x => x.unread).map(x => x.id);
   const headHtml = `<div class="grow"><b style="font-size:16px">👥 ${esc(j.title || '단체 문자')}</b><div class="muted">${phones.size}명 · 답장 ${replied.size}명 · 아직 답 없음 ${noReply.length}명</div></div>
     ${unreadIds.length ? `<button class="btn small ghost" id="cread">받은 답장 ${unreadIds.length}개 처리 완료</button>` : ''}
-    <button class="btn small ghost" id="gmem">참여자 보기</button><button class="btn small ghost" id="cleave">나가기</button>`;
+    <button class="btn small ghost" id="gmem">참여자 보기</button><button class="btn small red" id="cleave">방 해체하기</button>`;
   const targetHtml = `<span class="muted">받는 사람</span>
     <button class="pill ${CH.gTarget === 'ALL' ? 'on' : ''}" data-gt="ALL">📢 모두 (${phones.size}명)</button>
     ${noReply.length ? `<button class="pill ${CH.gTarget === 'NOREPLY' ? 'on' : ''}" data-gt="NOREPLY">🔕 답장 없는 분만 (${noReply.length}명)</button>` : ''}
     ${CH.gTarget && CH.gTarget !== 'ALL' && CH.gTarget !== 'NOREPLY' ? `<button class="pill on" data-gt="${CH.gTarget}">↪ ${esc(who(CH.gTarget))}께만 ✕</button>` : '<span class="muted" style="font-size:12.5px">말풍선 옆 [↪ 답장]을 누르면 그 분께만 보내요</span>'}`;
   const bindHead = () => {
     const rd = $('#cread'); if (rd) rd.onclick = async () => { const b = writeBatch(db); unreadIds.forEach(id => b.set(doc(db, 'inbox', id), { handled: true }, { merge: true })); await b.commit(); toast('처리 완료로 표시했어요'); };
-    $('#cleave').onclick = () => leaveRoom('g:' + j.id, j.title || '단체방');
+    $('#cleave').onclick = () => dissolveRoom(j);
     $('#gmem').onclick = () => { const m = modal(`<h2>참여자 ${phones.size}명</h2><div style="max-height:60vh;overflow:auto">${[...phones.keys()].map(p => `<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)"><b class="grow">${esc(who(p))}</b><span class="muted">${esc(prettyPhone(p))}</span>${replied.has(p) ? '<span class="tag t-ok">답장함</span>' : '<span class="tag t-gray">아직</span>'}<button class="btn small ghost" data-mp="${p}">1:1 대화</button></div>`).join('')}</div><div class="row" style="margin-top:12px"><div class="grow"></div><button class="btn ghost" id="mclose">닫기</button></div>`);
       m.querySelector('#mclose').onclick = closeModal; m.querySelectorAll('[data-mp]').forEach(b => b.onclick = () => { CH.cur = b.dataset.mp; closeModal(); drawChat(); }); };
   };
@@ -1384,12 +1392,11 @@ function drawGroupRoom(room){
     <div class="cinput">
       <div class="row" id="gtarget" style="gap:6px;padding:8px 10px 0">${targetHtml}</div>
       <div class="row" style="padding:8px 10px;gap:8px;align-items:flex-end;flex-wrap:nowrap">
-        <textarea id="ctext" placeholder="답장 입력 (Enter 보내기 · Shift+Enter 줄바꿈) — {이름} {호칭} 쓸 수 있어요" rows="2"></textarea>
+        <textarea id="ctext" placeholder="답장 입력 (Enter는 줄바꿈 · [전송]을 눌러야 보내져요) — {이름} {호칭} 쓸 수 있어요" rows="2"></textarea>
         <button class="csend" id="csend" ${CH.gTarget ? '' : 'disabled'}>전송</button></div>
     </div>`;
   const body = $('#cbody'); body.scrollTop = body.scrollHeight;
   const ta = $('#ctext');
-  ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing){ e.preventDefault(); sendGroup(j, phones); } });
   $('#csend').onclick = () => sendGroup(j, phones);
   CH.gNoReply = noReply;
   bindHead(); bindBody(); bindTarget();
