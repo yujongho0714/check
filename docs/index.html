@@ -1556,6 +1556,7 @@ function tuRow(m, id){ const d = TU.docs[m]; return (d && d.rows && d.rows[id]) 
 function tuShown(s, m){
   const r = tuRow(m, s.id);
   if (r.paid) return true;
+  const D = TU.docs[m]; if (D && D.listed) return !!(D.rows && D.rows[s.id]);   // 엑셀에서 가져온 달은 그 달 명단에 있던 원생만
   if (s.joinedMonth && m < s.joinedMonth) return false;
   if (s.status === 'ACTIVE' || s.status === 'LEAVE') return true;
   return !!(s.leftMonth && m < s.leftMonth);
@@ -1564,6 +1565,12 @@ function tuShown(s, m){
 function tuCalc(){
   const cfg = tuCfg(), months = tuMonths(), absBy = new Map();
   TU.ab.forEach(a => { const k = absKind(a); if (k === 'other' || !a.studentId || !a.day) return; const key = a.studentId + '|' + a.day.slice(0, 7); let o = absBy.get(key); if (!o) absBy.set(key, o = { sick: [], trip: [] }); o[k].push(a.day); });
+  // 형제가 한 줄에 합쳐서 낸 경우(예: 김동현 335,000원): 나머지 형제도 그 달 납부로 봐요
+  const cover = new Map(), feeOf = (s, m) => { const r = tuRow(m, s.id); return (r.fee != null && r.fee !== '') ? +r.fee : (s.fee || cfg.defaultFee); };
+  familyGroups(S.students.filter(s => s.status !== 'LEFT')).forEach(g => months.forEach(m => {
+    const payer = g.find(s => { const r = tuRow(m, s.id); return r.paid && r.amount != null && r.amount !== '' && +r.amount >= feeOf(s, m) * 1.5; });
+    if (payer) g.forEach(s => { if (s !== payer && !tuRow(m, s.id).paid) cover.set(s.id + '|' + m, payer.name); });
+  }));
   const out = new Map();
   S.students.forEach(s => {
     let carry = 0, carryNote = '';
@@ -1573,11 +1580,12 @@ function tuCalc(){
       const o = absBy.get(s.id + '|' + m) || { sick: [], trip: [] };
       const sickN = Math.min(o.sick.length, cfg.sickMax), tripN = Math.min(o.trip.length, cfg.tripMax);
       const ded = Math.max(sickN, tripN) * cfg.perDay;   // 병결·여행이 같은 달에 같이 있으면 더 큰 쪽 하나만 차감
-      const paid = !!r.paid;
+      const coveredBy = cover.get(s.id + '|' + m) || '';
+      const paid = !!r.paid || !!coveredBy;
       const skip = !!r.skip || !shown || (s.status === 'LEAVE' && !paid && m >= thisMonth());
       const carryIn = carry, carryInNote = carryNote;
       const due = skip ? 0 : Math.max(0, fee - ded - carryIn);
-      const amount = (r.amount != null && r.amount !== '') ? +r.amount : null;
+      const amount = coveredBy ? 0 : (r.amount != null && r.amount !== '') ? +r.amount : null;
       let carryOut = 0;
       if (paid){ const applied = Math.max(0, fee - (amount == null ? fee : amount)); carryOut = Math.max(0, ded + carryIn - applied); }
       else if (skip) carryOut = carryIn + ded;
@@ -1588,7 +1596,7 @@ function tuCalc(){
         carryIn ? `지난달 이월 차감 -${won(carryIn)}원 (${carryInNote})` : '',
         ded ? (paid && carryOut ? `${dedNote} → 이미 납부해서 ${mLabel(monthAdd(m, 1))} 원비에서 -${won(carryOut)}원` : `${dedNote}${paid ? '' : ' (낼 금액에 반영)'}`) : '',
       ].filter(Boolean).join(' / ');
-      out.set(s.id + '|' + m, { s, m, r, fee, ded, sickN, tripN, sick: o.sick, trip: o.trip, carryIn, carryInNote, due, paid, amount, skip, shown, carryOut, autoNote, dedNote });
+      out.set(s.id + '|' + m, { s, m, r, coveredBy, fee, ded, sickN, tripN, sick: o.sick, trip: o.trip, carryIn, carryInNote, due, paid, amount, skip, shown, carryOut, autoNote, dedNote });
       carry = carryOut; carryNote = carryOut ? [ded ? dedNote.replace(/ → .*$/, '') : '', carryOut > ded && carryIn ? '이전 이월' : ''].filter(Boolean).join(' + ') : '';
     });
   });
@@ -1685,11 +1693,11 @@ function rFee(p){
         <td class="num ${x.ded ? 'dd' : ''}" title="${esc(x.dedNote)}">${x.ded ? '-' + won(x.ded) : ''}${x.ded ? `<div class="muted" style="font-size:11px">${[x.sick.length ? '병' + x.sickN : '', x.trip.length ? '여' + x.tripN : ''].filter(Boolean).join('·')}일</div>` : ''}</td>
         <td class="num ${x.carryIn ? 'dd' : ''}" title="${esc(x.carryInNote)}">${x.carryIn ? '-' + won(x.carryIn) : ''}</td>
         <td class="num"><b>${x.skip ? '<span class="muted">면제</span>' : won(x.due)}</b></td>
-        <td><input type="date" class="tin" data-k="paid" value="${esc(r.paid || '')}"></td>
+        <td>${x.coveredBy ? `<span class="tag t-ok" title="형제가 한 번에 냈어요">형제 합산 · ${esc(x.coveredBy)}</span>` : `<input type="date" class="tin" data-k="paid" value="${esc(r.paid || '')}">`}</td>
         <td><select class="tin" data-k="method"><option value=""></option>${METHODS.map(t => `<option ${r.method === t ? 'selected' : ''}>${t}</option>`).join('')}${r.method && !METHODS.includes(r.method) ? `<option selected>${esc(r.method)}</option>` : ''}</select></td>
         <td><input type="number" class="tin" data-k="amount" value="${r.amount ?? ''}" step="1000" placeholder="${x.paid ? '' : won(x.due)}" style="width:92px"></td>
         <td style="min-width:220px"><input type="text" class="tin" data-k="note" value="${esc(r.note || '')}" placeholder="메모" style="width:100%">${x.autoNote ? `<div class="auto">${esc(x.autoNote)}</div>` : ''}</td>
-        <td style="white-space:nowrap">${x.paid ? `<button class="btn small ghost" data-un="1">납부 취소</button>` : x.skip && r.skip ? `<button class="btn small ghost" data-sk="0">면제 취소</button>` : `<button class="btn small" data-pay="1">오늘 납부</button> <button class="btn small ghost" data-sk="1" title="휴관 등으로 이 달은 안 받기">면제</button>`}</td>
+        <td style="white-space:nowrap">${x.coveredBy ? '' : x.paid ? `<button class="btn small ghost" data-un="1">납부 취소</button>` : x.skip && r.skip ? `<button class="btn small ghost" data-sk="0">면제 취소</button>` : `<button class="btn small" data-pay="1">오늘 납부</button> <button class="btn small ghost" data-sk="1" title="휴관 등으로 이 달은 안 받기">면제</button>`}</td>
       </tr>`; }).join('') || '<tr><td colspan="13" class="muted">해당하는 원생이 없어요</td></tr>'}
     </table></div>`; });
   const go = mm => { TU.month = mm; render(); };
@@ -1725,7 +1733,7 @@ function tuSheet(m, C){
   const rows = [['번호', '이름', '학년', '보호자 연락처', '원비', '결석 차감', '이월 차감', '낼 금액', '납입일', '결제', '납입액', '상태', '비고', '차감 내역']];
   list.forEach((x, i) => rows.push([i + 1, x.s.name, gradeOf(x.s), x.s.phones.map((p, j) => `${x.s.phoneLabels[j] || '보호자'} ${prettyPhone(normPhone(p))}`).join(' / '),
     x.fee, x.ded ? -x.ded : '', x.carryIn ? -x.carryIn : '', x.skip ? 0 : x.due, x.r.paid || '', x.r.method || '', x.paid ? (x.amount ?? x.fee) : '',
-    x.paid ? '납부' : x.skip ? '면제' : '미납', x.r.note || '', x.autoNote]));
+    x.coveredBy ? `형제 합산(${x.coveredBy})` : x.paid ? '납부' : x.skip ? '면제' : '미납', x.r.note || '', x.autoNote]));
   const sum = k => list.reduce((a, x) => a + k(x), 0);
   rows.push([]); rows.push(['', '합계', '', `${list.length}명`, sum(x => x.fee), -sum(x => x.ded), -sum(x => x.carryIn), sum(x => x.skip ? 0 : x.due), '', '', sum(x => x.paid ? (x.amount ?? x.fee) : 0), `미납 ${list.filter(x => !x.paid && !x.skip).length}명`]);
   return [`${m.slice(2, 4)}년 ${+m.slice(5)}월`, rows, [5, 9, 7, 30, 10, 10, 10, 10, 11, 9, 10, 6, 24, 60]];
@@ -1883,9 +1891,9 @@ async function tuApply(m, recs, label){
     if (x.amount != null && x.amount !== '' && !isNaN(x.amount) && cur.amount == null) o.amount = +x.amount;
     if (x.fee && cur.fee == null) o.fee = +x.fee;
     if (x.note && !cur.note) o.note = String(x.note);
-    if (Object.keys(o).length){ rows[s.id] = o; hit.push(s.name); }
+    o.inSheet = true; rows[s.id] = o; hit.push(s.name);
   });
-  if (Object.keys(rows).length) await setDoc(doc(db, 'tuition', m), { rows }, { merge: true });
+  if (Object.keys(rows).length) await setDoc(doc(db, 'tuition', m), { rows, ...(label === 'listed' ? { listed: true } : {}) }, { merge: true });
   return { hit, miss };
 }
 function tuImportXlsx(m){
@@ -1902,7 +1910,9 @@ function tuImportXlsx(m){
       if (!tables.length) return toast('이름·납입일(금액) 칸이 있는 표를 못 찾았어요');
       let use = tables.filter(t => t.month);
       if (!use.length){ const pm = prompt(`어느 달 수련비로 넣을까요? (예: ${m})`, m); if (!pm || !/^\d{4}-\d{2}$/.test(pm)) return; use = [{ ...tables[0], month: pm }]; }
-      else if (!confirm(`이 엑셀에서 ${use.length}개 달을 찾았어요:\n${use.map(t => `· ${t.sheet} → ${t.month}`).join('\n')}\n\n모두 가져올까요? (이미 적힌 칸은 덮어쓰지 않아요)`)) return;
+      else { use.sort((x, y) => x.month.localeCompare(y.month));
+        const from = prompt(`이 엑셀에서 ${use.length}개 달(${use[0].month} ~ ${use[use.length - 1].month})을 찾았어요.\n몇 월부터 가져올까요? (예: 2026-01)\n· 그 달부터 엑셀 명단에 있는 원생만 그 달 수련비 대상이 돼요\n· 이미 적힌 칸은 덮어쓰지 않아요`, use.length > 3 ? use[use.length - 3].month : use[0].month);
+        if (!from || !/^\d{4}-\d{2}$/.test(from)) return; use = use.filter(t => t.month >= from); if (!use.length) return toast('그 달부터는 시트가 없어요'); }
       const cfg = tuCfg(), fams = familyGroups(S.students.filter(s => s.status !== 'LEFT')), inFam = id => fams.some(g => g.some(s => s.id === id));
       const out = [];
       for (const t of use){
@@ -1916,7 +1926,7 @@ function tuImportXlsx(m){
               if (k && /품/.test(k.belt || '')) fee -= cfg.poomDisc;      // 품띠 띠값 5,000원 빼기
               if (k && inFam(k.id)) fee -= cfg.sibDisc; } }               // 형제 5,000원 빼기
           return { name, grade: ci.grade >= 0 ? r[ci.grade] : '', paid: ci.paid >= 0 ? normPayDate(r[ci.paid], t.month) : '', method: ci.method >= 0 && ci.method !== ci.paid ? normMethod(r[ci.method]) : '', amount, fee, note: ci.note >= 0 ? r[ci.note] : '' }; });
-        const { hit, miss } = await tuApply(t.month, recs); out.push({ t, hit, miss });
+        const { hit, miss } = await tuApply(t.month, recs, 'listed'); out.push({ t, hit, miss });
       }
       TU.month = use[use.length - 1].month; render();
       const miss = [...new Set(out.flatMap(o => o.miss))];
