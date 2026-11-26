@@ -2411,7 +2411,14 @@ function busCfgModal(){
     <div class="card" style="margin-bottom:10px"><b>네이버 지도 키 (Client ID)</b>
       <div class="row" style="margin-top:6px"><input type="text" id="bcNav" value="${esc(c.naverId || '')}" placeholder="비워 두면 임시 지도(오픈스트리트맵)" class="grow"></div>
       <p class="muted" style="margin:6px 0 0">네이버 클라우드 플랫폼 → Maps → Application 등록(Dynamic Map 체크) → 웹 서비스 URL에 <b>https://yujongho0714.github.io</b> 넣기 → 나온 Client ID를 여기에 붙여 넣으세요.</p></div>
+    <div class="card" style="margin-bottom:10px"><b>기사님·차량 선생님 링크</b>
+      <p class="muted" style="margin:4px 0 6px">Firebase에서 만든 기사님 계정 이메일(…@jungdo.driver)을 넣으면, 카톡으로 보낼 링크가 만들어져요. 기사님은 링크를 열고 비밀번호만 넣으면 운행 화면이 떠요.</p>
+      <div class="row"><input type="text" id="bcDrv" placeholder="car1@jungdo.driver" class="grow"><button class="btn small" id="bcDrvGo">링크 만들기</button></div><input type="text" id="bcDrvOut" readonly style="width:100%;margin-top:6px;display:none" onclick="this.select()"></div>
     <div class="row"><div class="grow"></div><button class="btn ghost" id="bcC">취소</button><button class="btn" id="bcS">저장</button></div>`);
+  r.querySelector('#bcDrvGo').onclick = () => { const em = r.querySelector('#bcDrv').value.trim(); if (!/@jungdo\.driver$/i.test(em)) return toast('이메일은 …@jungdo.driver 로 끝나야 해요');
+    let c = ''; try { const g = JSON.parse(lsGet('jdpc_cfg') || 'null'); c = 'JD1-' + btoa(g.projectId + '|' + g.apiKey + '|' + (g.storageBucket || '')).replace(/\+/g, '-').replace(/\//g, '_'); } catch(e){ return toast('연결 코드를 못 찾았어요'); }
+    const url = `https://yujongho0714.github.io/check/?c=${encodeURIComponent(c)}&e=${encodeURIComponent(em)}#drive`; const o = r.querySelector('#bcDrvOut'); o.style.display = 'block'; o.value = url; o.select();
+    navigator.clipboard && navigator.clipboard.writeText(url).then(() => toast('링크를 복사했어요 — 기사님께 카톡으로 보내세요')); };
   r.querySelector('#bcHere').onclick = () => navigator.geolocation && navigator.geolocation.getCurrentPosition(p => { r.querySelector('#bcLat').value = p.coords.latitude.toFixed(6); r.querySelector('#bcLng').value = p.coords.longitude.toFixed(6); }, e => toast('위치를 못 찾았어요'), { enableHighAccuracy: true, timeout: 15000 });
   r.querySelector('#bcC').onclick = closeModal;
   r.querySelector('#bcS').onclick = async () => { await setDoc(doc(db, 'config', 'bus'), { home: { lat: +r.querySelector('#bcLat').value, lng: +r.querySelector('#bcLng').value }, radius: +r.querySelector('#bcRad').value || 80, naverId: r.querySelector('#bcNav').value.trim() }, { merge: true });
