@@ -1528,7 +1528,7 @@ async function sendGroup(j, phones){
    - 이미 냈으면(차감 없이) → 다음 달 시트에 '이월 차감'으로 적고 다음 달 원비에서 빼기 */
 const TU = { month: thisMonth(), docs: {}, cfg: {}, ab: [], abFrom: '', unsub: [], on: false, loaded: false,
   f: 'all', q: '', uf: 'all', withNow: false, sel: new Set(), dirty: false, seen: false };
-const TU_DEF = { defaultFee: 150000, perDay: 5000, sickMax: 10, tripMax: 5, bank: '',
+const TU_DEF = { defaultFee: 160000, fee23: 155000, poomDisc: 5000, sibDisc: 5000, perDay: 5000, sickMax: 10, tripMax: 5, bank: '',
   tpl: '[용인대 정도태권도 2관]\n안녕하세요 {호칭}, {이름} 수련비 안내드려요.\n{내역}\n합계 {금액}원이 아직 확인되지 않았어요.\n{계좌}\n이미 보내주셨다면 말씀 부탁드려요. 감사합니다 :)' };
 const METHODS = ['카드', '계좌', '현금', '카드+바우처', '기타'];
 const monthAdd = (m, n) => { let [y, mo] = m.split('-').map(Number); mo += n; while (mo > 12){ mo -= 12; y++; } while (mo < 1){ mo += 12; y--; } return `${y}-${pad(mo)}`; };
@@ -1572,7 +1572,7 @@ function tuCalc(){
       const fee = (r.fee != null && r.fee !== '') ? +r.fee : (s.fee || cfg.defaultFee);
       const o = absBy.get(s.id + '|' + m) || { sick: [], trip: [] };
       const sickN = Math.min(o.sick.length, cfg.sickMax), tripN = Math.min(o.trip.length, cfg.tripMax);
-      const ded = (sickN + tripN) * cfg.perDay;
+      const ded = Math.max(sickN, tripN) * cfg.perDay;   // 병결·여행이 같은 달에 같이 있으면 더 큰 쪽 하나만 차감
       const paid = !!r.paid;
       const skip = !!r.skip || !shown || (s.status === 'LEAVE' && !paid && m >= thisMonth());
       const carryIn = carry, carryInNote = carryNote;
@@ -1846,7 +1846,7 @@ function tuCfgModal(){
     <div class="row" style="margin:8px 0"><span style="width:150px">결석 1일 차감</span><input type="number" id="cf2" value="${c.perDay}" step="500"> 원 <span class="muted">평일(수업일) 기준</span></div>
     <div class="row" style="margin:8px 0"><span style="width:150px">병결 차감 한도</span><input type="number" id="cf3" value="${c.sickMax}" style="width:80px"> 일 &nbsp; 여행 <input type="number" id="cf4" value="${c.tripMax}" style="width:80px"> 일</div>
     <div class="row" style="margin:8px 0"><span style="width:150px">입금 계좌 (문자용)</span><input type="text" id="cf5" value="${esc(c.bank)}" placeholder="예: 농협 000-0000-0000-00 (예금주)" class="grow"></div>
-    <p class="muted">결석 사유가 병결·여행인 날만 차감돼요. 출결의 [결석 · 받은 문자] 탭에서 결석을 등록할 때 종류를 고르면 되고, 전화 후 폰에서 적은 사유(감기·여행 등)도 알아서 나눠요.</p>
+    <p class="muted">병결·여행이 같은 달에 같이 있으면 <b>더 큰 쪽 하나만</b> 차감해요. 엑셀을 가져올 때 수업일수(주4~5회 ${won(c.defaultFee)}원 · 주2~3회 ${won(c.fee23)}원)로 원비를 정하고, 품띠는 ${won(c.poomDisc)}원, 형제는 ${won(c.sibDisc)}원을 빼요. 결석 사유가 병결·여행인 날만 차감돼요. 출결의 [결석 · 받은 문자] 탭에서 결석을 등록할 때 종류를 고르면 되고, 전화 후 폰에서 적은 사유(감기·여행 등)도 알아서 나눠요.</p>
     <div class="row" style="margin-top:14px"><div class="grow"></div><button class="btn ghost" id="cfC">취소</button><button class="btn" id="cfOk">저장</button></div>`);
   r.querySelector('#cfC').onclick = closeModal;
   r.querySelector('#cfOk').onclick = async () => { const n = (id, d) => { const v = +r.querySelector(id).value; return isNaN(v) ? d : v; };
@@ -1893,21 +1893,34 @@ function tuImportXlsx(m){
   f.onchange = async () => { const file = f.files[0]; if (!file) return;
     try {
       const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: false });
-      const pickMonth = prompt(`어느 달 수련비로 넣을까요? (예: ${m})`, m); if (!pickMonth || !/^\d{4}-\d{2}$/.test(pickMonth)) return;
-      let best = null;
+      // 시트마다: 이름 칸 + 납입 칸이 있는 표 찾기, 시트 이름의 "26년 9월" → 2026-09
+      const tables = [];
       wb.SheetNames.forEach(n => { const a = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: '' });
         for (let i = 0; i < Math.min(a.length, 15); i++){ const h = a[i].map(x => String(x).replace(/\s+/g, '')); const ni = h.findIndex(x => /^(관원명|이름|성명|원생명?|수련생)$/.test(x));
-          if (ni >= 0 && h.some(x => /납입|납부|입금|금액|결제/.test(x))){ best = best || { a, i, h, ni }; break; } } });
-      if (!best) return toast('이름·납입일(금액) 칸이 있는 표를 못 찾았어요');
-      const { a, i, h, ni } = best; const col = re => h.findIndex(x => re.test(x));
-      const ci = { grade: col(/학년|반|부$/), paid: col(/납입일|납부일|입금일|결제일|날짜/), method: col(/결제|방법|구분|수단/), amount: col(/납입액|납부액|입금액|^금액|수납/), fee: col(/원비|수련비|교육비|청구/), note: col(/비고|메모/) };
-      const recs = a.slice(i + 1).filter(r => String(r[ni]).trim()).map(r => ({ name: String(r[ni]).trim(), grade: ci.grade >= 0 ? r[ci.grade] : '',
-        paid: ci.paid >= 0 ? normPayDate(r[ci.paid], pickMonth) : '', method: ci.method >= 0 && ci.method !== ci.paid ? normMethod(r[ci.method]) : '',
-        amount: ci.amount >= 0 && r[ci.amount] !== '' ? +String(r[ci.amount]).replace(/[^\d.]/g, '') || null : null,
-        fee: ci.fee >= 0 && ci.fee !== ci.amount ? +String(r[ci.fee]).replace(/[^\d.]/g, '') || null : null, note: ci.note >= 0 ? r[ci.note] : '' }));
-      const { hit, miss } = await tuApply(pickMonth, recs);
-      TU.month = pickMonth; render();
-      alert(`${pickMonth} 가져오기 끝\n· 넣은 원생: ${hit.length}명\n· 이미 적혀 있던 칸은 그대로 뒀어요${miss.length ? `\n· 명단에서 못 찾은 이름 ${miss.length}명: ${miss.slice(0, 30).join(', ')}` : ''}`);
+          if (ni >= 0 && h.some(x => /납입|납부|입금|금액|결제|카\/?계/.test(x))){ const mm = n.match(/(\d{2,4})\s*년\s*(\d{1,2})\s*월/); const y = mm ? (mm[1].length === 2 ? 2000 + +mm[1] : +mm[1]) : 0;
+            tables.push({ sheet: n, month: mm ? `${y}-${pad(+mm[2])}` : '', a, i, h, ni }); break; } } });
+      if (!tables.length) return toast('이름·납입일(금액) 칸이 있는 표를 못 찾았어요');
+      let use = tables.filter(t => t.month);
+      if (!use.length){ const pm = prompt(`어느 달 수련비로 넣을까요? (예: ${m})`, m); if (!pm || !/^\d{4}-\d{2}$/.test(pm)) return; use = [{ ...tables[0], month: pm }]; }
+      else if (!confirm(`이 엑셀에서 ${use.length}개 달을 찾았어요:\n${use.map(t => `· ${t.sheet} → ${t.month}`).join('\n')}\n\n모두 가져올까요? (이미 적힌 칸은 덮어쓰지 않아요)`)) return;
+      const cfg = tuCfg(), fams = familyGroups(S.students.filter(s => s.status !== 'LEFT')), inFam = id => fams.some(g => g.some(s => s.id === id));
+      const out = [];
+      for (const t of use){
+        const { a, i, h, ni } = t; const col = re => h.findIndex(x => re.test(x));
+        const ci = { grade: col(/학년|반|부$/), days: col(/수업일수|주\d|횟수|수강/), paid: col(/납입일|납부일|입금일|결제일|날짜/), method: col(/카\/?계|결제|방법|구분|수단/), amount: col(/납입비|납입액|납부액|입금액|^금액|수납/), fee: col(/원비|^수련비|교육비|청구/), note: col(/비고|메모/) };
+        const recs = a.slice(i + 1).filter(r => String(r[ni]).trim() && !/^(합계|총|계)$/.test(String(r[ni]).trim())).map(r => {
+          const name = String(r[ni]).trim(), amount = ci.amount >= 0 && r[ci.amount] !== '' ? +String(r[ci.amount]).replace(/[^\d.]/g, '') || null : null;
+          let fee = ci.fee >= 0 && ci.fee !== ci.amount ? +String(r[ci.fee]).replace(/[^\d.]/g, '') || null : null;
+          if (!fee && ci.days >= 0){ const d = String(r[ci.days]); const k = findKid(name, ci.grade >= 0 ? r[ci.grade] : '');
+            if (/[45]/.test(d) || /[23]/.test(d)){ fee = /[45]/.test(d) ? cfg.defaultFee : cfg.fee23;
+              if (k && /품/.test(k.belt || '')) fee -= cfg.poomDisc;      // 품띠 띠값 5,000원 빼기
+              if (k && inFam(k.id)) fee -= cfg.sibDisc; } }               // 형제 5,000원 빼기
+          return { name, grade: ci.grade >= 0 ? r[ci.grade] : '', paid: ci.paid >= 0 ? normPayDate(r[ci.paid], t.month) : '', method: ci.method >= 0 && ci.method !== ci.paid ? normMethod(r[ci.method]) : '', amount, fee, note: ci.note >= 0 ? r[ci.note] : '' }; });
+        const { hit, miss } = await tuApply(t.month, recs); out.push({ t, hit, miss });
+      }
+      TU.month = use[use.length - 1].month; render();
+      const miss = [...new Set(out.flatMap(o => o.miss))];
+      alert(`가져오기 끝\n${out.map(o => `· ${o.t.month}: ${o.hit.length}명`).join('\n')}\n· 이미 적혀 있던 칸은 그대로 뒀어요${miss.length ? `\n· 출결 명단에서 못 찾은 이름 ${miss.length}명: ${miss.slice(0, 40).join(', ')}` : ''}`);
     } catch(e){ console.error(e); toast('엑셀을 못 읽었어요'); }
   };
   f.click();
