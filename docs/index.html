@@ -69,6 +69,15 @@ tr.click:hover{background:#f8fafc;cursor:pointer}
 .t-in{background:#dbeafe;color:var(--in)}.t-out{background:#ffedd5;color:var(--out)}
 .t-ok{background:#dcfce7;color:var(--ok)}.t-bad{background:#fee2e2;color:var(--bad)}.t-wait{background:#fef3c7;color:var(--warn)}
 .t-gray{background:#f3f4f6;color:#4b5563}
+.stcards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}.stcards small{font-size:14px;font-weight:700;margin-left:2px}
+.stbars{display:flex;gap:6px;align-items:flex-end;height:170px;overflow-x:auto;padding-top:4px}
+.stbar{all:unset;cursor:pointer;flex:1;min-width:44px;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px}
+.stbf{width:70%;background:#93c5fd;border-radius:6px 6px 0 0;min-height:4px}.stbar.on .stbf,.stbar:hover .stbf{background:var(--blue)}
+.stbn{font-weight:900;font-size:14px}.stbl{font-size:12px;color:var(--sub);white-space:nowrap}
+.stcols{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+.stcol{border:1px solid var(--line);border-radius:12px;padding:8px}.stcolh{display:flex;justify-content:space-between;padding:2px 4px 6px;border-bottom:1px solid var(--line);margin-bottom:4px}.stcolh b{color:var(--navy)}
+.stkid{padding:5px 6px;border-radius:7px;cursor:pointer;font-size:14px}.stkid:hover{background:#f1f5f9}.stkid.inline{display:inline-block;border:1px solid var(--line)}
+.stfams{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:10px;margin-bottom:10px}
 .edyear{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(520px,100%),1fr));gap:12px}
 .edmon{border:1px solid var(--line);border-radius:12px;padding:10px}.edmon.cur{border-color:#16a34a;box-shadow:0 0 0 2px #bbf7d0 inset}
 .edmh{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}.edmh b{font-size:16px;color:var(--navy)}
@@ -185,6 +194,7 @@ tr.click:hover{background:#f8fafc;cursor:pointer}
     <button data-t="today" class="on">오늘 출결</button>
     <button data-t="chat">💬 문자</button>
     <button data-t="roster">원생 명단</button>
+    <button data-t="stats">👪 수련생 현황</button>
     <button data-t="bulk">단체 문자</button>
     <button data-t="month">월간 출석부</button>
     <button data-t="absent">결석 · 받은 문자</button>
@@ -300,7 +310,7 @@ function onAuth(user){
   $('#login').classList.add('hidden'); $('#app').classList.remove('hidden');
   $('#who').textContent = user.email || '';
   const err = e => { console.error(e); toast('데이터를 못 읽었어요: ' + (e.code || e.message)); };
-  unsubs.push(onSnapshot(collection(db, 'students'), snap => { S.students = snap.docs.map(toStudent); rerender(['today','roster','bulk','month','absent','fee','unpaid']); }, err));
+  unsubs.push(onSnapshot(collection(db, 'students'), snap => { S.students = snap.docs.map(toStudent); rerender(['today','roster','bulk','month','absent','fee','unpaid','stats']); }, err));
   unsubs.push(onSnapshot(query(collection(db, 'events'), where('day', '==', today())), snap => { S.todayEv = snap.docs.map(d => ({ id: d.id, ...d.data() })); rerender(['today']); }, err));
   unsubs.push(onSnapshot(collection(db, 'groups'), snap => { S.groups = snap.docs.map(d => ({ id: d.id, name: d.get('name') || '', ids: d.get('studentIds') || [] })); rerender(['bulk']); }, err));
   unsubs.push(onSnapshot(query(collection(db, 'bulk'), orderBy('createdMs', 'desc'), limit(300)), snap => { S.bulkAll = snap.docs.map(d => ({ id: d.id, ...d.data() })); S.bulk = S.bulkAll.slice(0, 15); rerender(['bulk', 'chat']); }, err));
@@ -337,7 +347,7 @@ function tabFromHash(){ const t = (location.hash || '').slice(1); const b = t &&
 addEventListener('hashchange', () => { if (tabFromHash() && !$('#app').classList.contains('hidden')) render(); });
 function rerender(tabs){ if (!tabs.includes(S.tab)) return; if (S.tab === 'chat') { drawChat(); return; } if (S.tab === 'fee' || S.tab === 'unpaid') { tuRefresh(); return; } if (!S.busyInput) render(); }
 function updChatBadge(){ const n = S.inbox.filter(x => !x.handled).length; const b = document.querySelector('#tabs [data-t=chat]'); if (b) b.innerHTML = '💬 문자' + (n ? ` <span class="cbadge">${n}</span>` : ''); }
-function render(){ const p = $('#panel'); ({ today: rToday, chat: rChat, roster: rRoster, bulk: rBulk, month: rMonth, absent: rAbsent, msg: rMsg, call: rCall, char: rChar, fee: rFee, unpaid: rUnpaid, edu: rEdu })[S.tab](p); }
+function render(){ const p = $('#panel'); ({ today: rToday, chat: rChat, roster: rRoster, bulk: rBulk, month: rMonth, absent: rAbsent, msg: rMsg, call: rCall, char: rChar, fee: rFee, unpaid: rUnpaid, edu: rEdu, stats: rStats })[S.tab](p); }
 // 글 쓰는 중에는 실시간 갱신으로 화면을 다시 그리지 않음
 document.addEventListener('focusin', e => { if (e.target.matches('#panel input[type=text], #panel textarea')) S.busyInput = true; });
 document.addEventListener('focusout', () => { S.busyInput = false; });
@@ -1536,7 +1546,7 @@ function tuCalc(){
 // 미납 달 목록 (지난달까지 + 원하면 이번 달)
 function tuUnpaid(C, withNow){
   const now = thisMonth(), months = tuMonths().filter(m => withNow ? m <= now : m < now), list = [];
-  S.students.filter(s => s.status !== 'QUIT' || months.some(m => tuShown(s, m))).forEach(s => {
+  S.students.filter(s => s.status !== 'LEFT' || months.some(m => tuShown(s, m))).forEach(s => {
     const ms = months.map(m => C.get(s.id + '|' + m)).filter(x => x && x.shown && !x.skip && !x.paid && x.due > 0);
     if (ms.length) list.push({ s, ms, total: ms.reduce((a, x) => a + x.due, 0) });
   });
@@ -1617,7 +1627,7 @@ function rFee(p){
         const st = x.paid ? '' : x.skip ? 'skip' : 'un';
         return `<tr class="${st}" data-id="${s.id}">
         <td class="muted">${i + 1}</td>
-        <td style="white-space:nowrap"><b>${esc(s.name)}</b>${s.status === 'LEAVE' ? ' <span class="tag t-gray">휴관</span>' : s.status === 'QUIT' ? ' <span class="tag t-gray">퇴관</span>' : ''}</td>
+        <td style="white-space:nowrap"><b>${esc(s.name)}</b>${s.status === 'LEAVE' ? ' <span class="tag t-gray">휴관</span>' : s.status === 'LEFT' ? ' <span class="tag t-gray">퇴관</span>' : ''}</td>
         <td class="muted" style="white-space:nowrap">${esc(gradeOf(s))}</td>
         <td class="muted" style="font-size:12px;white-space:nowrap">${ph || '-'}</td>
         <td><input type="number" class="tin" data-k="fee" value="${x.fee}" step="1000" style="width:92px"></td>
@@ -1979,6 +1989,76 @@ function edEdit(m, w){
   };
 }
 async function edStorageDelete(path){ try { const st = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js'); await st.deleteObject(st.ref(st.getStorage(fb), path)); } catch(e){} }
+
+
+/* ═════════════ 👪 수련생 현황 (학년별 · 형제 · 보호자 연락처) ═════════════ */
+const SV = { view: 'grade', q: '', g: '' };
+// 형제 묶기: 형제 표시(siblingKey)가 같거나 보호자 번호가 하나라도 같으면 한 가족
+function familyGroups(list){
+  const par = new Map(list.map(s => [s.id, s.id])); const f = x => { while (par.get(x) !== x){ par.set(x, par.get(par.get(x))); x = par.get(x); } return x; };
+  const join = (a, b) => { a = f(a); b = f(b); if (a !== b) par.set(a, b); };
+  const byKey = new Map();
+  list.forEach(s => { const ks = s.phones.map(normPhone).filter(n => n.length >= 9).map(n => 'p' + n); if (s.siblingKey) ks.push('k' + s.siblingKey);
+    ks.forEach(k => { if (byKey.has(k)) join(s.id, byKey.get(k)); else byKey.set(k, s.id); }); });
+  const fam = new Map(); list.forEach(s => { const r = f(s.id); if (!fam.has(r)) fam.set(r, []); fam.get(r).push(s); });
+  return [...fam.values()].filter(g => g.length > 1).map(g => g.sort((a, b) => ageKey(b) - ageKey(a) || a.name.localeCompare(b.name, 'ko'))).sort((a, b) => a[0].name.localeCompare(b[0].name, 'ko'));
+}
+const phonesHtml = s => s.phones.map((x, i) => { const n = normPhone(x); return `<a href="tel:${n}" style="color:inherit;text-decoration:none">${esc(s.phoneLabels[i] || '보호자')} <b>${esc(prettyPhone(n))}</b></a>`; }).join('<br>') || '<span style="color:var(--bad)">번호 없음</span>';
+function rStats(p){
+  const act = active(), leave = S.students.filter(s => s.status === 'LEAVE'), fams = familyGroups(act);
+  const yr = String(thisYear()), leftThisYear = S.students.filter(s => s.status === 'LEFT' && (s.leftMonth || '').startsWith(yr)).length;
+  const joinedThisYear = act.filter(s => (s.joinedMonth || '').startsWith(yr)).length;
+  const byG = new Map(); act.forEach(s => { const g = gradeOf(s) || '학년 미입력'; if (!byG.has(g)) byG.set(g, []); byG.get(g).push(s); });
+  const grades = [...byG.keys()].sort((a, b) => gradeRank(a) - gradeRank(b));
+  const max = Math.max(1, ...grades.map(g => byG.get(g).length));
+  const q = SV.q.trim(), match = s => !q || nameMatch(s.name, q) || s.phones.some(x => normPhone(x).includes(q.replace(/\D/g, '') || '@@'));
+  const V = [['grade', '학년별'], ['family', `형제 ${fams.length}가정`], ['phone', '보호자 연락처']];
+  let body = '';
+  if (SV.view === 'grade'){
+    const gs = SV.g ? [SV.g] : grades;
+    body = `<div class="stcols">${gs.map(g => { const l = byG.get(g).filter(match).sort((a, b) => ageKey(a) - ageKey(b) || a.name.localeCompare(b.name, 'ko')); if (!l.length) return '';
+      return `<div class="stcol"><div class="stcolh"><b>${esc(g)}</b><span>${l.length}명</span></div>${l.map(s => `<div class="stkid" data-id="${s.id}"><b>${esc(s.name)}</b>${ageKey(s) ? ` <span class="muted">${ageKey(s)}세</span>` : ''}${s.belt ? ` <span class="muted">· ${esc(normBelt(s.belt))}</span>` : ''}</div>`).join('')}</div>`; }).join('')}</div>`;
+  } else if (SV.view === 'family'){
+    const fl = fams.filter(g => g.some(match));
+    body = `<div class="stfams">${fl.map(g => { const ph = [...new Map(g.flatMap(s => s.phones.map((x, i) => [normPhone(x), s.phoneLabels[i] || '보호자']))).entries()].filter(([n]) => n.length >= 9);
+      return `<div class="card stfam"><div class="row" style="gap:6px">${g.map(s => `<span class="stkid inline" data-id="${s.id}"><b>${esc(s.name)}</b> <span class="muted">${esc(gradeOf(s))}</span></span>`).join('')}<div class="grow"></div><span class="tag t-in">${g.length}남매</span></div>
+        <div class="muted" style="margin-top:6px">${ph.map(([n, l]) => `${esc(l)} <a href="tel:${n}" style="color:inherit"><b>${prettyPhone(n)}</b></a>`).join(' · ') || '번호 없음'}</div></div>`; }).join('') || '<p class="muted">형제 원생이 없어요</p>'}</div>
+      <p class="muted">같은 보호자 번호를 쓰거나 원생 명단에서 형제로 묶은 아이들을 한 가족으로 보여줘요. 휴관·퇴관 원생은 빠져요.</p>`;
+  } else {
+    const l = act.filter(match).sort(byName);
+    body = `<div class="scroll"><table><tr><th>이름</th><th>학년</th><th>나이</th><th>보호자 연락처</th><th>형제</th><th>메모</th></tr>
+      ${l.map(s => { const fam = fams.find(g => g.includes(s)); return `<tr class="click" data-id="${s.id}"><td><b>${esc(s.name)}</b></td><td>${esc(gradeOf(s))}</td><td>${ageKey(s) ? ageKey(s) + '세' : ''}</td><td>${phonesHtml(s)}</td><td class="muted">${fam ? esc(fam.filter(x => x !== s).map(x => x.name).join(', ')) : ''}</td><td class="muted">${esc(s.memo)}</td></tr>`; }).join('')}</table></div>`;
+  }
+  p.innerHTML = `
+    <div class="row" style="margin-bottom:12px"><h2 style="margin:0">수련생 현황</h2><span class="muted">${today()} 기준</span><div class="grow"></div><button class="btn ghost" id="stx">📥 현황 엑셀</button></div>
+    <div class="stcards">
+      <div class="card"><div class="muted">재원생</div><div class="stat">${act.length}<small>명</small></div></div>
+      <div class="card"><div class="muted">휴관</div><div class="stat" style="color:var(--warn)">${leave.length}<small>명</small></div></div>
+      <div class="card"><div class="muted">${yr}년 새로 온 원생 · 그만둔 원생</div><div class="stat"><span style="color:var(--ok)">+${joinedThisYear}</span> <span style="color:var(--bad);font-size:22px">-${leftThisYear}</span></div></div>
+      <div class="card"><div class="muted">형제 가정</div><div class="stat" style="color:var(--blue)">${fams.length}<small>가정 · ${fams.reduce((a, g) => a + g.length, 0)}명</small></div></div>
+    </div>
+    <div class="card" style="margin:12px 0"><div class="row" style="margin-bottom:8px"><b>학년별 인원</b><span class="muted">막대를 누르면 그 학년만 보여요</span>${SV.g ? `<button class="btn small ghost" id="stg0">전체 학년 보기</button>` : ''}</div>
+      <div class="stbars">${grades.map(g => { const n = byG.get(g).length; return `<button class="stbar ${SV.g === g ? 'on' : ''}" data-g="${esc(g)}"><span class="stbn">${n}</span><span class="stbf" style="height:${Math.round(n / max * 100)}%"></span><span class="stbl">${esc(g)}</span></button>`; }).join('')}</div></div>
+    <div class="row" style="margin-bottom:10px">${V.map(([k, t]) => `<button class="pill ${SV.view === k ? 'on' : ''}" data-v="${k}">${t}</button>`).join('')}
+      <input type="text" id="stq" placeholder="이름·초성·전화번호 찾기" value="${esc(SV.q)}" style="width:220px"></div>
+    ${body}`;
+  p.querySelectorAll('[data-v]').forEach(b => b.onclick = () => { SV.view = b.dataset.v; render(); });
+  p.querySelectorAll('[data-g]').forEach(b => b.onclick = () => { SV.g = SV.g === b.dataset.g ? '' : b.dataset.g; SV.view = 'grade'; render(); });
+  if ($('#stg0')) $('#stg0').onclick = () => { SV.g = ''; render(); };
+  p.querySelectorAll('[data-id]').forEach(el => el.onclick = e => { if (e.target.closest('a')) return; editStudent(S.students.find(s => s.id === el.dataset.id)); });
+  const qi = $('#stq'); const qf = () => { SV.q = qi.value; render(); setTimeout(() => { const n = $('#stq'); if (n){ n.focus(); n.setSelectionRange(n.value.length, n.value.length); } }); };
+  qi.addEventListener('input', e => { if (!e.isComposing) qf(); }); qi.addEventListener('compositionend', qf);
+  $('#stx').onclick = () => {
+    const ph = s => s.phones.map((x, i) => `${s.phoneLabels[i] || '보호자'} ${prettyPhone(normPhone(x))}`).join(' / ');
+    if (!window.XLSX) return toast('엑셀 도구를 못 불러왔어요');
+    const wb = XLSX.utils.book_new(), add = (n, rows, w) => { const ws = XLSX.utils.aoa_to_sheet(rows); ws['!cols'] = w.map(x => ({ wch: x })); XLSX.utils.book_append_sheet(wb, ws, n); };
+    add('요약', [['기준일', today()], ['재원생', act.length], ['휴관', leave.length], [`${yr}년 입관`, joinedThisYear], [`${yr}년 퇴관`, leftThisYear], ['형제 가정', fams.length], [], ['학년', '인원'], ...grades.map(g => [g, byG.get(g).length])], [14, 10]);
+    add('학년별 명단', [['학년', '이름', '나이', '띠', '보호자 연락처'], ...grades.flatMap(g => byG.get(g).sort(byName).map(s => [g, s.name, ageKey(s) || '', normBelt(s.belt), ph(s)]))], [10, 9, 6, 10, 40]);
+    add('형제', [['가정', '이름', '학년', '보호자 연락처'], ...fams.flatMap((g, i) => g.map(s => [i + 1, s.name, gradeOf(s), ph(s)]))], [6, 9, 10, 40]);
+    add('연락처', [['이름', '학년', '나이', '보호자 연락처', '메모'], ...act.slice().sort(byName).map(s => [s.name, gradeOf(s), ageKey(s) || '', ph(s), s.memo])], [9, 10, 6, 40, 24]);
+    XLSX.writeFile(wb, `students_status_${today().replace(/-/g, '')}.xlsx`);
+  };
+}
 
 function exportXlsx(rows, file, sheet){
   if (!window.XLSX){ toast('엑셀 도구를 못 불러왔어요'); return; }
