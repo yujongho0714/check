@@ -54,6 +54,11 @@ tr.click:hover{background:#f8fafc;cursor:pointer}
 .t-in{background:#dbeafe;color:var(--in)}.t-out{background:#ffedd5;color:var(--out)}
 .t-ok{background:#dcfce7;color:var(--ok)}.t-bad{background:#fee2e2;color:var(--bad)}.t-wait{background:#fef3c7;color:var(--warn)}
 .t-gray{background:#f3f4f6;color:#4b5563}
+#tuBody td{padding:5px 6px;font-size:13.5px}#tuBody th{white-space:nowrap}
+#tuBody input,#tuBody select{padding:5px 6px;font-size:13px;border-radius:7px}
+#tuBody tr.un td:first-child{box-shadow:3px 0 0 var(--bad) inset}#tuBody tr.skip{opacity:.55}
+#tuBody .num{text-align:right;white-space:nowrap}#tuBody .dd{color:var(--warn);font-weight:800}
+#tuBody .auto{font-size:11.5px;color:#b45309;margin-top:3px;line-height:1.35}
 .belt{display:inline-flex;align-items:center;gap:5px;font-weight:700;font-size:13px;white-space:nowrap}
 .belt i{display:inline-block;width:22px;height:10px;border-radius:3px;border:1px solid rgba(0,0,0,.2)}
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
@@ -156,6 +161,8 @@ tr.click:hover{background:#f8fafc;cursor:pointer}
     <button data-t="month">월간 출석부</button>
     <button data-t="absent">결석 · 받은 문자</button>
     <button data-t="call">📞 전화 대상</button>
+    <button data-t="fee">💰 수련비</button>
+    <button data-t="unpaid">미납자 관리</button>
     <button data-t="msg">문자 문구 · 오늘 안내</button>
     <button data-t="char">🧸 캐릭터 넣기</button>
   </nav>
@@ -264,7 +271,7 @@ function onAuth(user){
   $('#login').classList.add('hidden'); $('#app').classList.remove('hidden');
   $('#who').textContent = user.email || '';
   const err = e => { console.error(e); toast('데이터를 못 읽었어요: ' + (e.code || e.message)); };
-  unsubs.push(onSnapshot(collection(db, 'students'), snap => { S.students = snap.docs.map(toStudent); rerender(['today','roster','bulk','month','absent']); }, err));
+  unsubs.push(onSnapshot(collection(db, 'students'), snap => { S.students = snap.docs.map(toStudent); rerender(['today','roster','bulk','month','absent','fee','unpaid']); }, err));
   unsubs.push(onSnapshot(query(collection(db, 'events'), where('day', '==', today())), snap => { S.todayEv = snap.docs.map(d => ({ id: d.id, ...d.data() })); rerender(['today']); }, err));
   unsubs.push(onSnapshot(collection(db, 'groups'), snap => { S.groups = snap.docs.map(d => ({ id: d.id, name: d.get('name') || '', ids: d.get('studentIds') || [] })); rerender(['bulk']); }, err));
   unsubs.push(onSnapshot(query(collection(db, 'bulk'), orderBy('createdMs', 'desc'), limit(300)), snap => { S.bulkAll = snap.docs.map(d => ({ id: d.id, ...d.data() })); S.bulk = S.bulkAll.slice(0, 15); rerender(['bulk', 'chat']); }, err));
@@ -299,9 +306,9 @@ $('#tabs').onclick = e => { const b = e.target.closest('button'); if (!b) return
 // 올인원 바로가기: 주소 끝 #chat · #roster · #call · #bulk · #month · #absent · #msg → 그 탭으로
 function tabFromHash(){ const t = (location.hash || '').slice(1); const b = t && document.querySelector(`#tabs [data-t="${t}"]`); if (b){ S.tab = t; document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b)); } return !!b; }
 addEventListener('hashchange', () => { if (tabFromHash() && !$('#app').classList.contains('hidden')) render(); });
-function rerender(tabs){ if (!tabs.includes(S.tab)) return; if (S.tab === 'chat') { drawChat(); return; } if (!S.busyInput) render(); }
+function rerender(tabs){ if (!tabs.includes(S.tab)) return; if (S.tab === 'chat') { drawChat(); return; } if (S.tab === 'fee' || S.tab === 'unpaid') { tuRefresh(); return; } if (!S.busyInput) render(); }
 function updChatBadge(){ const n = S.inbox.filter(x => !x.handled).length; const b = document.querySelector('#tabs [data-t=chat]'); if (b) b.innerHTML = '💬 문자' + (n ? ` <span class="cbadge">${n}</span>` : ''); }
-function render(){ const p = $('#panel'); ({ today: rToday, chat: rChat, roster: rRoster, bulk: rBulk, month: rMonth, absent: rAbsent, msg: rMsg, call: rCall, char: rChar })[S.tab](p); }
+function render(){ const p = $('#panel'); ({ today: rToday, chat: rChat, roster: rRoster, bulk: rBulk, month: rMonth, absent: rAbsent, msg: rMsg, call: rCall, char: rChar, fee: rFee, unpaid: rUnpaid })[S.tab](p); }
 // 글 쓰는 중에는 실시간 갱신으로 화면을 다시 그리지 않음
 document.addEventListener('focusin', e => { if (e.target.matches('#panel input[type=text], #panel textarea')) S.busyInput = true; });
 document.addEventListener('focusout', () => { S.busyInput = false; });
@@ -1080,11 +1087,12 @@ function rAbsent(p){
         <div class="row"><input type="text" id="aq" placeholder="이름·초성으로 찾기" style="width:200px"><span class="muted">시작</span><input type="date" id="ad" value="${today()}"><span class="muted">끝</span><input type="date" id="ad2" value="${today()}"></div>
         <p class="muted" id="adinfo" style="margin:4px 0"></p>
         <div class="kids" id="akids" style="max-height:160px;margin:8px 0"></div>
-        <div class="row"><input type="text" id="ar" placeholder="사유 (예: 감기, 여행)" class="grow"><button class="btn" id="asave">결석 등록</button></div>
+        <div class="row"><select id="akind"><option value="sick">병결 (수련비 차감)</option><option value="trip">여행 (수련비 차감)</option><option value="other">개인 사정 (차감 없음)</option></select><input type="text" id="ar" placeholder="사유 (예: 감기, 가족 여행)" class="grow"><button class="btn" id="asave">결석 등록</button></div>
+        <p class="muted" style="margin:6px 0 0">병결·여행은 수업일 1일당 5,000원씩 💰 수련비에서 빠져요 (이미 냈으면 다음 달에서).</p>
       </div>
       <h3>${+MS.month.slice(5)}월 결석 기록 ${ab.length}건 <span class="muted">(월간 출석부에서 달을 바꾸면 그 달이 보여요)</span></h3>
       <div class="scroll" style="max-height:45vh"><table><tr><th>날짜</th><th>이름</th><th>사유</th><th></th></tr>
-        ${ab.map(a => `<tr><td>${a.day.slice(5).replace('-', '/')}</td><td>${esc(a.name)}</td><td>${esc(a.reason)}</td><td><button class="btn small ghost" data-ad="${a.id}">지우기</button></td></tr>`).join('') || '<tr><td colspan="4" class="muted">없어요</td></tr>'}
+        ${ab.map(a => `<tr><td>${a.day.slice(5).replace('-', '/')}</td><td>${esc(a.name)}</td><td>${esc(a.reason)} <span class="tag ${KIND_TXT[absKind(a)][1]}">${KIND_TXT[absKind(a)][0]}</span></td><td><button class="btn small ghost" data-ad="${a.id}">지우기</button></td></tr>`).join('') || '<tr><td colspan="4" class="muted">없어요</td></tr>'}
       </table></div>
     </div>
     <div>
@@ -1104,8 +1112,8 @@ function rAbsent(p){
   const info = () => { const a = $('#ad').value, b = $('#ad2').value; const n = rangeDays().length; $('#adinfo').textContent = a && b && b > a ? `${a.slice(5)} ~ ${b.slice(5)} · 수업일 ${n}일 결석 처리 (주말·공휴일 빼고)` : '하루만 결석 처리 (여러 날이면 끝 날짜를 고르세요)'; };
   $('#ad').onchange = () => { if (!$('#ad2').value || $('#ad2').value < $('#ad').value) $('#ad2').value = $('#ad').value; info(); }; $('#ad2').onchange = info; info();
   $('#akids').onclick = e => { const b = e.target.closest('[data-ak]'); if (!b) return; const id = b.dataset.ak; picked.has(id) ? picked.delete(id) : picked.add(id); drawKids(); };
-  $('#asave').onclick = async () => { const days = rangeDays(); const reason = $('#ar').value.trim() || '부모님 연락'; if (!picked.size || !days.length) return toast('아이와 날짜(수업일)를 고르세요');
-    const b = writeBatch(db); [...picked].forEach(id => { const s = S.students.find(x => x.id === id); days.forEach(day => b.set(doc(db, 'absences', `${day}_${id}`), { day, studentId: id, name: s.name, reason, createdAt: serverTimestamp() })); });
+  $('#asave').onclick = async () => { const days = rangeDays(); const kind = $('#akind').value; const reason = $('#ar').value.trim() || ({ sick: '병결', trip: '여행', other: '부모님 연락' })[kind]; if (!picked.size || !days.length) return toast('아이와 날짜(수업일)를 고르세요');
+    const b = writeBatch(db); [...picked].forEach(id => { const s = S.students.find(x => x.id === id); days.forEach(day => b.set(doc(db, 'absences', `${day}_${id}`), { day, studentId: id, name: s.name, reason, kind, createdAt: serverTimestamp() })); });
     await b.commit(); CS.loadedDay = ''; toast(`${picked.size}명 · ${days.length}일 결석 등록했어요`); picked.clear(); $('#ar').value = ''; drawKids(); };
   p.querySelectorAll('[data-ad]').forEach(b => b.onclick = () => deleteDoc(doc(db, 'absences', b.dataset.ad)));
   p.querySelectorAll('[data-h]').forEach(b => b.onclick = () => setDoc(doc(db, 'inbox', b.dataset.h), { handled: b.dataset.v === '1' }, { merge: true }));
@@ -1421,6 +1429,433 @@ async function sendGroup(j, phones){
 }
 
 /* ─── 엑셀 ─── */
+
+/* ═════════════ 💰 수련비 · 미납자 관리 ═════════════
+   tuition/{YYYY-MM}.rows[studentId] = { paid:'YYYY-MM-DD', method, amount, fee, note, skip }
+   config/tuition = { defaultFee, perDay, sickMax, tripMax, bank, tpl, smsLog:{id:day} }
+   결석(absences) 중 병결·여행은 평일(수업일) 1일당 5,000원 차감.
+   - 그 달 수련비를 아직 안 냈으면 → 그 달 낼 금액에서 바로 빼기
+   - 이미 냈으면(차감 없이) → 다음 달 시트에 '이월 차감'으로 적고 다음 달 원비에서 빼기 */
+const TU = { month: thisMonth(), docs: {}, cfg: {}, ab: [], abFrom: '', unsub: [], on: false, loaded: false,
+  f: 'all', q: '', uf: 'all', withNow: false, sel: new Set(), dirty: false, seen: false };
+const TU_DEF = { defaultFee: 150000, perDay: 5000, sickMax: 10, tripMax: 5, bank: '',
+  tpl: '[용인대 정도태권도 2관]\n안녕하세요 {호칭}, {이름} 수련비 안내드려요.\n{내역}\n합계 {금액}원이 아직 확인되지 않았어요.\n{계좌}\n이미 보내주셨다면 말씀 부탁드려요. 감사합니다 :)' };
+const METHODS = ['카드', '계좌', '현금', '카드+바우처', '기타'];
+const monthAdd = (m, n) => { let [y, mo] = m.split('-').map(Number); mo += n; while (mo > 12){ mo -= 12; y++; } while (mo < 1){ mo += 12; y--; } return `${y}-${pad(mo)}`; };
+const won = n => (n == null || n === '' || isNaN(n)) ? '-' : Number(n).toLocaleString('ko-KR');
+const mLabel = m => `${+m.slice(5)}월`;
+const tuCfg = () => ({ ...TU_DEF, ...TU.cfg });
+function absKind(a){
+  if (a.kind) return a.kind;
+  const r = String(a.reason || '');
+  if (/여행|해외|휴가|캠핑|놀러|가족.?여행|체험학습/.test(r)) return 'trip';
+  if (/병|아파|아프|아퍼|감기|독감|입원|코로나|장염|수족구|폐렴|다쳐|다침|골절|부상|기침|구토|몸살|수술|치료|발열|열이|열나|컨디션/.test(r)) return 'sick';
+  return 'other';
+}
+const KIND_TXT = { sick: ['병결', 't-bad'], trip: ['여행', 't-in'], other: ['차감 없음', 't-gray'] };
+// 11/16, 11/17, 11/18 → "11/16~18" (주말·휴일 건너뛰고 이어지면 한 묶음)
+function dayRanges(days){
+  days = [...new Set(days)].sort(); const out = []; let st = null, pv = null;
+  const nextClass = d => { let x = shiftDay(d, 1); for (let i = 0; i < 7 && isOff(x); i++) x = shiftDay(x, 1); return x; };
+  const fmt = (a, b) => { const A = `${+a.slice(5, 7)}/${+a.slice(8)}`; if (a === b) return A; return a.slice(5, 7) === b.slice(5, 7) ? `${A}~${+b.slice(8)}` : `${A}~${+b.slice(5, 7)}/${+b.slice(8)}`; };
+  days.forEach(d => { if (st && d === nextClass(pv)) pv = d; else { if (st) out.push(fmt(st, pv)); st = pv = d; } });
+  if (st) out.push(fmt(st, pv)); return out.join(', ');
+}
+function tuMonths(){ const ms = new Set(Object.keys(TU.docs)); ms.add(thisMonth()); ms.add(TU.month); return [...ms].filter(m => /^\d{4}-\d{2}$/.test(m)).sort(); }
+function tuRow(m, id){ const d = TU.docs[m]; return (d && d.rows && d.rows[id]) || {}; }
+function tuShown(s, m){
+  const r = tuRow(m, s.id);
+  if (r.paid) return true;
+  if (s.joinedMonth && m < s.joinedMonth) return false;
+  if (s.status === 'ACTIVE' || s.status === 'LEAVE') return true;
+  return !!(s.leftMonth && m < s.leftMonth);
+}
+// 학생×달 계산 (이월 차감을 이어서 계산)
+function tuCalc(){
+  const cfg = tuCfg(), months = tuMonths(), absBy = new Map();
+  TU.ab.forEach(a => { const k = absKind(a); if (k === 'other' || !a.studentId || !a.day) return; const key = a.studentId + '|' + a.day.slice(0, 7); let o = absBy.get(key); if (!o) absBy.set(key, o = { sick: [], trip: [] }); o[k].push(a.day); });
+  const out = new Map();
+  S.students.forEach(s => {
+    let carry = 0, carryNote = '';
+    months.forEach(m => {
+      const r = tuRow(m, s.id), shown = tuShown(s, m);
+      const fee = (r.fee != null && r.fee !== '') ? +r.fee : (s.fee || cfg.defaultFee);
+      const o = absBy.get(s.id + '|' + m) || { sick: [], trip: [] };
+      const sickN = Math.min(o.sick.length, cfg.sickMax), tripN = Math.min(o.trip.length, cfg.tripMax);
+      const ded = (sickN + tripN) * cfg.perDay;
+      const paid = !!r.paid;
+      const skip = !!r.skip || !shown || (s.status === 'LEAVE' && !paid && m >= thisMonth());
+      const carryIn = carry, carryInNote = carryNote;
+      const due = skip ? 0 : Math.max(0, fee - ded - carryIn);
+      const amount = (r.amount != null && r.amount !== '') ? +r.amount : null;
+      let carryOut = 0;
+      if (paid){ const applied = Math.max(0, fee - (amount == null ? fee : amount)); carryOut = Math.max(0, ded + carryIn - applied); }
+      else if (skip) carryOut = carryIn + ded;
+      const parts = []; if (o.sick.length) parts.push(`병결 ${o.sick.length}일(${dayRanges(o.sick)})${o.sick.length > sickN ? ` 중 ${sickN}일만` : ''}`);
+      if (o.trip.length) parts.push(`여행 ${o.trip.length}일(${dayRanges(o.trip)})${o.trip.length > tripN ? ` 중 ${tripN}일만` : ''}`);
+      const dedNote = parts.length ? `${mLabel(m)} ${parts.join(' · ')} → ${won(ded)}원 차감` : '';
+      const autoNote = [
+        carryIn ? `지난달 이월 차감 -${won(carryIn)}원 (${carryInNote})` : '',
+        ded ? (paid && carryOut ? `${dedNote} → 이미 납부해서 ${mLabel(monthAdd(m, 1))} 원비에서 -${won(carryOut)}원` : `${dedNote}${paid ? '' : ' (낼 금액에 반영)'}`) : '',
+      ].filter(Boolean).join(' / ');
+      out.set(s.id + '|' + m, { s, m, r, fee, ded, sickN, tripN, sick: o.sick, trip: o.trip, carryIn, carryInNote, due, paid, amount, skip, shown, carryOut, autoNote, dedNote });
+      carry = carryOut; carryNote = carryOut ? [ded ? dedNote.replace(/ → .*$/, '') : '', carryOut > ded && carryIn ? '이전 이월' : ''].filter(Boolean).join(' + ') : '';
+    });
+  });
+  return out;
+}
+// 미납 달 목록 (지난달까지 + 원하면 이번 달)
+function tuUnpaid(C, withNow){
+  const now = thisMonth(), months = tuMonths().filter(m => withNow ? m <= now : m < now), list = [];
+  S.students.filter(s => s.status !== 'QUIT' || months.some(m => tuShown(s, m))).forEach(s => {
+    const ms = months.map(m => C.get(s.id + '|' + m)).filter(x => x && x.shown && !x.skip && !x.paid && x.due > 0);
+    if (ms.length) list.push({ s, ms, total: ms.reduce((a, x) => a + x.due, 0) });
+  });
+  return list.sort((a, b) => b.ms.length - a.ms.length || byName(a.s, b.s));
+}
+const monthsText = ms => { const ys = new Set(ms.map(x => x.m.slice(0, 4))); return ms.map(x => ys.size > 1 ? `${x.m.slice(2, 4)}.${+x.m.slice(5)}` : +x.m.slice(5)).join('·') + '월'; };
+
+function tuStart(){
+  if (TU.on) return; TU.on = true;
+  TU.unsub.push(onSnapshot(collection(db, 'tuition'), snap => {
+    TU.docs = {}; snap.docs.forEach(d => TU.docs[d.id] = d.data()); TU.loaded = true;
+    const now = thisMonth();
+    // 새 달이 되면 그 달 시트를 자동으로 만들기
+    if (!TU.docs[now]) setDoc(doc(db, 'tuition', now), { rows: {}, createdMs: Date.now() }, { merge: true }).catch(() => {});
+    tuAbsSub(); tuRefresh();
+  }, e => toast('수련비를 못 읽었어요: ' + (e.code || e.message))));
+  TU.unsub.push(onSnapshot(doc(db, 'config', 'tuition'), d => { TU.cfg = d.exists() ? d.data() : {}; tuRefresh(); }, () => {}));
+  if (!CS.hol || !Object.keys(CS.hol).length) getDoc(doc(db, 'config', 'holidays')).then(d => { CS.hol = (d.exists() && d.get('days')) || {}; tuRefresh(); }).catch(() => {});
+}
+function tuAbsSub(){
+  const first = tuMonths()[0] || thisMonth(); const from = first + '-01';
+  if (TU.abFrom === from) return; TU.abFrom = from;
+  if (TU.abUn) TU.abUn();
+  TU.abUn = onSnapshot(query(collection(db, 'absences'), where('day', '>=', from)), snap => { TU.ab = snap.docs.map(d => ({ id: d.id, ...d.data() })); tuRefresh(); }, () => {});
+}
+// 표에 입력 중이면 다시 그리지 않고, 입력이 끝나면 그리기
+function tuRefresh(){
+  if (S.tab !== 'fee' && S.tab !== 'unpaid') return;
+  const a = document.activeElement; if (a && a.closest && a.closest('#tuBody, .modal')) { TU.dirty = true; return; }
+  render();
+}
+document.addEventListener('focusout', () => setTimeout(() => { if (!TU.dirty) return; const a = document.activeElement; if (a && a.closest && a.closest('#tuBody, .modal')) return; TU.dirty = false; if (S.tab === 'fee' || S.tab === 'unpaid') render(); }, 50));
+async function tuSave(m, id, patch){
+  const clean = {}; Object.entries(patch).forEach(([k, v]) => clean[k] = (v === '' || v == null) ? deleteField() : v);
+  try { await setDoc(doc(db, 'tuition', m), { rows: { [id]: clean } }, { merge: true }); } catch(e){ toast('저장 못 했어요: ' + (e.code || e.message)); }
+}
+const keepScroll = (p, fn) => { const sc = p.querySelector('.scroll'); const t = sc ? sc.scrollTop : 0, l = sc ? sc.scrollLeft : 0; fn(); const sc2 = p.querySelector('.scroll'); if (sc2){ sc2.scrollTop = t; sc2.scrollLeft = l; } };
+
+/* ─── 💰 수련비 시트 ─── */
+function rFee(p){
+  tuStart();
+  if (!TU.loaded){ p.innerHTML = '<p class="muted">수련비 불러오는 중…</p>'; return; }
+  const m = TU.month, C = tuCalc(), cfg = tuCfg();
+  const all = S.students.filter(s => tuShown(s, m)).sort(byName).map(s => C.get(s.id + '|' + m)).filter(Boolean);
+  const q = TU.q.trim();
+  const rows = all.filter(x => (!q || nameMatch(x.s.name, q)) && (TU.f === 'all' || (TU.f === 'unpaid' ? !x.paid && !x.skip : TU.f === 'paid' ? x.paid : TU.f === 'ded' ? (x.ded || x.carryIn) : x.skip)));
+  const paidN = all.filter(x => x.paid).length, unpaidN = all.filter(x => !x.paid && !x.skip).length;
+  const got = all.reduce((a, x) => a + (x.paid ? (x.amount ?? x.fee) : 0), 0), left = all.reduce((a, x) => a + (!x.paid && !x.skip ? x.due : 0), 0);
+  const months = tuMonths();
+  const mopt = months.map(x => `<option value="${x}" ${x === m ? 'selected' : ''}>${x.slice(0, 4)}년 ${+x.slice(5)}월</option>`).join('');
+  const F = [['all', '전체'], ['unpaid', '미납'], ['paid', '납부'], ['ded', '차감 있음'], ['skip', '휴관·면제']];
+  keepScroll(p, () => { p.innerHTML = `
+    <div class="row" style="margin-bottom:12px">
+      <button class="btn ghost small" id="tuPrev">◀</button><select id="tuM" style="font-weight:800">${mopt}</select><button class="btn ghost small" id="tuNext">▶</button>
+      <h2 style="margin:0 8px">${+m.slice(5)}월 수련비</h2>
+      <div class="grow"></div>
+      <button class="btn ghost small" id="tuX1">📥 이번 달 엑셀</button>
+      <button class="btn ghost small" id="tuXA">📥 전체 달 엑셀</button>
+      <button class="btn ghost small" id="tuImp">📤 엑셀 가져오기</button>
+      <button class="btn ghost small" id="tuOld">↪ 예전 수련비 앱 자료</button>
+      <button class="btn ghost small" id="tuCfg">⚙️ 설정</button>
+    </div>
+    <div class="grid4" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px">
+      <div class="card"><div class="muted">원생</div><div class="stat">${all.length}<small style="font-size:14px">명</small></div></div>
+      <div class="card"><div class="muted">납부</div><div class="stat" style="color:var(--ok)">${paidN}<small style="font-size:14px">명</small></div><div class="muted">${won(got)}원</div></div>
+      <div class="card" style="cursor:pointer" id="tuGoUnpaid"><div class="muted">미납</div><div class="stat" style="color:var(--bad)">${unpaidN}<small style="font-size:14px">명</small></div><div class="muted">${won(left)}원 남음 · 미납자 관리 ›</div></div>
+      <div class="card"><div class="muted">결석 차감 (1일 ${won(cfg.perDay)}원)</div><div class="stat" style="color:var(--warn)">${all.filter(x => x.ded || x.carryIn).length}<small style="font-size:14px">명</small></div><div class="muted">병결 ${cfg.sickMax}일 · 여행 ${cfg.tripMax}일까지</div></div>
+    </div>
+    <div class="row" style="margin-bottom:10px">
+      <input type="text" id="tuQ" placeholder="이름·초성 찾기" value="${esc(TU.q)}" style="width:180px">
+      ${F.map(([k, t]) => `<button class="pill ${TU.f === k ? 'on' : ''}" data-tf="${k}">${t}</button>`).join('')}
+      <div class="grow"></div><span class="muted">칸을 고치면 바로 저장돼요 · [오늘 납부]를 누르면 낼 금액으로 납부 처리</span>
+    </div>
+    <div class="scroll" style="max-height:62vh"><table class="tut" id="tuBody">
+      <tr><th>번호</th><th>이름</th><th>학년</th><th>보호자 연락처</th><th>원비</th><th>결석 차감</th><th>이월 차감</th><th>낼 금액</th><th>납입일</th><th>결제</th><th>납입액</th><th>비고</th><th></th></tr>
+      ${rows.map((x, i) => { const s = x.s, r = x.r;
+        const ph = s.phones.map((p, j) => `${esc(s.phoneLabels[j] || '보호자')} ${prettyPhone(normPhone(p))}`).join('<br>');
+        const st = x.paid ? '' : x.skip ? 'skip' : 'un';
+        return `<tr class="${st}" data-id="${s.id}">
+        <td class="muted">${i + 1}</td>
+        <td style="white-space:nowrap"><b>${esc(s.name)}</b>${s.status === 'LEAVE' ? ' <span class="tag t-gray">휴관</span>' : s.status === 'QUIT' ? ' <span class="tag t-gray">퇴관</span>' : ''}</td>
+        <td class="muted" style="white-space:nowrap">${esc(gradeOf(s))}</td>
+        <td class="muted" style="font-size:12px;white-space:nowrap">${ph || '-'}</td>
+        <td><input type="number" class="tin" data-k="fee" value="${x.fee}" step="1000" style="width:92px"></td>
+        <td class="num ${x.ded ? 'dd' : ''}" title="${esc(x.dedNote)}">${x.ded ? '-' + won(x.ded) : ''}${x.ded ? `<div class="muted" style="font-size:11px">${[x.sick.length ? '병' + x.sickN : '', x.trip.length ? '여' + x.tripN : ''].filter(Boolean).join('·')}일</div>` : ''}</td>
+        <td class="num ${x.carryIn ? 'dd' : ''}" title="${esc(x.carryInNote)}">${x.carryIn ? '-' + won(x.carryIn) : ''}</td>
+        <td class="num"><b>${x.skip ? '<span class="muted">면제</span>' : won(x.due)}</b></td>
+        <td><input type="date" class="tin" data-k="paid" value="${esc(r.paid || '')}"></td>
+        <td><select class="tin" data-k="method"><option value=""></option>${METHODS.map(t => `<option ${r.method === t ? 'selected' : ''}>${t}</option>`).join('')}${r.method && !METHODS.includes(r.method) ? `<option selected>${esc(r.method)}</option>` : ''}</select></td>
+        <td><input type="number" class="tin" data-k="amount" value="${r.amount ?? ''}" step="1000" placeholder="${x.paid ? '' : won(x.due)}" style="width:92px"></td>
+        <td style="min-width:220px"><input type="text" class="tin" data-k="note" value="${esc(r.note || '')}" placeholder="메모" style="width:100%">${x.autoNote ? `<div class="auto">${esc(x.autoNote)}</div>` : ''}</td>
+        <td style="white-space:nowrap">${x.paid ? `<button class="btn small ghost" data-un="1">납부 취소</button>` : x.skip && r.skip ? `<button class="btn small ghost" data-sk="0">면제 취소</button>` : `<button class="btn small" data-pay="1">오늘 납부</button> <button class="btn small ghost" data-sk="1" title="휴관 등으로 이 달은 안 받기">면제</button>`}</td>
+      </tr>`; }).join('') || '<tr><td colspan="13" class="muted">해당하는 원생이 없어요</td></tr>'}
+    </table></div>`; });
+  const go = mm => { TU.month = mm; render(); };
+  $('#tuM').onchange = e => go(e.target.value);
+  $('#tuPrev').onclick = () => go(monthAdd(m, -1)); $('#tuNext').onclick = () => go(monthAdd(m, 1));
+  $('#tuGoUnpaid').onclick = () => { location.hash = 'unpaid'; };
+  const qi = $('#tuQ'); const qf = () => { TU.q = qi.value; render(); setTimeout(() => { const n = $('#tuQ'); if (n){ n.focus(); n.setSelectionRange(n.value.length, n.value.length); } }); };
+  qi.addEventListener('input', e => { if (!e.isComposing) qf(); }); qi.addEventListener('compositionend', qf);
+  p.querySelectorAll('[data-tf]').forEach(b => b.onclick = () => { TU.f = b.dataset.tf; render(); });
+  p.querySelectorAll('.tin').forEach(inp => inp.addEventListener('change', async () => {
+    const id = inp.closest('tr').dataset.id, k = inp.dataset.k; let v = inp.value.trim();
+    if (k === 'fee' || k === 'amount') v = v === '' ? '' : Math.max(0, Math.round(+v.replace(/[^\d.]/g, '')));
+    if (k === 'fee'){ // 원비는 이 달 + 앞으로의 기본 원비로
+      await tuSave(m, id, { fee: v });
+      if (v !== '' && m >= thisMonth()) setDoc(doc(db, 'students', id), { fee: v }, { merge: true }).catch(() => {});
+      return;
+    }
+    const patch = { [k]: v };
+    if (k === 'paid' && v){ const x = C.get(id + '|' + m); if (x && x.r.amount == null) patch.amount = x.due; if (x && x.r.fee == null) patch.fee = x.fee; }
+    tuSave(m, id, patch);
+  }));
+  p.querySelectorAll('[data-pay]').forEach(b => b.onclick = () => { const id = b.closest('tr').dataset.id, x = C.get(id + '|' + m); tuSave(m, id, { paid: today(), amount: x.r.amount ?? x.due, fee: x.fee, method: x.r.method || '카드' }); toast(`${x.s.name} 납부 처리 (${won(x.r.amount ?? x.due)}원)`); });
+  p.querySelectorAll('[data-un]').forEach(b => b.onclick = () => { const id = b.closest('tr').dataset.id; if (confirm('납부 기록을 지울까요?')) tuSave(m, id, { paid: '', amount: '', method: '' }); });
+  p.querySelectorAll('[data-sk]').forEach(b => b.onclick = () => tuSave(m, b.closest('tr').dataset.id, { skip: b.dataset.sk === '1' ? true : '' }));
+  $('#tuX1').onclick = () => { exportBook([tuSheet(m, C)], `tuition_${m}.xlsx`); };
+  $('#tuXA').onclick = () => { exportBook([...months.filter(x => x <= thisMonth() || TU.docs[x]).reverse().map(x => tuSheet(x, C)), unpaidSheet(tuUnpaid(C, true))], `tuition_all_${today().replace(/-/g, '')}.xlsx`); };
+  $('#tuImp').onclick = () => tuImportXlsx(m);
+  $('#tuOld').onclick = tuImportOld;
+  $('#tuCfg').onclick = tuCfgModal;
+}
+function tuSheet(m, C){
+  const list = S.students.filter(s => tuShown(s, m)).sort(byName).map(s => C.get(s.id + '|' + m)).filter(Boolean);
+  const rows = [['번호', '이름', '학년', '보호자 연락처', '원비', '결석 차감', '이월 차감', '낼 금액', '납입일', '결제', '납입액', '상태', '비고', '차감 내역']];
+  list.forEach((x, i) => rows.push([i + 1, x.s.name, gradeOf(x.s), x.s.phones.map((p, j) => `${x.s.phoneLabels[j] || '보호자'} ${prettyPhone(normPhone(p))}`).join(' / '),
+    x.fee, x.ded ? -x.ded : '', x.carryIn ? -x.carryIn : '', x.skip ? 0 : x.due, x.r.paid || '', x.r.method || '', x.paid ? (x.amount ?? x.fee) : '',
+    x.paid ? '납부' : x.skip ? '면제' : '미납', x.r.note || '', x.autoNote]));
+  const sum = k => list.reduce((a, x) => a + k(x), 0);
+  rows.push([]); rows.push(['', '합계', '', `${list.length}명`, sum(x => x.fee), -sum(x => x.ded), -sum(x => x.carryIn), sum(x => x.skip ? 0 : x.due), '', '', sum(x => x.paid ? (x.amount ?? x.fee) : 0), `미납 ${list.filter(x => !x.paid && !x.skip).length}명`]);
+  return [`${m.slice(2, 4)}년 ${+m.slice(5)}월`, rows, [5, 9, 7, 30, 10, 10, 10, 10, 11, 9, 10, 6, 24, 60]];
+}
+function unpaidSheet(U){
+  const rows = [['이름', '학년', '미납 달', '개월 수', '미납 합계', '보호자 연락처', '마지막 안내 문자']];
+  const log = tuCfg().smsLog || {};
+  U.forEach(u => rows.push([u.s.name, gradeOf(u.s), monthsText(u.ms), u.ms.length, u.total, u.s.phones.map((p, j) => `${u.s.phoneLabels[j] || '보호자'} ${prettyPhone(normPhone(p))}`).join(' / '), log[u.s.id] || '']));
+  return ['미납자', rows, [9, 7, 16, 7, 11, 34, 12]];
+}
+function exportBook(sheets, file){
+  if (!window.XLSX){ toast('엑셀 도구를 못 불러왔어요'); return; }
+  const wb = XLSX.utils.book_new();
+  sheets.forEach(([name, rows, widths]) => { const ws = XLSX.utils.aoa_to_sheet(rows); if (widths) ws['!cols'] = widths.map(w => ({ wch: w })); XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31)); });
+  XLSX.writeFile(wb, file);
+}
+
+/* ─── 미납자 관리 ─── */
+function rUnpaid(p){
+  tuStart();
+  if (!TU.loaded){ p.innerHTML = '<p class="muted">수련비 불러오는 중…</p>'; return; }
+  const C = tuCalc(), now = thisMonth(), prev = monthAdd(now, -1), log = tuCfg().smsLog || {};
+  const U0 = tuUnpaid(C, TU.withNow);
+  const U = U0.filter(u => TU.uf === 'all' || (TU.uf === '3' ? u.ms.length >= 3 : u.ms.length === +TU.uf));
+  [...TU.sel].forEach(id => { if (!U.some(u => u.s.id === id)) TU.sel.delete(id); });
+  const prevU = tuUnpaid(C, false).filter(u => u.ms.some(x => x.m === prev)).length;
+  const cnt = n => U0.filter(u => n === '3' ? u.ms.length >= 3 : u.ms.length === +n).length;
+  keepScroll(p, () => { p.innerHTML = `
+    <div class="row" style="margin-bottom:10px"><h2 style="margin:0">미납자 관리</h2><span class="muted">${TU.withNow ? `${+now.slice(5)}월(이번 달)까지` : `${+prev.slice(5)}월까지 마감 기준`} · 수련비 시트와 같은 자료</span><div class="grow"></div>
+      <button class="btn ghost small" id="unX">📥 미납자 엑셀</button><button class="btn ghost small" id="unFee">💰 수련비 시트 ›</button></div>
+    ${TU.docs[prev] ? `<div class="card" style="background:#fff7ed;border-color:#fed7aa;margin-bottom:12px"><b>📌 ${+now.slice(5)}월이 시작됐어요.</b> ${+prev.slice(5)}월 미납 <b style="color:var(--bad)">${prevU}명</b> · 밀린 달 있는 원생 모두 <b>${tuUnpaid(C, false).length}명</b>을 정리했어요. 아래에서 골라 안내 문자를 보내세요.</div>` : ''}
+    <div class="row" style="margin-bottom:10px">
+      ${[['all', `전체 ${U0.length}`], ['1', `1개월 ${cnt('1')}`], ['2', `2개월 ${cnt('2')}`], ['3', `3개월 이상 ${cnt('3')}`]].map(([k, t]) => `<button class="pill ${TU.uf === k ? 'on' : ''}" data-uf="${k}">${t}명</button>`).join('')}
+      <label class="muted" style="margin-left:8px"><input type="checkbox" id="unNow" ${TU.withNow ? 'checked' : ''}> 이번 달(${+now.slice(5)}월) 미납도 포함</label>
+      <div class="grow"></div>
+      <button class="btn ghost small" id="unAll">${U.length && U.every(u => TU.sel.has(u.s.id)) ? '선택 해제' : '모두 선택'}</button>
+      <button class="btn" id="unSms" ${TU.sel.size ? '' : 'disabled'}>✉️ 미납 안내 문자 (${TU.sel.size}명)</button>
+    </div>
+    <div class="scroll" style="max-height:62vh"><table id="tuBody">
+      <tr><th></th><th>이름</th><th>학년</th><th>미납 달</th><th>개월</th><th>미납 합계</th><th>보호자 연락처</th><th>안내 문자</th><th></th></tr>
+      ${U.map(u => { const s = u.s; return `<tr data-id="${s.id}">
+        <td><input type="checkbox" class="unc" ${TU.sel.has(s.id) ? 'checked' : ''}></td>
+        <td style="white-space:nowrap"><b>${esc(s.name)}</b>${s.status !== 'ACTIVE' ? ` <span class="tag t-gray">${s.status === 'LEAVE' ? '휴관' : '퇴관'}</span>` : ''}</td>
+        <td class="muted">${esc(gradeOf(s))}</td>
+        <td><b style="color:var(--bad)">${monthsText(u.ms)}</b><div class="muted" style="font-size:11.5px">${u.ms.map(x => `${mLabel(x.m)} ${won(x.due)}`).join(' · ')}</div></td>
+        <td><span class="tag ${u.ms.length >= 3 ? 't-bad' : u.ms.length === 2 ? 't-wait' : 't-gray'}">${u.ms.length}개월</span></td>
+        <td class="num"><b>${won(u.total)}원</b></td>
+        <td class="muted" style="font-size:12.5px;white-space:nowrap">${s.phones.map((p, j) => `${esc(s.phoneLabels[j] || '보호자')} ${prettyPhone(normPhone(p))}`).join('<br>') || '<span style="color:var(--bad)">번호 없음</span>'}</td>
+        <td class="muted">${log[s.id] ? `${+log[s.id].slice(5, 7)}/${+log[s.id].slice(8)} 보냄` : '-'}</td>
+        <td style="white-space:nowrap"><button class="btn small ghost" data-one="1">문자</button> <button class="btn small" data-paym="1">납부 처리</button></td>
+      </tr>`; }).join('') || `<tr><td colspan="9" class="muted" style="padding:30px;text-align:center">미납자가 없어요 🎉</td></tr>`}
+    </table></div>`; });
+  p.querySelectorAll('[data-uf]').forEach(b => b.onclick = () => { TU.uf = b.dataset.uf; render(); });
+  $('#unNow').onchange = e => { TU.withNow = e.target.checked; render(); };
+  $('#unFee').onclick = () => { location.hash = 'fee'; };
+  $('#unX').onclick = () => exportBook([unpaidSheet(U)], `unpaid_${today().replace(/-/g, '')}.xlsx`);
+  $('#unAll').onclick = () => { const all = U.length && U.every(u => TU.sel.has(u.s.id)); U.forEach(u => all ? TU.sel.delete(u.s.id) : TU.sel.add(u.s.id)); render(); };
+  p.querySelectorAll('.unc').forEach(c => c.onchange = () => { const id = c.closest('tr').dataset.id; c.checked ? TU.sel.add(id) : TU.sel.delete(id); render(); });
+  $('#unSms').onclick = () => unpaidSmsModal(U.filter(u => TU.sel.has(u.s.id)));
+  p.querySelectorAll('[data-one]').forEach(b => b.onclick = () => unpaidSmsModal(U.filter(u => u.s.id === b.closest('tr').dataset.id)));
+  p.querySelectorAll('[data-paym]').forEach(b => b.onclick = () => payModal(U.find(u => u.s.id === b.closest('tr').dataset.id)));
+}
+function payModal(u){
+  if (!u) return;
+  const r = modal(`<h2>${esc(u.s.name)} 납부 처리</h2><p class="muted">낸 달을 고르세요. 납입일은 오늘, 금액은 낼 금액으로 적혀요 (수련비 시트에서 고칠 수 있어요).</p>
+    ${u.ms.map(x => `<label class="row" style="margin:6px 0"><input type="checkbox" class="pm" value="${x.m}" checked> <b>${x.m.slice(0, 4)}년 ${mLabel(x.m)}</b> <span class="muted">${won(x.due)}원</span></label>`).join('')}
+    <div class="row" style="margin-top:8px"><span class="muted">결제</span><select id="pmM">${METHODS.map(t => `<option>${t}</option>`).join('')}</select><span class="muted">납입일</span><input type="date" id="pmD" value="${today()}"></div>
+    <div class="row" style="margin-top:14px"><div class="grow"></div><button class="btn ghost" id="pmC">취소</button><button class="btn" id="pmOk">납부 처리</button></div>`);
+  r.querySelector('#pmC').onclick = closeModal;
+  r.querySelector('#pmOk').onclick = async () => { const ms = [...r.querySelectorAll('.pm:checked')].map(c => c.value); const d = r.querySelector('#pmD').value || today(), meth = r.querySelector('#pmM').value;
+    for (const m of ms){ const x = u.ms.find(y => y.m === m); await tuSave(m, u.s.id, { paid: d, amount: x.due, fee: x.fee, method: meth }); }
+    closeModal(); toast(`${u.s.name} ${ms.length}개월 납부 처리했어요`); };
+}
+function unpaidSmsModal(list){
+  if (!list.length) return;
+  const cfg = tuCfg();
+  const build = (tpl, allPhones) => {
+    const byPhone = new Map(), noPhone = [];
+    list.forEach(u => { const s = u.s, ph = []; s.phones.forEach((p, i) => { const n = normPhone(p); if (n.length >= 9 && !ph.some(x => x[0] === n)) ph.push([n, s.phoneLabels[i] || '보호자']); });
+      const use = allPhones ? ph : ph.slice(0, 1); if (!use.length) noPhone.push(s.name);
+      use.forEach(([p, l]) => { if (!byPhone.has(p)) byPhone.set(p, { l, us: [] }); byPhone.get(p).us.push(u); }); });
+    const items = [...byPhone].map(([p, o]) => {
+      const many = o.us.length > 1;
+      const detail = o.us.map(u => `${many ? `· ${givenName(u.s.name)}: ` : '· '}${u.ms.map(x => `${mLabel(x.m)} ${won(x.due)}원`).join(', ')}`).join('\n');
+      const total = o.us.reduce((a, u) => a + u.total, 0), ho = !o.l || o.l === '보호자' ? '보호자님' : o.l;
+      const t = tpl.split('{이름}').join(o.us.map(u => givenName(u.s.name)).join(', ')).split('{성명}').join(o.us.map(u => u.s.name).join(', ')).split('{호칭}').join(ho)
+        .split('{내역}').join(detail).split('{미납달}').join([...new Set(o.us.flatMap(u => u.ms.map(x => mLabel(x.m))))].join('·')).split('{금액}').join(won(total))
+        .split('{계좌}').join(cfg.bank ? `입금 계좌: ${cfg.bank}` : '').replace(/\n{3,}/g, '\n\n').trim();
+      return { n: o.us.map(u => u.s.name).join(', '), p, t, ids: o.us.map(u => u.s.id) };
+    });
+    return { items, noPhone };
+  };
+  const r = modal(`<h2>✉️ 미납 안내 문자 (${list.length}명)</h2>
+    <p class="muted">문자 폰으로 보내져요. 넣을 수 있는 말: {호칭} {이름} {성명} {내역} {미납달} {금액} {계좌}</p>
+    <textarea id="usT" style="min-height:150px">${esc(cfg.tpl)}</textarea>
+    <div class="row" style="margin:6px 0"><label class="muted"><input type="checkbox" id="usAll"> 보호자 번호 모두에게</label><div class="grow"></div><button class="btn small ghost" id="usSave">이 문구 저장</button></div>
+    <h3>미리 보기 <span class="muted" id="usN"></span></h3>
+    <div id="usP" class="scroll" style="max-height:34vh;padding:8px"></div>
+    <div class="row" style="margin-top:14px"><div class="grow"></div><button class="btn ghost" id="usC">취소</button><button class="btn" id="usGo">보내기</button></div>`);
+  const draw = () => { const { items, noPhone } = build(r.querySelector('#usT').value, r.querySelector('#usAll').checked);
+    r.querySelector('#usN').textContent = `${items.length}통${noPhone.length ? ` · 번호 없음: ${noPhone.join(', ')}` : ''}`;
+    r.querySelector('#usP').innerHTML = items.map(it => `<div style="margin-bottom:10px"><div class="muted">${esc(it.n)} · ${prettyPhone(it.p)}</div><div class="cb" style="display:inline-block;background:#fee500;border-radius:4px 14px 14px 14px;padding:9px 12px;white-space:pre-wrap;max-width:90%">${esc(it.t)}</div></div>`).join(''); return items; };
+  draw(); r.querySelector('#usT').addEventListener('input', draw); r.querySelector('#usAll').onchange = draw;
+  r.querySelector('#usSave').onclick = () => setDoc(doc(db, 'config', 'tuition'), { tpl: r.querySelector('#usT').value }, { merge: true }).then(() => toast('문구를 저장했어요'));
+  r.querySelector('#usC').onclick = closeModal;
+  r.querySelector('#usGo').onclick = async () => { const items = draw(); if (!items.length) return toast('보낼 번호가 없어요');
+    if (!confirm(`${items.length}통을 보낼까요?`)) return;
+    const now = Date.now();
+    await addDoc(collection(db, 'bulk'), { title: `💰 미납 안내 ${items.length}통`, createdMs: now, lastMs: now, status: 'PENDING', items: items.map(({ n, p, t }) => ({ n, p, t })), results: {} });
+    const lg = {}; items.forEach(it => it.ids.forEach(id => lg[id] = today()));
+    await setDoc(doc(db, 'config', 'tuition'), { smsLog: lg }, { merge: true });
+    TU.sel.clear(); closeModal(); toast(`${items.length}통 보내기 시작 (문자 폰)`); };
+}
+function tuCfgModal(){
+  const c = tuCfg();
+  const r = modal(`<h2>⚙️ 수련비 설정</h2>
+    <div class="row" style="margin:8px 0"><span style="width:150px">기본 원비</span><input type="number" id="cf1" value="${c.defaultFee}" step="1000"> <span class="muted">원비가 안 적힌 원생에게 써요</span></div>
+    <div class="row" style="margin:8px 0"><span style="width:150px">결석 1일 차감</span><input type="number" id="cf2" value="${c.perDay}" step="500"> 원 <span class="muted">평일(수업일) 기준</span></div>
+    <div class="row" style="margin:8px 0"><span style="width:150px">병결 차감 한도</span><input type="number" id="cf3" value="${c.sickMax}" style="width:80px"> 일 &nbsp; 여행 <input type="number" id="cf4" value="${c.tripMax}" style="width:80px"> 일</div>
+    <div class="row" style="margin:8px 0"><span style="width:150px">입금 계좌 (문자용)</span><input type="text" id="cf5" value="${esc(c.bank)}" placeholder="예: 농협 000-0000-0000-00 (예금주)" class="grow"></div>
+    <p class="muted">결석 사유가 병결·여행인 날만 차감돼요. 출결의 [결석 · 받은 문자] 탭에서 결석을 등록할 때 종류를 고르면 되고, 전화 후 폰에서 적은 사유(감기·여행 등)도 알아서 나눠요.</p>
+    <div class="row" style="margin-top:14px"><div class="grow"></div><button class="btn ghost" id="cfC">취소</button><button class="btn" id="cfOk">저장</button></div>`);
+  r.querySelector('#cfC').onclick = closeModal;
+  r.querySelector('#cfOk').onclick = async () => { const n = (id, d) => { const v = +r.querySelector(id).value; return isNaN(v) ? d : v; };
+    await setDoc(doc(db, 'config', 'tuition'), { defaultFee: n('#cf1', c.defaultFee), perDay: n('#cf2', c.perDay), sickMax: n('#cf3', c.sickMax), tripMax: n('#cf4', c.tripMax), bank: r.querySelector('#cf5').value.trim() }, { merge: true });
+    closeModal(); toast('저장했어요'); };
+}
+
+/* ─── 가져오기: 이름으로 원생 찾기 ─── */
+function findKid(name, grade){
+  name = String(name || '').replace(/\s+/g, ''); if (!name) return null;
+  const c = S.students.filter(s => s.name.replace(/\s+/g, '') === name); if (c.length <= 1) return c[0] || null;
+  const g = String(grade || ''); const a = c.filter(s => s.status === 'ACTIVE');
+  const byG = c.filter(s => g && (gradeOf(s) === g || s.grade === g || (ageOf(g) && ageKey(s) === ageOf(g))));
+  return byG[0] || (a.length === 1 ? a[0] : null);
+}
+const METHOD_MAP = { '카': '카드', '카드': '카드', '계': '계좌', '계좌': '계좌', '이체': '계좌', '현': '현금', '현금': '현금', '카+바': '카드+바우처', '바': '카드+바우처' };
+const normMethod = t => { t = String(t || '').trim(); return METHOD_MAP[t] || t; };
+function normPayDate(v, m){
+  if (v == null || v === '') return '';
+  if (typeof v === 'number' && v > 30000 && v < 60000){ const d = new Date(Math.round((v - 25569) * 864e5)); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`; }
+  if (v instanceof Date) return dayOf(v.getTime());
+  const s = String(v).trim(); let x;
+  if ((x = s.match(/(\d{4})[.\-/년\s]+(\d{1,2})[.\-/월\s]+(\d{1,2})/))) return `${x[1]}-${pad(x[2])}-${pad(x[3])}`;
+  if ((x = s.match(/^(\d{1,2})[.\-/월\s]+(\d{1,2})/))){ let y = +m.slice(0, 4); if (+x[1] > +m.slice(5) + 1) y--; return `${y}-${pad(x[1])}-${pad(x[2])}`; }
+  return /완|납|o|ㅇ|✓|v/i.test(s) ? `${m}-01` : '';
+}
+async function tuApply(m, recs, label){
+  // recs: [{name, grade, paid, method, amount, note, fee}]
+  const hit = [], miss = [], rows = {};
+  recs.forEach(x => { const s = findKid(x.name, x.grade); if (!s){ if (x.name) miss.push(x.name); return; }
+    const cur = tuRow(m, s.id), o = {};
+    if (x.paid && !cur.paid) o.paid = x.paid;
+    if (x.method && !cur.method) o.method = x.method;
+    if (x.amount != null && x.amount !== '' && !isNaN(x.amount) && cur.amount == null) o.amount = +x.amount;
+    if (x.fee && cur.fee == null) o.fee = +x.fee;
+    if (x.note && !cur.note) o.note = String(x.note);
+    if (Object.keys(o).length){ rows[s.id] = o; hit.push(s.name); }
+  });
+  if (Object.keys(rows).length) await setDoc(doc(db, 'tuition', m), { rows }, { merge: true });
+  return { hit, miss };
+}
+function tuImportXlsx(m){
+  const f = document.createElement('input'); f.type = 'file'; f.accept = '.xlsx,.xls,.csv';
+  f.onchange = async () => { const file = f.files[0]; if (!file) return;
+    try {
+      const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: false });
+      const pickMonth = prompt(`어느 달 수련비로 넣을까요? (예: ${m})`, m); if (!pickMonth || !/^\d{4}-\d{2}$/.test(pickMonth)) return;
+      let best = null;
+      wb.SheetNames.forEach(n => { const a = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: '' });
+        for (let i = 0; i < Math.min(a.length, 15); i++){ const h = a[i].map(x => String(x).replace(/\s+/g, '')); const ni = h.findIndex(x => /^(관원명|이름|성명|원생명?|수련생)$/.test(x));
+          if (ni >= 0 && h.some(x => /납입|납부|입금|금액|결제/.test(x))){ best = best || { a, i, h, ni }; break; } } });
+      if (!best) return toast('이름·납입일(금액) 칸이 있는 표를 못 찾았어요');
+      const { a, i, h, ni } = best; const col = re => h.findIndex(x => re.test(x));
+      const ci = { grade: col(/학년|반|부$/), paid: col(/납입일|납부일|입금일|결제일|날짜/), method: col(/결제|방법|구분|수단/), amount: col(/납입액|납부액|입금액|^금액|수납/), fee: col(/원비|수련비|교육비|청구/), note: col(/비고|메모/) };
+      const recs = a.slice(i + 1).filter(r => String(r[ni]).trim()).map(r => ({ name: String(r[ni]).trim(), grade: ci.grade >= 0 ? r[ci.grade] : '',
+        paid: ci.paid >= 0 ? normPayDate(r[ci.paid], pickMonth) : '', method: ci.method >= 0 && ci.method !== ci.paid ? normMethod(r[ci.method]) : '',
+        amount: ci.amount >= 0 && r[ci.amount] !== '' ? +String(r[ci.amount]).replace(/[^\d.]/g, '') || null : null,
+        fee: ci.fee >= 0 && ci.fee !== ci.amount ? +String(r[ci.fee]).replace(/[^\d.]/g, '') || null : null, note: ci.note >= 0 ? r[ci.note] : '' }));
+      const { hit, miss } = await tuApply(pickMonth, recs);
+      TU.month = pickMonth; render();
+      alert(`${pickMonth} 가져오기 끝\n· 넣은 원생: ${hit.length}명\n· 이미 적혀 있던 칸은 그대로 뒀어요${miss.length ? `\n· 명단에서 못 찾은 이름 ${miss.length}명: ${miss.slice(0, 30).join(', ')}` : ''}`);
+    } catch(e){ console.error(e); toast('엑셀을 못 읽었어요'); }
+  };
+  f.click();
+}
+// 예전 '정도2관 수련비'(cash) 앱 자료: 같은 주소(yujongho0714.github.io)라 이 브라우저에 저장된 걸 바로 읽어요.
+async function tuImportOld(){
+  let stu = null; try { stu = JSON.parse(localStorage.getItem('tuition-students-v1') || 'null'); } catch(e){}
+  let groups = {}; try { groups = JSON.parse(localStorage.getItem('tuition-groups-v1') || '{}') || {}; } catch(e){}
+  const months = {};
+  try { for (let i = 0; i < localStorage.length; i++){ const k = localStorage.key(i); const mm = k && k.match(/^tuition-month-v1-(\d{4}-\d{2})$/); if (mm) months[mm[1]] = JSON.parse(localStorage.getItem(k) || '{}'); } } catch(e){}
+  let src = '이 브라우저에 저장된 자료';
+  if (!stu){ // 이 브라우저에서 안 썼으면 cash 앱에 들어있던 원래 엑셀 자료(9월)를 씀
+    try { const html = await (await fetch('../cash/index.html', { cache: 'no-store' })).text();
+      const mt = html.match(/SEED_STUDENTS\s*=\s*(\[[\s\S]*?\]);/); const arr = mt ? Function('return ' + mt[1])() : [];
+      const dm = (html.match(/DEFAULT_MONTH\s*=\s*['"](\d{4}-\d{2})['"]/) || [])[1] || '2026-09';
+      stu = arr.map(s => ({ id: s.id, name: s.name, grade: s.grade, baseFee: s.amount && s.amount <= 200000 ? s.amount : null, sibGroup: null })); // 형제 합산 금액은 원비로 안 씀
+      months[dm] = {}; arr.forEach(s => months[dm][s.id] = { paydate: s.paydate || '', method: s.method || '', amount: s.amount || null, note: s.note || '' });
+      src = '수련비 앱에 들어 있던 원래 엑셀 자료';
+    } catch(e){ return toast('예전 수련비 자료를 못 찾았어요'); }
+  }
+  if (!stu || !stu.length) return toast('예전 수련비 자료가 없어요');
+  const ms = Object.keys(months).sort();
+  if (!confirm(`${src}를 가져올까요?\n원생 ${stu.length}명 · ${ms.map(mLabel).join(', ') || '달 기록 없음'}\n(이미 적혀 있는 칸은 덮어쓰지 않아요)`)) return;
+  const fee = s => { let b = s.baseFee; if (b == null) return null; const g = s.sibGroup && groups[s.sibGroup]; if (g) b = g.discountType === 'percent' ? b - Math.round(b * (g.discountValue || 0) / 100) : b - (g.discountValue || 0); return Math.max(0, b); };
+  let hitAll = new Set(), missAll = new Set();
+  for (const m of ms){
+    const recs = stu.map(s => { const r = months[m][s.id] || {}; return { name: s.name, grade: s.grade, paid: r.paydate || '', method: normMethod(r.method), amount: r.amount, fee: fee(s), note: r.note || '' }; });
+    const { hit, miss } = await tuApply(m, recs); hit.forEach(x => hitAll.add(x)); miss.forEach(x => missAll.add(x));
+  }
+  // 원비가 비어 있는 원생은 예전 기본 원비로
+  const b = writeBatch(db); let nf = 0;
+  stu.forEach(s => { const k = findKid(s.name, s.grade), f = fee(s); if (k && !k.fee && f){ b.set(doc(db, 'students', k.id), { fee: f }, { merge: true }); nf++; } });
+  if (nf) await b.commit();
+  if (ms.length) TU.month = ms[ms.length - 1];
+  render();
+  alert(`가져오기 끝\n· ${ms.map(mLabel).join(', ')} 자료 · ${hitAll.size}명${nf ? `\n· 원비 채움 ${nf}명` : ''}${missAll.size ? `\n· 출결 명단에서 못 찾은 이름: ${[...missAll].join(', ')}` : ''}`);
+}
+
 function exportXlsx(rows, file, sheet){
   if (!window.XLSX){ toast('엑셀 도구를 못 불러왔어요'); return; }
   const ws = XLSX.utils.aoa_to_sheet(rows); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, sheet.slice(0, 31)); XLSX.writeFile(wb, file);
