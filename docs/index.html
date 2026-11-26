@@ -69,6 +69,10 @@ tr.click:hover{background:#f8fafc;cursor:pointer}
 .t-in{background:#dbeafe;color:var(--in)}.t-out{background:#ffedd5;color:var(--out)}
 .t-ok{background:#dcfce7;color:var(--ok)}.t-bad{background:#fee2e2;color:var(--bad)}.t-wait{background:#fef3c7;color:var(--warn)}
 .t-gray{background:#f3f4f6;color:#4b5563}
+.lfm{display:flex;gap:10px;border:1px solid var(--line);border-radius:10px;padding:8px;margin-bottom:6px}.lfm.now{border-color:#16a34a;background:#f0fdf4}
+.lfw{width:48px;flex:none;text-align:center;font-weight:900;color:var(--navy);font-size:13.5px;padding-top:6px}.lfw b{color:#16a34a;font-size:11px}
+.lft td,.lft th{padding:5px 6px}.lfc{width:34px;height:30px;border-radius:8px;border:1.5px solid var(--line);background:#fff;font-weight:900;color:#fff;font-size:16px}
+.lfc.on{background:#16a34a;border-color:#16a34a}
 .blive{display:grid;grid-template-columns:250px minmax(0,1fr) minmax(0,1.1fr);gap:14px;align-items:start}
 @media(max-width:1100px){.blive{grid-template-columns:1fr}}
 .blist{display:flex;flex-direction:column;gap:6px;max-height:75vh;overflow:auto}
@@ -235,6 +239,7 @@ tr.click:hover{background:#f8fafc;cursor:pointer}
     <button data-t="fee">💰 수련비</button>
     <button data-t="unpaid">미납자 관리</button>
     <button data-t="edu">📺 인성교육</button>
+    <button data-t="life">🌱 라이프 스킬</button>
     <button data-t="msg">문자 문구 · 오늘 안내</button>
     <button data-t="char">🧸 캐릭터 넣기</button>
   </nav>
@@ -355,7 +360,7 @@ function onAuth(user){
     unsubs.push(onSnapshot(query(collection(db, 'events'), where('day', '==', today())), snap => { S.todayEv = snap.docs.map(d => ({ id: d.id, ...d.data() })); if (BUS.drive) driveDraw(); }, () => {}));
     driveOpen(''); return;
   }
-  unsubs.push(onSnapshot(collection(db, 'students'), snap => { S.students = snap.docs.map(toStudent); rerender(['today','roster','bulk','month','absent','fee','unpaid','stats']); }, err));
+  unsubs.push(onSnapshot(collection(db, 'students'), snap => { S.students = snap.docs.map(toStudent); rerender(['today','roster','bulk','month','absent','fee','unpaid','stats','life']); }, err));
   unsubs.push(onSnapshot(query(collection(db, 'events'), where('day', '==', today())), snap => { S.todayEv = snap.docs.map(d => ({ id: d.id, ...d.data() })); rerender(['today']); }, err));
   unsubs.push(onSnapshot(collection(db, 'groups'), snap => { S.groups = snap.docs.map(d => ({ id: d.id, name: d.get('name') || '', ids: d.get('studentIds') || [] })); rerender(['bulk']); }, err));
   unsubs.push(onSnapshot(query(collection(db, 'bulk'), orderBy('createdMs', 'desc'), limit(300)), snap => { S.bulkAll = snap.docs.map(d => ({ id: d.id, ...d.data() })); S.bulk = S.bulkAll.slice(0, 15); rerender(['bulk', 'chat']); }, err));
@@ -393,7 +398,7 @@ function tabFromHash(){ const t = (location.hash || '').slice(1); const b = t &&
 addEventListener('hashchange', () => { if (tabFromHash() && !$('#app').classList.contains('hidden')) render(); });
 function rerender(tabs){ if (!tabs.includes(S.tab)) return; if (S.tab === 'chat') { drawChat(); return; } if (S.tab === 'fee' || S.tab === 'unpaid') { tuRefresh(); return; } if (!S.busyInput) render(); }
 function updChatBadge(){ const n = S.inbox.filter(x => !x.handled).length; const b = document.querySelector('#tabs [data-t=chat]'); if (b) b.innerHTML = '💬 문자' + (n ? ` <span class="cbadge">${n}</span>` : ''); }
-function render(){ const p = $('#panel'); ({ today: rToday, chat: rChat, roster: rRoster, bulk: rBulk, month: rMonth, absent: rAbsent, msg: rMsg, call: rCall, char: rChar, fee: rFee, unpaid: rUnpaid, edu: rEdu, stats: rStats, bus: rBus })[S.tab](p); }
+function render(){ const p = $('#panel'); ({ today: rToday, chat: rChat, roster: rRoster, bulk: rBulk, month: rMonth, absent: rAbsent, msg: rMsg, call: rCall, char: rChar, fee: rFee, unpaid: rUnpaid, edu: rEdu, stats: rStats, bus: rBus, life: rLife })[S.tab](p); }
 // 글 쓰는 중에는 실시간 갱신으로 화면을 다시 그리지 않음
 document.addEventListener('focusin', e => { if (e.target.matches('#panel input[type=text], #panel textarea')) S.busyInput = true; });
 document.addEventListener('focusout', () => { S.busyInput = false; });
@@ -2527,6 +2532,101 @@ function drivePos(r, p){
 }
 // 주소 끝 #drive 로 열면 바로 운행 화면
 addEventListener('hashchange', () => { if (location.hash === '#drive' && db) driveOpen(''); });
+
+
+/* ═════════════ 🌱 라이프 스킬 · 정도 인성 미션 (월별 주차 미션 · 미션지 인쇄 · 완료 체크 · 승급심사 점수) ═════════════
+   life/{YYYY-MM} = { theme, missions:[{title, desc}], points, done:{ studentId: [1,0,1,0,…] } } */
+const LF = { month: thisMonth(), docs: {}, sub: '', unsub: null, q: '', g: '' };
+function lfSub(){ if (LF.sub === LF.month) return; LF.sub = LF.month; if (LF.unsub) LF.unsub();
+  LF.unsub = onSnapshot(doc(db, 'life', LF.month), d => { LF.docs[LF.month] = d.exists() ? d.data() : {}; if (S.tab !== 'life') return; const a = document.activeElement; if (a && a.closest && a.closest('#lfMis')) return; render(); }, e => toast('라이프 스킬을 못 읽었어요: ' + (e.code || e.message))); }
+const lfWeeks = m => { const [y, mo] = m.split('-').map(Number); return new Date(y, mo, 0).getDate() > 28 ? 5 : 4; };
+const lfWeekNow = () => Math.min(5, Math.ceil(new Date().getDate() / 7));
+function rLife(p){
+  lfSub();
+  const D = LF.docs[LF.month]; const m = LF.month;
+  if (!D){ p.innerHTML = '<p class="muted">불러오는 중…</p>'; return; }
+  const W = Math.max(4, (D.missions || []).length || 4), mis = Array.from({ length: W }, (_, i) => (D.missions || [])[i] || { title: '', desc: '' }), pts = D.points ?? 5, done = D.done || {};
+  const kids = active().filter(s => (!LF.q || nameMatch(s.name, LF.q)) && (!LF.g || gradeOf(s) === LF.g)).sort(byName);
+  const grades = [...new Set(active().map(gradeOf).filter(Boolean))].sort((a, b) => gradeRank(a) - gradeRank(b));
+  const nowW = m === thisMonth() ? lfWeekNow() : 0;
+  const cnt = s => (done[s.id] || []).slice(0, W).filter(Boolean).length;
+  const allN = active().length, weekRate = i => allN ? Math.round(active().filter(s => (done[s.id] || [])[i]).length / allN * 100) : 0;
+  p.innerHTML = `
+    <div class="row" style="margin-bottom:12px"><button class="btn ghost small" id="lfPrev">◀</button><h2 style="margin:0">${m.slice(0, 4)}년 ${+m.slice(5)}월 라이프 스킬</h2><button class="btn ghost small" id="lfNext">▶</button>
+      <div class="grow"></div><button class="btn ghost" id="lfPr1">🖨 미션지 (이름 빈칸)</button><button class="btn ghost" id="lfPrN">🖨 원생별 미션지 (${active().length}장)</button><button class="btn" id="lfSms">✉️ ${nowW ? nowW + '주차' : ''} 미션 문자</button><button class="btn ghost" id="lfX">📥 엑셀</button></div>
+    <div class="grid2" style="grid-template-columns:minmax(0,1fr) minmax(0,1.35fr);align-items:start">
+      <div class="card" id="lfMis">
+        <div class="row"><b>이달의 주제</b><input type="text" id="lfTheme" value="${esc(D.theme || '')}" placeholder="예: 감사하는 마음" class="grow"></div>
+        <div class="row" style="margin:8px 0"><span class="muted">미션 1개 점수</span><input type="number" id="lfPts" value="${pts}" style="width:70px"><span class="muted">점 · 승급심사 총점에 반영</span>
+          ${W < 5 ? '<div class="grow"></div><button class="btn small ghost" id="lfAdd5">+ 5주차</button>' : ''}</div>
+        ${mis.map((x, i) => `<div class="lfm ${i + 1 === nowW ? 'now' : ''}"><div class="lfw">${i + 1}주차${i + 1 === nowW ? '<br><b>이번 주</b>' : ''}</div><div class="grow">
+          <input type="text" class="lfT" data-i="${i}" value="${esc(x.title)}" placeholder="미션 (예: 부모님께 감사 편지 쓰기)" style="width:100%">
+          <textarea class="lfD" data-i="${i}" placeholder="설명 (예: 하루 한 번 '고맙습니다' 말하고 미션지에 체크해요)" style="min-height:52px;margin-top:5px">${esc(x.desc)}</textarea></div></div>`).join('')}
+        <p class="muted" style="margin:6px 0 0">고치면 바로 저장돼요. 미션지는 A4 세로로 인쇄돼요.</p>
+      </div>
+      <div class="card">
+        <div class="row" style="margin-bottom:8px"><b>완료 체크</b><span class="muted">미션지를 받으면 눌러서 체크해요</span><div class="grow"></div>
+          <select id="lfG"><option value="">전체 학년</option>${grades.map(g => `<option ${LF.g === g ? 'selected' : ''}>${esc(g)}</option>`).join('')}</select><input type="text" id="lfQ" placeholder="이름·초성" value="${esc(LF.q)}" style="width:120px"></div>
+        <div class="scroll" style="max-height:62vh"><table class="lft"><tr><th>이름</th><th>학년</th>${mis.map((_, i) => `<th style="text-align:center">${i + 1}주<div class="muted" style="font-weight:500">${weekRate(i)}%</div><button class="btn small ghost" data-allw="${i}" style="padding:1px 6px;font-size:11px">모두✓</button></th>`).join('')}<th>완료</th><th>점수</th></tr>
+          ${kids.map(s => `<tr data-id="${s.id}"><td><b>${esc(s.name)}</b></td><td class="muted">${esc(gradeOf(s))}</td>${mis.map((_, i) => `<td style="text-align:center"><button class="lfc ${(done[s.id] || [])[i] ? 'on' : ''}" data-w="${i}">${(done[s.id] || [])[i] ? '✓' : ''}</button></td>`).join('')}<td><b>${cnt(s)}</b>/${W}</td><td><b style="color:var(--blue)">${cnt(s) * pts}</b>점</td></tr>`).join('') || `<tr><td colspan="${W + 4}" class="muted">원생이 없어요</td></tr>`}
+        </table></div>
+      </div>
+    </div>`;
+  $('#lfPrev').onclick = () => { LF.month = monthAdd(m, -1); render(); }; $('#lfNext').onclick = () => { LF.month = monthAdd(m, 1); render(); };
+  const save = patch => setDoc(doc(db, 'life', m), patch, { merge: true });
+  const readMis = () => Array.from({ length: W }, (_, i) => ({ title: (p.querySelector(`.lfT[data-i="${i}"]`) || {}).value || '', desc: (p.querySelector(`.lfD[data-i="${i}"]`) || {}).value || '' }));
+  p.querySelectorAll('.lfT, .lfD').forEach(el => el.addEventListener('change', () => save({ missions: readMis() })));
+  $('#lfTheme').addEventListener('change', e => save({ theme: e.target.value.trim() }));
+  $('#lfPts').addEventListener('change', e => save({ points: Math.max(0, +e.target.value || 0) }));
+  if ($('#lfAdd5')) $('#lfAdd5').onclick = () => save({ missions: [...readMis(), { title: '', desc: '' }] });
+  p.querySelectorAll('.lfc').forEach(b => b.onclick = () => { const id = b.closest('tr').dataset.id, i = +b.dataset.w; const arr = Array.from({ length: W }, (_, k) => (done[id] || [])[k] ? 1 : 0); arr[i] = arr[i] ? 0 : 1; save({ done: { [id]: arr } }); });
+  p.querySelectorAll('[data-allw]').forEach(b => b.onclick = () => { const i = +b.dataset.allw; if (!confirm(`지금 보이는 ${kids.length}명 모두 ${i + 1}주차 완료로 할까요?`)) return; const d = {}; kids.forEach(s => { const arr = Array.from({ length: W }, (_, k) => (done[s.id] || [])[k] ? 1 : 0); arr[i] = 1; d[s.id] = arr; }); save({ done: d }); });
+  $('#lfG').onchange = e => { LF.g = e.target.value; render(); };
+  const qi = $('#lfQ'); const qf = () => { LF.q = qi.value; render(); setTimeout(() => { const n = $('#lfQ'); if (n){ n.focus(); n.setSelectionRange(n.value.length, n.value.length); } }); };
+  qi.addEventListener('input', e => { if (!e.isComposing) qf(); }); qi.addEventListener('compositionend', qf);
+  $('#lfPr1').onclick = () => lfPrint(m, { ...D, missions: readMis() }, [null]);
+  $('#lfPrN').onclick = () => lfPrint(m, { ...D, missions: readMis() }, active().sort(byName));
+  $('#lfX').onclick = () => exportXlsx([['이름', '학년', ...mis.map((_, i) => `${i + 1}주차`), '완료', '점수'], ...active().sort(byName).map(s => [s.name, gradeOf(s), ...mis.map((_, i) => (done[s.id] || [])[i] ? 'O' : ''), cnt(s), cnt(s) * pts])], `life_skill_${m}.xlsx`, `${+m.slice(5)}월 라이프스킬`);
+  $('#lfSms').onclick = () => lfSms(m, readMis(), D.theme || '', nowW || 1);
+}
+function lfPrint(m, D, kids){
+  const W = Math.max(4, (D.missions || []).length), mis = Array.from({ length: W }, (_, i) => (D.missions || [])[i] || { title: '', desc: '' });
+  const page = s => `<section class="pg"><div class="hd"><div><div class="dj">${esc(DOJANG_SHORT)}</div><div class="tt">라이프 스킬 · 정도 인성 미션</div></div><div class="mo"><b>${+m.slice(5)}월</b><span>${m.slice(0, 4)}</span></div></div>
+    ${D.theme ? `<div class="th">이달의 주제 <b>${esc(D.theme)}</b></div>` : ''}
+    <div class="nm">이름 <span>${s ? esc(s.name) : ''}</span> <em>${s ? esc(gradeOf(s)) : ''}</em></div>
+    <table><tr><th style="width:12%">주차</th><th>이번 주 미션</th><th style="width:30%">실천한 날 ✔</th><th style="width:14%">부모님 확인</th></tr>
+      ${mis.map((x, i) => `<tr><td class="wk">${i + 1}주</td><td><b>${esc(x.title || '')}</b>${x.desc ? `<div class="ds">${esc(x.desc)}</div>` : ''}</td><td><div class="dd">${['월', '화', '수', '목', '금', '토', '일'].map(d => `<span><i></i>${d}</span>`).join('')}</div></td><td></td></tr>`).join('')}</table>
+    <div class="msg"><b>부모님 한마디</b></div>
+    <div class="ft">✔ 미션을 실천하고 체크·서명해서 도장에 가져오면, <b>정기 승급심사 총점</b>에 반영돼요 (미션 1개 ${D.points ?? 5}점)</div></section>`;
+  const f = document.createElement('iframe'); f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0'; document.body.appendChild(f);
+  const d = f.contentDocument; d.open(); d.write(`<!doctype html><html><head><meta charset="utf-8"><title>라이프 스킬 ${m}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>@page{size:A4 portrait;margin:12mm}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}body{margin:0;font-family:'Noto Sans KR',sans-serif;color:#111827}
+    .pg{page-break-after:always;break-after:page;min-height:270mm;display:flex;flex-direction:column}.pg:last-child{page-break-after:auto}
+    .hd{display:flex;justify-content:space-between;align-items:center;background:#0c1428;color:#fff;border-radius:14px;padding:14px 18px}
+    .dj{font-size:13px;color:#c9d3ee}.tt{font-size:24px;font-weight:900;margin-top:2px}.mo{text-align:center;background:#f5c518;color:#0c1428;border-radius:12px;padding:6px 14px}.mo b{display:block;font-size:26px;font-weight:900;line-height:1.1}.mo span{font-size:11px;font-weight:700}
+    .th{margin:12px 0 0;padding:10px 14px;border:2px solid #f5c518;border-radius:12px;font-size:15px}.th b{font-size:19px;margin-left:6px}
+    .nm{margin:12px 0;font-size:16px}.nm span{display:inline-block;min-width:160px;border-bottom:2px solid #111;font-weight:900;font-size:19px;padding:0 6px}.nm em{font-style:normal;color:#6b7280;margin-left:6px}
+    table{width:100%;border-collapse:collapse;font-size:14px}th{background:#eef2ff;color:#1e3a8a;font-weight:900;padding:8px;border:1.5px solid #1e3a8a}td{border:1.5px solid #1e3a8a;padding:10px 8px;vertical-align:middle;height:22mm}
+    .wk{text-align:center;font-weight:900;font-size:17px;color:#1e3a8a}.ds{color:#4b5563;font-size:12.5px;margin-top:4px;line-height:1.45}
+    .dd{display:grid;grid-template-columns:repeat(4,1fr);gap:5px 4px;font-size:12px}.dd span{display:flex;align-items:center;gap:3px}.dd i{width:13px;height:13px;border:1.5px solid #374151;border-radius:3px;display:inline-block}
+    .msg{margin-top:12px;border:1.5px dashed #9ca3af;border-radius:12px;height:30mm;padding:8px 12px;font-size:13px;color:#6b7280}
+    .ft{margin-top:auto;padding-top:10px;font-size:12.5px;color:#374151;text-align:center}</style></head><body>${kids.map(page).join('')}</body></html>`); d.close();
+  setTimeout(() => { try { f.contentWindow.focus(); f.contentWindow.print(); } catch(e){ toast('인쇄 창을 못 열었어요'); } setTimeout(() => f.remove(), 60000); }, 900);
+}
+function lfSms(m, mis, theme, w){
+  const x = mis[w - 1] || {}; if (!x.title) return toast(`${w}주차 미션을 먼저 적어 주세요`);
+  const kids = active(); const tpl0 = `[${DOJANG_SHORT}] {호칭}, ${+m.slice(5)}월 ${w}주차 라이프 스킬 미션이에요${theme ? ` (이달의 주제: ${theme})` : ''}.\n✔ ${x.title}${x.desc ? `\n${x.desc}` : ''}\n{이름} 어린이가 실천하면 미션지에 체크하고 서명해 주세요. 승급심사 점수에 반영돼요!`;
+  const r = modal(`<h2>✉️ ${w}주차 라이프 스킬 미션 문자</h2><p class="muted" style="margin-top:0">재원생 ${kids.length}명 보호자님께 (형제는 한 통으로). {호칭} {이름}을 넣을 수 있어요.</p>
+    <div class="row" style="margin-bottom:6px">${mis.map((y, i) => y.title ? `<button class="pill ${i + 1 === w ? 'on' : ''}" data-lw="${i + 1}">${i + 1}주차</button>` : '').join('')}</div>
+    <textarea id="lsT" style="min-height:150px">${esc(tpl0)}</textarea><div class="row" style="margin-top:10px"><span class="muted" id="lsN"></span><div class="grow"></div><button class="btn ghost" id="lsC">취소</button><button class="btn" id="lsG">보내기</button></div>`);
+  r.querySelectorAll('[data-lw]').forEach(b => b.onclick = () => { closeModal(); lfSms(m, mis, theme, +b.dataset.lw); });
+  const { list, noPhone } = buildItems(r.querySelector('#lsT').value, kids, false); r.querySelector('#lsN').textContent = `${list.length}통${noPhone.length ? ` · 번호 없음 ${noPhone.length}명` : ''}`;
+  r.querySelector('#lsC').onclick = closeModal;
+  r.querySelector('#lsG').onclick = async () => { const { list } = buildItems(r.querySelector('#lsT').value, kids, false); if (!list.length) return toast('보낼 번호가 없어요'); if (!confirm(`${list.length}통을 보낼까요?`)) return;
+    const now = Date.now(); await addDoc(collection(db, 'bulk'), { title: `🌱 ${+m.slice(5)}월 ${w}주차 라이프 스킬 ${list.length}통`, createdMs: now, lastMs: now, status: 'PENDING', items: list, results: {} });
+    closeModal(); toast(`${list.length}통 보내기 시작 (문자 폰)`); };
+}
 
 function exportXlsx(rows, file, sheet){
   if (!window.XLSX){ toast('엑셀 도구를 못 불러왔어요'); return; }
