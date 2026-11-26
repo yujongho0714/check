@@ -69,6 +69,38 @@ tr.click:hover{background:#f8fafc;cursor:pointer}
 .t-in{background:#dbeafe;color:var(--in)}.t-out{background:#ffedd5;color:var(--out)}
 .t-ok{background:#dcfce7;color:var(--ok)}.t-bad{background:#fee2e2;color:var(--bad)}.t-wait{background:#fef3c7;color:var(--warn)}
 .t-gray{background:#f3f4f6;color:#4b5563}
+.blive{display:grid;grid-template-columns:250px minmax(0,1fr) minmax(0,1.1fr);gap:14px;align-items:start}
+@media(max-width:1100px){.blive{grid-template-columns:1fr}}
+.blist{display:flex;flex-direction:column;gap:6px;max-height:75vh;overflow:auto}
+.broute{all:unset;cursor:pointer;border:1px solid var(--line);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:3px;font-size:14px}
+.broute.on{border-color:var(--blue);background:#eff6ff}.broute:hover{border-color:#93c5fd}
+.bmap{height:62vh;border-radius:12px;border:1px solid var(--line);overflow:hidden;background:#e5e7eb}
+.btl{position:relative;padding-left:4px}
+.bst{display:flex;gap:12px;position:relative;padding-bottom:14px}
+.bst:not(:last-child)::before{content:'';position:absolute;left:15px;top:30px;bottom:0;width:4px;background:#cbd5e1;border-radius:2px}
+.bst.done:not(:last-child)::before{background:#16a34a}
+.bdot{width:34px;height:34px;flex:none;border-radius:50%;background:#fff;border:4px solid #cbd5e1;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px;color:#64748b;z-index:1;box-sizing:border-box}
+.bst.done .bdot{background:#16a34a;border-color:#16a34a;color:#fff}.bst.next .bdot{border-color:#f59e0b;color:#b45309;box-shadow:0 0 0 5px #fef3c7}
+.bbody{flex:1;min-width:0;padding-top:4px}.bhead{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.btime{color:var(--navy);font-size:15px}.bname{font-size:15.5px}
+.bkids{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;align-items:center}
+.blab{font-size:11.5px;font-weight:900;border-radius:5px;padding:2px 6px}.blab.on{background:#dbeafe;color:#1d4ed8}.blab.off{background:#ffedd5;color:#c2410c}
+.bkid{border:1px solid var(--line);border-radius:7px;padding:3px 8px;font-size:13.5px;font-weight:700;background:#fff;display:inline-flex;gap:4px;align-items:center}
+.bkid small{color:var(--sub);font-weight:500}.bkid.abs{text-decoration:line-through;opacity:.6}
+.bkid i{font-style:normal;font-size:11px;border-radius:4px;padding:0 4px}.bkid .kb{background:#fee2e2;color:#dc2626}.bkid .kg{background:#dcfce7;color:#15803d}.bkid .kw{background:#fef3c7;color:#b45309}
+.bcar{margin:-4px 0 12px 44px;background:#ecfdf5;border:1px dashed #16a34a;border-radius:10px;padding:7px 10px;font-size:13.5px;display:flex;gap:6px;align-items:center}
+.bcar span{font-size:20px;animation:bcar 1.2s ease-in-out infinite alternate}@keyframes bcar{to{transform:translateX(6px)}}
+.bed{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:14px;align-items:start}@media(max-width:1100px){.bed{grid-template-columns:1fr}}
+.bes{display:flex;gap:10px;border:1px solid var(--line);border-radius:10px;padding:8px;margin-bottom:6px}.bes.placing{border-color:#f59e0b;background:#fffbeb}
+.besn{width:42px;flex:none;font-weight:900;color:var(--navy);text-align:center;padding-top:8px;font-size:13px}
+.bes input[type=time]{width:110px}
+#driveOv{position:fixed;inset:0;z-index:80;background:#f8fafc;overflow:auto;font-size:16px}
+.dvh{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:8px;background:var(--navy);color:#fff;padding:14px 16px;font-size:18px}
+.dvx{border:0;background:rgba(255,255,255,.15);color:#fff;border-radius:10px;width:40px;height:40px;font-size:18px}
+.dvb{padding:14px 16px 40px;max-width:640px;margin:0 auto}
+.dvr{display:block;width:100%;text-align:left;border:1px solid var(--line);background:#fff;border-radius:14px;padding:16px;margin-bottom:10px;font-size:17px}
+.dvgo,.dvend{display:block;width:100%;border:0;border-radius:16px;padding:20px;font-size:21px;font-weight:900;color:#fff;background:#16a34a;margin:6px 0}.dvend{background:#dc2626;margin-top:16px}
+.dvstat{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px;font-weight:700}
+.dvdot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#16a34a;animation:dvp 1s infinite}@keyframes dvp{50%{opacity:.25}}
 .stcards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}.stcards small{font-size:14px;font-weight:700;margin-left:2px}
 .stbars{display:flex;gap:6px;align-items:flex-end;height:170px;overflow-x:auto;padding-top:4px}
 .stbar{all:unset;cursor:pointer;flex:1;min-width:44px;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px}
@@ -199,6 +231,7 @@ tr.click:hover{background:#f8fafc;cursor:pointer}
     <button data-t="month">월간 출석부</button>
     <button data-t="absent">결석 · 받은 문자</button>
     <button data-t="call">📞 전화 대상</button>
+    <button data-t="bus">🚐 차량·도보</button>
     <button data-t="fee">💰 수련비</button>
     <button data-t="unpaid">미납자 관리</button>
     <button data-t="edu">📺 인성교육</button>
@@ -298,6 +331,11 @@ $('#pwIn').addEventListener('keydown', e => { if (e.key === 'Enter') $('#loginBt
 $('#logoutBtn').onclick = () => signOut(auth);
 $('#qsmsBtn').onclick = () => document.querySelector('#tabs [data-t=chat]').click();
 
+// 기사님 링크: ?c=JD1-…(연결 코드)&e=이메일 → 코드 저장하고 이메일 미리 채우기
+{ const q = new URLSearchParams(location.search); const c = q.get('c'), em = q.get('e');
+  if (c && parseCode(c)){ lsSet('jdpc_cfg', JSON.stringify(parseCode(c))); }
+  if (em) setTimeout(() => { if ($('#emailIn')) $('#emailIn').value = em; }, 0);
+  if (c || em) history.replaceState(null, '', location.pathname + location.hash); }
 const saved = lsGet('jdpc_cfg');
 if (saved){ try { connect(JSON.parse(saved)); onAuthStateChanged(auth, onAuth); } catch(e){ showLogin(); } } else showLogin();
 
@@ -310,6 +348,13 @@ function onAuth(user){
   $('#login').classList.add('hidden'); $('#app').classList.remove('hidden');
   $('#who').textContent = user.email || '';
   const err = e => { console.error(e); toast('데이터를 못 읽었어요: ' + (e.code || e.message)); };
+  // 기사님·차량 선생님 전용 계정(…@jungdo.driver): 운행 화면만 열기
+  if (/@jungdo\.driver$/i.test(user.email || '')){
+    S.driverOnly = true; $('#app').classList.add('hidden');
+    unsubs.push(onSnapshot(collection(db, 'students'), snap => { S.students = snap.docs.map(toStudent); if (BUS.drive) driveDraw(); }, () => {}));
+    unsubs.push(onSnapshot(query(collection(db, 'events'), where('day', '==', today())), snap => { S.todayEv = snap.docs.map(d => ({ id: d.id, ...d.data() })); if (BUS.drive) driveDraw(); }, () => {}));
+    driveOpen(''); return;
+  }
   unsubs.push(onSnapshot(collection(db, 'students'), snap => { S.students = snap.docs.map(toStudent); rerender(['today','roster','bulk','month','absent','fee','unpaid','stats']); }, err));
   unsubs.push(onSnapshot(query(collection(db, 'events'), where('day', '==', today())), snap => { S.todayEv = snap.docs.map(d => ({ id: d.id, ...d.data() })); rerender(['today']); }, err));
   unsubs.push(onSnapshot(collection(db, 'groups'), snap => { S.groups = snap.docs.map(d => ({ id: d.id, name: d.get('name') || '', ids: d.get('studentIds') || [] })); rerender(['bulk']); }, err));
@@ -319,6 +364,7 @@ function onAuth(user){
   ['server', 'kiosk'].forEach(w => unsubs.push(onSnapshot(doc(db, 'status', w), d => { S.dev[w] = d.exists() ? d.data() : null; renderDev(); }, () => {})));
   const t = setInterval(renderDev, 30000); unsubs.push(() => clearInterval(t));
   tabFromHash(); render();
+  if (location.hash === '#drive') driveOpen('');
 }
 function toStudent(d){
   const x = d.data();
@@ -347,7 +393,7 @@ function tabFromHash(){ const t = (location.hash || '').slice(1); const b = t &&
 addEventListener('hashchange', () => { if (tabFromHash() && !$('#app').classList.contains('hidden')) render(); });
 function rerender(tabs){ if (!tabs.includes(S.tab)) return; if (S.tab === 'chat') { drawChat(); return; } if (S.tab === 'fee' || S.tab === 'unpaid') { tuRefresh(); return; } if (!S.busyInput) render(); }
 function updChatBadge(){ const n = S.inbox.filter(x => !x.handled).length; const b = document.querySelector('#tabs [data-t=chat]'); if (b) b.innerHTML = '💬 문자' + (n ? ` <span class="cbadge">${n}</span>` : ''); }
-function render(){ const p = $('#panel'); ({ today: rToday, chat: rChat, roster: rRoster, bulk: rBulk, month: rMonth, absent: rAbsent, msg: rMsg, call: rCall, char: rChar, fee: rFee, unpaid: rUnpaid, edu: rEdu, stats: rStats })[S.tab](p); }
+function render(){ const p = $('#panel'); ({ today: rToday, chat: rChat, roster: rRoster, bulk: rBulk, month: rMonth, absent: rAbsent, msg: rMsg, call: rCall, char: rChar, fee: rFee, unpaid: rUnpaid, edu: rEdu, stats: rStats, bus: rBus })[S.tab](p); }
 // 글 쓰는 중에는 실시간 갱신으로 화면을 다시 그리지 않음
 document.addEventListener('focusin', e => { if (e.target.matches('#panel input[type=text], #panel textarea')) S.busyInput = true; });
 document.addEventListener('focusout', () => { S.busyInput = false; });
@@ -2059,6 +2105,421 @@ function rStats(p){
     XLSX.writeFile(wb, `students_status_${today().replace(/-/g, '')}.xlsx`);
   };
 }
+
+
+/* ═════════════ 🚐 차량 · 🚶 도보 픽업 (똑타버스처럼 노선도 + 실시간 위치 + 정류장 도착 자동 기록) ═════════════
+   routes/{id} = { name, type:'car'|'walk', dir:'in'|'out', car, days:[1..6], radius, stops:[{ id, name, time, lat, lng, on:[studentId], off:[studentId] }] }
+   runs/{day}_{routeId} = { day, routeId, name, status:'live'|'done', startedAt, endedAt, live:{lat,lng,acc,at}, track:[{t,lat,lng}], arrivals:{stopId:ms}, departs:{stopId:ms} }
+   config/bus = { home:{lat,lng}, radius, naverId } */
+const BUS = { on: false, routes: [], runs: {}, abs: new Set(), cfg: {}, view: 'live', sel: '', edit: null, map: null, placing: -1, drive: null, mapsReady: null };
+const BUS_HOME = { lat: 37.0043, lng: 127.2630 };   // 도장 위치 기본값 (설정에서 바꿔요)
+const busHome = () => (BUS.cfg.home && BUS.cfg.home.lat) ? BUS.cfg.home : BUS_HOME;
+const busRadius = r => +(r && r.radius) || +BUS.cfg.radius || 80;
+const DAYS_KO = ['일', '월', '화', '수', '목', '금', '토'];
+const busId = () => Math.random().toString(36).slice(2, 9);
+const hmNow = () => { const d = new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const hmOf = ms => { const d = new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const minOf = hm => { const m = String(hm || '').match(/^(\d{1,2}):(\d{2})$/); return m ? +m[1] * 60 + +m[2] : 9999; };
+function geoDist(a, b){ if (!a || !b || a.lat == null || b.lat == null) return Infinity; const R = 6371000, t = x => x * Math.PI / 180;
+  const dLa = t(b.lat - a.lat), dLo = t(b.lng - a.lng), h = Math.sin(dLa / 2) ** 2 + Math.cos(t(a.lat)) * Math.cos(t(b.lat)) * Math.sin(dLo / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); }
+const busDow = () => new Date().getDay();
+const stTime = (s, d) => (s && s.times && s.times[d == null ? busDow() : d]) || (s && s.time) || '';
+const busStart0 = (r, d) => (r.stops && r.stops[0] && stTime(r.stops[0], d)) || '';
+// 오늘 이 노선에 실제로 타는 아이: 재원생만(휴원·퇴관 빼기) + 아이별 탑승 요일
+const busKids = (r, ids, d) => (ids || []).filter(id => { const s = S.students.find(x => x.id === id); if (!s || s.status !== 'ACTIVE') return false; const kd = r.kidDays && r.kidDays[id]; return !kd || !kd.length || kd.includes(d == null ? busDow() : d); });
+const busSort = (a, b) => minOf(busStart0(a)) - minOf(busStart0(b)) || String(a.name).localeCompare(String(b.name), 'ko');
+const busToday = () => { const w = new Date().getDay(); return BUS.routes.filter(r => !r.days || !r.days.length || r.days.includes(w)); };
+const kidName = id => { const s = S.students.find(x => x.id === id); return s ? s.name : '(지운 원생)'; };
+// 부모님 링크용 공개 사본 (아이 이름·번호는 안 올라가요: 정류장 이름·시간·차 위치만)
+const PUB_BUS = 'https://taekwondo-wordgame-default-rtdb.asia-southeast1.firebasedatabase.app/apps/pub_bus/data/';
+const PUB_PAGE = 'https://yujongho0714.github.io/check/bus.html';
+const pubNewKey = () => Array.from(crypto.getRandomValues(new Uint8Array(15)), b => 'abcdefghijkmnpqrstuvwxyz23456789'[b % 32]).join('');
+const pubRoute = r => ({ name: r.name || '', type: r.type || 'car', dir: r.dir || 'in', car: (r.car || '').split(' ')[0], stops: (r.stops || []).map(x => ({ name: x.name || '', time: stTime(x), lat: x.lat ?? null, lng: x.lng ?? null })), naverId: BUS.cfg.naverId || '', dojo: DOJANG_SHORT, at: Date.now() });
+async function pubSend(key, path, data, method){ if (!key) return; try { await fetch(`${PUB_BUS}r_${key}/${path}.json`, { method: method || 'PUT', body: JSON.stringify(data) }); } catch(e){} }
+async function pubEnsure(r){ if (r.pubKey) return r.pubKey; const k = pubNewKey(); r.pubKey = k; await setDoc(doc(db, 'routes', r.id), { pubKey: k }, { merge: true }); await pubSend(k, 'route', pubRoute(r)); return k; }
+const pubLink = (r, stopIdx) => `${PUB_PAGE}?k=${r.pubKey}${stopIdx != null && stopIdx >= 0 ? '&s=' + stopIdx : ''}`;
+const busKind = r => r.type === 'walk' ? ['🚶 도보', 't-ok'] : ['🚐 차량', 't-in'];
+const busDir = r => r.dir === 'out' ? '하원' : '등원';
+
+function busStart(){
+  if (BUS.on) return; BUS.on = true;
+  onSnapshot(collection(db, 'routes'), s => { BUS.routes = s.docs.map(d => ({ id: d.id, ...d.data() })).sort(busSort); busRefresh(); }, e => toast('노선을 못 읽었어요: ' + (e.code || e.message)));
+  onSnapshot(query(collection(db, 'runs'), where('day', '==', today())), s => { BUS.runs = {}; s.docs.forEach(d => BUS.runs[d.get('routeId')] = { id: d.id, ...d.data() }); busRefresh(true); }, () => {});
+  onSnapshot(query(collection(db, 'absences'), where('day', '==', today())), s => { BUS.abs = new Set(s.docs.map(d => d.get('studentId'))); busRefresh(); }, () => {});
+  onSnapshot(doc(db, 'config', 'bus'), d => { BUS.cfg = d.exists() ? d.data() : {}; busRefresh(); }, () => {});
+}
+function busRefresh(liveOnly){
+  if (BUS.drive) driveDraw();
+  if (S.tab !== 'bus') return;
+  if (BUS.view === 'live'){ busLiveDraw(); return; }
+  if (BUS.view === 'routes' && !BUS.edit && !liveOnly) render();
+}
+
+/* ── 지도: 네이버 지도 키가 있으면 네이버, 없으면 오픈스트리트맵(임시) ── */
+function loadScript(src){ return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); }); }
+function loadCss(href){ if (document.querySelector(`link[href="${href}"]`)) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = href; document.head.appendChild(l); }
+function mapsLoad(){
+  const id = (BUS.cfg.naverId || '').trim();
+  if (BUS.mapsReady && BUS.mapsReady.id === id) return BUS.mapsReady.p;
+  const p = (async () => {
+    if (id && !window.__naverFail){
+      try {
+        window.navermap_authFailure = () => { window.__naverFail = true; toast('네이버 지도 키 인증이 안 돼요 — 임시 지도로 보여요 (키·사이트 주소 등록 확인)'); BUS.mapsReady = null; if (S.tab === 'bus') render(); };
+        if (!window.naver || !window.naver.maps) await loadScript(`https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${encodeURIComponent(id)}`);
+        if (window.naver && window.naver.maps) return 'naver';
+      } catch(e){}
+    }
+    loadCss('https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css');
+    if (!window.L) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js');
+    return 'leaflet';
+  })();
+  BUS.mapsReady = { id, p }; return p;
+}
+const pinHtml = (label, color, big) => `<div style="width:${big ? 34 : 26}px;height:${big ? 34 : 26}px;border-radius:50%;background:${color};color:#fff;font:800 ${big ? 16 : 12.5}px 'Noto Sans KR',sans-serif;display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35)">${label}</div>`;
+async function mapMake(el){
+  const kind = await mapsLoad(), h = busHome();
+  if (!el.isConnected) return null;
+  const M = { kind, marks: [], car: null, line: null, track: null };
+  if (kind === 'naver'){
+    const N = naver.maps, ll = (a, b) => new N.LatLng(a, b);
+    M.map = new N.Map(el, { center: ll(h.lat, h.lng), zoom: 15 });
+    const pin = (p, html, drag) => new N.Marker({ position: ll(p.lat, p.lng), map: M.map, draggable: !!drag, icon: { content: html, anchor: new N.Point(15, 15) } });
+    M.setStops = (stops, onDrag) => { M.marks.forEach(m => m.setMap(null)); M.marks = []; if (M.line) M.line.setMap(null);
+      const pts = stops.filter(s => s.lat != null); stops.forEach((s, i) => { if (s.lat == null) return; const m = pin(s, pinHtml(i + 1, s.color || '#1e3a8a'), !!onDrag); if (onDrag) N.Event.addListener(m, 'dragend', e => onDrag(i, e.coord.lat(), e.coord.lng())); M.marks.push(m); });
+      if (pts.length > 1) M.line = new N.Polyline({ map: M.map, path: pts.map(s => ll(s.lat, s.lng)), strokeColor: '#1e3a8a', strokeWeight: 4, strokeOpacity: .55, strokeStyle: 'shortdash' }); };
+    M.setCar = (p, icon) => { if (!p){ if (M.car) M.car.setMap(null); M.car = null; return; } if (!M.car) M.car = pin(p, pinHtml(icon || '🚐', '#16a34a', true)); else M.car.setPosition(ll(p.lat, p.lng)); };
+    M.setTrack = pts => { if (M.track) M.track.setMap(null); M.track = pts && pts.length > 1 ? new N.Polyline({ map: M.map, path: pts.map(p => ll(p.lat, p.lng)), strokeColor: '#16a34a', strokeWeight: 5, strokeOpacity: .8 }) : null; };
+    M.fit = pts => { pts = pts.filter(p => p && p.lat != null); if (!pts.length) return; if (pts.length === 1){ M.map.setCenter(ll(pts[0].lat, pts[0].lng)); return; }
+      const b = new N.LatLngBounds(ll(pts[0].lat, pts[0].lng), ll(pts[0].lat, pts[0].lng)); pts.forEach(p => b.extend(ll(p.lat, p.lng))); M.map.fitBounds(b, { top: 40, right: 40, bottom: 40, left: 40 }); };
+    M.onClick = cb => N.Event.addListener(M.map, 'click', e => cb(e.coord.lat(), e.coord.lng()));
+    M.pan = p => M.map.panTo(ll(p.lat, p.lng));
+  } else {
+    M.map = L.map(el, { zoomControl: true }).setView([h.lat, h.lng], 15);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(M.map);
+    const icon = html => L.divIcon({ html, className: '', iconSize: [30, 30], iconAnchor: [15, 15] });
+    M.setStops = (stops, onDrag) => { M.marks.forEach(m => m.remove()); M.marks = []; if (M.line) M.line.remove();
+      const pts = stops.filter(s => s.lat != null); stops.forEach((s, i) => { if (s.lat == null) return; const m = L.marker([s.lat, s.lng], { icon: icon(pinHtml(i + 1, s.color || '#1e3a8a')), draggable: !!onDrag }).addTo(M.map).bindTooltip(`${i + 1}. ${s.name || ''} ${s.time || ''}`); if (onDrag) m.on('dragend', () => { const q = m.getLatLng(); onDrag(i, q.lat, q.lng); }); M.marks.push(m); });
+      M.line = pts.length > 1 ? L.polyline(pts.map(s => [s.lat, s.lng]), { color: '#1e3a8a', weight: 4, opacity: .5, dashArray: '8 8' }).addTo(M.map) : null; };
+    M.setCar = (p, ic) => { if (!p){ if (M.car) M.car.remove(); M.car = null; return; } if (!M.car) M.car = L.marker([p.lat, p.lng], { icon: L.divIcon({ html: pinHtml(ic || '🚐', '#16a34a', true), className: '', iconSize: [38, 38], iconAnchor: [19, 19] }), zIndexOffset: 1000 }).addTo(M.map); else M.car.setLatLng([p.lat, p.lng]); };
+    M.setTrack = pts => { if (M.track) M.track.remove(); M.track = pts && pts.length > 1 ? L.polyline(pts.map(p => [p.lat, p.lng]), { color: '#16a34a', weight: 5, opacity: .8 }).addTo(M.map) : null; };
+    M.fit = pts => { pts = pts.filter(p => p && p.lat != null); if (!pts.length) return; if (pts.length === 1) M.map.setView([pts[0].lat, pts[0].lng], 16); else M.map.fitBounds(pts.map(p => [p.lat, p.lng]), { padding: [40, 40] }); };
+    M.onClick = cb => M.map.on('click', e => cb(e.latlng.lat, e.latlng.lng));
+    M.pan = p => M.map.panTo([p.lat, p.lng]);
+    setTimeout(() => M.map.invalidateSize(), 200);
+  }
+  return M;
+}
+
+/* ── 정류장 진행 상황 (어디까지 왔나) ── */
+function busProgress(r, run){
+  const st = r.stops || [], arr = (run && run.arrivals) || {}, dep = (run && run.departs) || {};
+  let last = -1; st.forEach((s, i) => { if (arr[s.id]) last = i; });
+  const next = run && run.status === 'live' ? Math.min(last + 1, st.length - 1) : -1;
+  const live = run && run.live, fresh = live && Date.now() - live.at < 90000;
+  let distNext = null; if (live && next >= 0 && st[next] && st[next].lat != null) distNext = geoDist(live, st[next]);
+  return { arr, dep, last, next: last + 1 < st.length ? next : -1, live, fresh, distNext };
+}
+function kidChip(id, r, extra){
+  const s = S.students.find(x => x.id === id); const absent = BUS.abs.has(id);
+  const ins = S.todayEv.some(e => e.studentId === id && e.type === 'IN'), outs = S.todayEv.some(e => e.studentId === id && e.type === 'OUT');
+  const tag = absent ? '<i class="kb">결석</i>' : r.dir === 'out' ? (outs ? '<i class="kg">하원함</i>' : ins ? '' : '<i class="kw">등원 안 함</i>') : (ins ? '<i class="kg">등원함</i>' : '');
+  return `<span class="bkid ${absent ? 'abs' : ''}">${esc(s ? s.name : '(지운 원생)')}${s && extra ? ` <small>${esc(gradeOf(s))}</small>` : ''}${tag}</span>`;
+}
+function busTimelineHtml(r, run, forDriver){
+  const st = r.stops || [], P = busProgress(r, run);
+  if (!st.length) return '<p class="muted">정류장이 없어요. [노선 관리]에서 정류장을 넣어 주세요.</p>';
+  return `<div class="btl">${st.map((s, i) => {
+    const a = P.arr[s.id], done = !!a, isNext = i === P.next;
+    const tm = stTime(s), on = busKids(r, s.on), off = busKids(r, s.off);
+    const late = a && tm ? Math.round((minOf(hmOf(a)) - minOf(tm))) : null;
+    const carHere = run && run.status === 'live' && i === P.last + 1 && P.last >= 0;
+    return `${carHere ? `<div class="bcar"><span>${r.type === 'walk' ? '🚶' : '🚐'}</span><b>${P.fresh ? '지금 이동 중' : '위치 신호 끊김'}</b>${P.distNext != null && isFinite(P.distNext) ? ` · 다음 정류장까지 ${P.distNext < 1000 ? Math.round(P.distNext) + 'm' : (P.distNext / 1000).toFixed(1) + 'km'} (약 ${Math.max(1, Math.round(P.distNext / (r.type === 'walk' ? 70 : 350)))}분)` : ''}</div>` : ''}
+    <div class="bst ${done ? 'done' : ''} ${isNext ? 'next' : ''}">
+      <div class="bdot">${done ? '✓' : i + 1}</div>
+      <div class="bbody">
+        <div class="bhead"><b class="btime">${esc(tm || '--:--')}</b><b class="bname">${esc(s.name || '정류장')}</b>${s.lat == null ? '<span class="tag t-wait">위치 없음</span>' : ''}
+          ${a ? `<span class="tag ${late > 3 ? 't-wait' : 't-ok'}">${hmOf(a)} 도착${late != null ? (late > 0 ? ` +${late}분` : late < 0 ? ` ${late}분` : ' 정시') : ''}</span>` : isNext ? '<span class="tag t-in">다음 정류장</span>' : ''}
+          ${P.dep[s.id] ? `<span class="muted">${hmOf(P.dep[s.id])} 출발</span>` : ''}</div>
+        ${on.length ? `<div class="bkids"><span class="blab on">타요 ${on.filter(id => !BUS.abs.has(id)).length}</span>${on.map(id => kidChip(id, r, forDriver)).join('')}</div>` : ''}
+        ${off.length ? `<div class="bkids"><span class="blab off">내려요 ${off.filter(id => !BUS.abs.has(id)).length}</span>${off.map(id => kidChip(id, r, forDriver)).join('')}</div>` : ''}
+        ${forDriver && isNext && run && run.status === 'live' ? `<button class="btn" data-arrive="${s.id}" style="margin-top:8px;background:#16a34a">✓ ${esc(s.name || '정류장')} 도착</button>` : ''}
+      </div></div>`; }).join('')}</div>`;
+}
+
+/* ── 탭 화면 ── */
+function rBus(p){
+  busStart();
+  const V = [['live', '🟢 오늘 운행'], ['routes', '🗺 노선 관리']];
+  p.innerHTML = `<div class="row" style="margin-bottom:12px">${V.map(([k, t]) => `<button class="pill ${BUS.view === k ? 'on' : ''}" data-bv="${k}">${t}</button>`).join('')}
+      <div class="grow"></div><button class="btn" id="bDrive" style="background:#16a34a">📱 운행 화면 (기사님·선생님 폰)</button><button class="btn ghost" id="bCfg">⚙️ 설정</button></div>
+    <div id="busBody"></div>`;
+  p.querySelectorAll('[data-bv]').forEach(b => b.onclick = () => { BUS.view = b.dataset.bv; BUS.edit = null; BUS.map = null; render(); });
+  $('#bDrive').onclick = () => driveOpen(BUS.sel); $('#bCfg').onclick = busCfgModal;
+  if (BUS.edit) busEditor($('#busBody')); else if (BUS.view === 'routes') busRoutes($('#busBody')); else busLive($('#busBody'));
+}
+function busLive(el){
+  el.innerHTML = `<div class="blive"><div class="blist" id="bList"></div><div class="bmid"><div id="bTl"></div></div><div class="bmapw"><div id="bMap" class="bmap"></div><div class="muted" id="bMapInfo" style="margin-top:6px"></div></div></div>`;
+  BUS.map = null; busLiveDraw();
+}
+async function busLiveDraw(){
+  const list = $('#bList'); if (!list) return;
+  const rs = busToday(); if (!BUS.sel || !BUS.routes.some(r => r.id === BUS.sel)){ const now = minOf(hmNow()); const live = rs.find(r => BUS.runs[r.id] && BUS.runs[r.id].status === 'live'); BUS.sel = (live || rs.find(r => minOf(busStart0(r)) >= now - 30) || rs[0] || {}).id || ''; }
+  list.innerHTML = `<div class="muted" style="margin-bottom:6px">${today().slice(5).replace('-', '/')} (${DAYS_KO[new Date().getDay()]}) 운행 ${rs.length}개</div>` + (rs.map(r => { const run = BUS.runs[r.id], k = busKind(r);
+    const stt = !run ? ['운행 전', 't-gray'] : run.status === 'live' ? ['운행 중', 't-ok'] : ['운행 끝', 't-in'];
+    return `<button class="broute ${BUS.sel === r.id ? 'on' : ''}" data-r="${r.id}"><div><b>${esc(busStart0(r) || '--:--')}</b> ${esc(r.name || '노선')}</div><div class="muted"><span class="tag ${k[1]}">${k[0]}</span> ${busDir(r)} · 정류장 ${(r.stops || []).length} · <span class="tag ${stt[1]}">${stt[0]}</span></div></button>`; }).join('') || '<p class="muted">오늘 운행할 노선이 없어요.<br>[🗺 노선 관리]에서 만들어 주세요.</p>');
+  list.querySelectorAll('[data-r]').forEach(b => b.onclick = () => { BUS.sel = b.dataset.r; BUS.fitted = ''; busLiveDraw(); });
+  const r = BUS.routes.find(x => x.id === BUS.sel), tl = $('#bTl');
+  if (!r){ tl.innerHTML = ''; return; }
+  const run = BUS.runs[r.id], kids = new Set((r.stops || []).flatMap(s => [...busKids(r, s.on), ...busKids(r, s.off)]));
+  tl.innerHTML = `<div class="row" style="margin-bottom:8px"><h2 style="margin:0">${esc(r.name || '노선')}</h2><span class="tag ${busKind(r)[1]}">${busKind(r)[0]}</span><span class="muted">${busDir(r)} · ${esc(r.car || '')}</span></div>
+    <div class="row" style="margin-bottom:10px">${run ? `<span class="muted">${run.startedAt ? hmOf(run.startedAt) + ' 출발' : ''}${run.endedAt ? ' · ' + hmOf(run.endedAt) + ' 운행 끝' : ''}${run.live && run.status === 'live' ? ` · 위치 ${Math.round((Date.now() - run.live.at) / 1000)}초 전` : ''}</span>` : '<span class="muted">아직 출발 안 했어요</span>'}
+      <div class="grow"></div><button class="btn small ghost" id="bLink">👨‍👩‍👧 부모님 위치 링크</button><button class="btn small ghost" id="bSms">✉️ 이 노선 부모님께 문자 (${kids.size}명)</button><button class="btn small ghost" id="bX">📥 엑셀</button><button class="btn small ghost" id="bEd">✏️ 고치기</button></div>
+    ${busTimelineHtml(r, run, false)}`;
+  $('#bLink').onclick = async () => { await pubEnsure(r); const url = pubLink(r);
+    const m = modal(`<h2>👨‍👩‍👧 부모님 차량 위치 링크</h2><p class="muted" style="margin-top:0">이 링크를 열면 부모님 폰에서 차 위치·정류장 도착 시간이 보여요 (아이 이름은 안 보여요). 문자 보내기에서 {링크}를 쓰면 아이별 정류장이 들어간 링크가 가요.</p>
+      <input type="text" value="${esc(url)}" readonly style="width:100%" onclick="this.select()"><div class="row" style="margin-top:10px"><a class="btn ghost" href="${esc(url)}" target="_blank" rel="noopener">열어 보기</a><div class="grow"></div><button class="btn" id="blC">복사</button><button class="btn ghost" id="blX">닫기</button></div>`);
+    m.querySelector('#blC').onclick = () => { navigator.clipboard.writeText(url).then(() => toast('복사했어요')); }; m.querySelector('#blX').onclick = closeModal; };
+  $('#bSms').onclick = () => busSms(r); $('#bX').onclick = () => busExcel([r]); $('#bEd').onclick = () => busEditOpen(r);
+  // 지도
+  const mapEl = $('#bMap'); if (!mapEl) return;
+  if (!BUS.map || BUS.map.el !== mapEl){ const M = await mapMake(mapEl); if (!M || !mapEl.isConnected) return; BUS.map = M; M.el = mapEl; M.host = 'live'; BUS.fitted = ''; }
+  const M = BUS.map, P = busProgress(r, run);
+  M.setStops((r.stops || []).map((s, i) => ({ ...s, color: P.arr[s.id] ? '#16a34a' : i === P.next ? '#f59e0b' : '#1e3a8a' })));
+  M.setTrack(run && run.track); M.setCar(run && run.live && run.status === 'live' ? run.live : null, r.type === 'walk' ? '🚶' : '🚐');
+  if (BUS.fitted !== r.id){ BUS.fitted = r.id; M.fit([...(r.stops || []), run && run.live]); }
+  $('#bMapInfo').textContent = M.kind === 'naver' ? '네이버 지도' : '임시 지도(오픈스트리트맵) — ⚙️ 설정에 네이버 지도 키를 넣으면 네이버 지도로 바뀌어요';
+}
+function busRoutes(el){
+  const rs = BUS.routes;
+  el.innerHTML = `<div class="row" style="margin-bottom:10px"><b>노선 ${rs.length}개</b><span class="muted">시간 순 · 누르면 고칠 수 있어요</span><div class="grow"></div>
+      <button class="btn ghost" id="bXall">📥 전체 노선 엑셀</button><button class="btn" id="bNew">+ 새 노선</button></div>
+    <div class="scroll"><table><tr><th>출발</th><th>노선 이름</th><th>종류</th><th>등·하원</th><th>요일</th><th>차량·담당</th><th>정류장</th><th>아이</th></tr>
+    ${rs.map(r => { const k = busKind(r); const kids = new Set((r.stops || []).flatMap(s => [...(s.on || []), ...(s.off || [])]).filter(id => { const x = S.students.find(y => y.id === id); return x && x.status === 'ACTIVE'; })); return `<tr class="click" data-r="${r.id}"><td><b>${esc(busStart0(r) || '-')}</b></td><td><b>${esc(r.name || '')}</b></td><td><span class="tag ${k[1]}">${k[0]}</span></td><td>${busDir(r)}</td><td>${(r.days && r.days.length ? r.days : [1, 2, 3, 4, 5]).map(d => DAYS_KO[d]).join('')}</td><td>${esc(r.car || '')}</td><td>${(r.stops || []).map(s => esc(s.name || '?')).join(' → ')}</td><td>${kids.size}명</td></tr>`; }).join('') || '<tr><td colspan="8" class="muted" style="padding:24px;text-align:center">아직 노선이 없어요. [+ 새 노선]을 눌러 출발지 → 경유지 → 도착지 순서로 만들어 보세요.</td></tr>'}</table></div>`;
+  $('#bNew').onclick = () => busEditOpen(null); $('#bXall').onclick = () => busExcel(rs);
+  el.querySelectorAll('[data-r]').forEach(tr => tr.onclick = () => busEditOpen(BUS.routes.find(r => r.id === tr.dataset.r)));
+}
+
+/* ── 노선 만들기 · 고치기 ── */
+function busEditOpen(r){
+  const h = busHome();
+  BUS.edit = r ? JSON.parse(JSON.stringify(r)) : { id: '', name: '', type: 'car', dir: 'in', car: '1호차', days: [1, 2, 3, 4, 5], radius: '', stops: [
+    { id: busId(), name: '출발', time: '', lat: null, lng: null, on: [], off: [] }, { id: busId(), name: '도장', time: '', lat: h.lat, lng: h.lng, on: [], off: [] }] };
+  BUS.placing = -1; BUS.map = null; BUS.view = 'routes'; render();
+}
+function busEditor(el){
+  const E = BUS.edit;
+  el.innerHTML = `<div class="bed"><div class="bedl">
+    <div class="row" style="margin-bottom:10px"><button class="btn small ghost" id="beBack">← 목록</button><h2 style="margin:0">${E.id ? '노선 고치기' : '새 노선'}</h2></div>
+    <div class="card" style="margin-bottom:10px">
+      <div class="row"><input type="text" id="beName" value="${esc(E.name)}" placeholder="노선 이름 (예: 2부 등원 1호차)" class="grow">
+        <select id="beType"><option value="car" ${E.type !== 'walk' ? 'selected' : ''}>🚐 차량</option><option value="walk" ${E.type === 'walk' ? 'selected' : ''}>🚶 도보 픽업</option></select>
+        <select id="beDir"><option value="in" ${E.dir !== 'out' ? 'selected' : ''}>등원 (태우러 가기)</option><option value="out" ${E.dir === 'out' ? 'selected' : ''}>하원 (데려다주기)</option></select></div>
+      <div class="row" style="margin-top:8px"><input type="text" id="beCar" value="${esc(E.car || '')}" placeholder="차량·담당 (예: 1호차 김기사님)" style="width:220px">
+        <span class="muted">요일</span>${[1, 2, 3, 4, 5, 6].map(d => `<button class="pill ${(E.days || []).includes(d) ? 'on' : ''}" data-day="${d}">${DAYS_KO[d]}</button>`).join('')}
+        <span class="muted">도착 인정 거리</span><input type="number" id="beRad" value="${esc(E.radius || '')}" placeholder="${busRadius({})}" style="width:80px"><span class="muted">m</span></div>
+    </div>
+    <div class="row" style="margin-bottom:8px"><b>시간</b>${[['', '기본'], ...(E.days && E.days.length ? E.days : [1, 2, 3, 4, 5]).map(d => [String(d), DAYS_KO[d] + '요일'])].map(([k, t]) => `<button class="pill ${String(BUS.edDay || '') === k ? 'on' : ''}" data-eday="${k}">${t}${k && E.stops.some(x => x.times && x.times[k]) ? ' •' : ''}</button>`).join('')}
+      <span class="muted">${BUS.edDay ? `${DAYS_KO[+BUS.edDay]}요일만 다른 시간을 넣어요 (비우면 기본 시간)` : '요일마다 시간이 다르면 요일을 눌러 그 요일 시간만 바꾸세요'}</span></div>
+    <div class="muted" style="margin-bottom:6px">출발지 → 경유지 → 마지막 도착지 순서예요. 📍를 누른 뒤 오른쪽 지도를 누르면 그 정류장 위치가 정해져요 (지도 핀은 끌어서 옮길 수 있어요).</div>
+    <div id="beStops">${E.stops.map((s, i) => `<div class="bes ${BUS.placing === i ? 'placing' : ''}" data-i="${i}">
+      <div class="besn">${i === 0 ? '출발' : i === E.stops.length - 1 ? '도착' : i}</div>
+      <div class="grow">
+        <div class="row"><input type="time" class="bt" value="${esc(BUS.edDay ? ((s.times && s.times[BUS.edDay]) || '') : (s.time || ''))}" ${BUS.edDay ? `placeholder="${esc(s.time || '')}" title="기본 ${esc(s.time || '없음')}"` : ''}>${BUS.edDay && s.time ? `<span class="muted" style="font-size:11.5px">기본 ${esc(s.time)}</span>` : ''}<input type="text" class="bn grow" value="${esc(s.name || '')}" placeholder="정류장 이름 (예: 백성초 정문)">
+          <button class="btn small ${s.lat != null ? 'ghost' : ''}" data-place="${i}" title="지도에서 위치 고르기">${BUS.placing === i ? '지도를 누르세요' : s.lat != null ? '📍 위치 바꾸기' : '📍 위치 정하기'}</button>
+          <button class="btn small ghost" data-here="${i}" title="지금 이 폰·PC 위치로">🎯 여기</button>
+          <button class="btn small ghost" data-up="${i}" ${i === 0 ? 'disabled' : ''}>↑</button><button class="btn small ghost" data-dn="${i}" ${i === E.stops.length - 1 ? 'disabled' : ''}>↓</button><button class="btn small ghost" data-del="${i}">✕</button></div>
+        <div class="row" style="margin-top:6px"><span class="blab on">타요</span>${(s.on || []).map(id => edKidChip(E, id)).join('') || '<span class="muted">없음</span>'}<button class="btn small ghost" data-kids="${i}|on">+ 고르기</button>
+          <span class="blab off" style="margin-left:8px">내려요</span>${(s.off || []).map(id => edKidChip(E, id)).join('') || '<span class="muted">없음</span>'}<button class="btn small ghost" data-kids="${i}|off">+ 고르기</button></div>
+      </div></div>`).join('')}</div>
+    <div class="row" style="margin-top:8px"><button class="btn ghost" id="beAdd">+ 경유지 추가</button><button class="btn ghost" id="beHome">+ 도장 추가</button><div class="grow"></div>
+      ${E.id ? '<button class="btn ghost" id="beCopy">📄 복사 (다른 요일용)</button><button class="btn ghost" id="beRev">↩ 거꾸로 복사 (하원 노선 만들기)</button><button class="btn red" id="beDel">노선 지우기</button>' : ''}<button class="btn" id="beSave">저장</button></div>
+  </div><div class="bedr"><div id="bMap" class="bmap" style="height:72vh"></div><div class="row" style="margin-top:6px"><input type="text" id="beQ" placeholder="장소 찾기 (예: 안성 백성초등학교)" class="grow"><button class="btn small ghost" id="beFind">찾기</button></div><div class="muted" id="beFound"></div></div></div>`;
+  const sync = () => { E.name = $('#beName').value; E.type = $('#beType').value; E.dir = $('#beDir').value; E.car = $('#beCar').value; E.radius = $('#beRad').value;
+    el.querySelectorAll('.bes').forEach(row => { const s = E.stops[+row.dataset.i], v = row.querySelector('.bt').value; s.name = row.querySelector('.bn').value;
+      if (BUS.edDay){ s.times = s.times || {}; if (v && v !== s.time) s.times[BUS.edDay] = v; else delete s.times[BUS.edDay]; } else s.time = v; }); };
+  const redraw = () => { sync(); busEditor(el); };
+  $('#beBack').onclick = () => { if (confirm('저장하지 않은 내용은 사라져요. 목록으로 갈까요?')){ BUS.edit = null; BUS.map = null; render(); } };
+  el.querySelectorAll('[data-day]').forEach(b => b.onclick = () => { const d = +b.dataset.day; E.days = E.days || []; E.days.includes(d) ? E.days.splice(E.days.indexOf(d), 1) : E.days.push(d); E.days.sort(); redraw(); });
+  el.querySelectorAll('[data-eday]').forEach(b => b.onclick = () => { sync(); BUS.edDay = b.dataset.eday; busEditor(el); });
+  el.querySelectorAll('[data-kd]').forEach(b => b.onclick = () => { sync(); busKidDays(E, b.dataset.kd, () => busEditor(el)); });
+  if ($('#beCopy')) $('#beCopy').onclick = () => { sync(); BUS.edit = { ...JSON.parse(JSON.stringify(E)), id: '', pubKey: '', name: E.name + ' (복사)', stops: E.stops.map(s => ({ ...JSON.parse(JSON.stringify(s)), id: busId() })) };
+    const map = {}; E.stops.forEach((s, i) => map[s.id] = BUS.edit.stops[i].id); BUS.map = null; busEditor(el); toast('복사했어요 — 요일·시간을 바꾸고 저장하세요'); };
+  el.querySelectorAll('[data-place]').forEach(b => b.onclick = () => { const i = +b.dataset.place; BUS.placing = BUS.placing === i ? -1 : i; redraw(); });
+  el.querySelectorAll('[data-here]').forEach(b => b.onclick = () => { const i = +b.dataset.here; if (!navigator.geolocation) return toast('위치를 못 써요');
+    toast('지금 위치 찾는 중…'); navigator.geolocation.getCurrentPosition(p => { sync(); E.stops[i].lat = p.coords.latitude; E.stops[i].lng = p.coords.longitude; busEditor(el); toast(`정확도 약 ${Math.round(p.coords.accuracy)}m`); }, e => toast('위치를 못 찾았어요: ' + e.message), { enableHighAccuracy: true, timeout: 15000 }); });
+  el.querySelectorAll('[data-up]').forEach(b => b.onclick = () => { sync(); const i = +b.dataset.up; [E.stops[i - 1], E.stops[i]] = [E.stops[i], E.stops[i - 1]]; busEditor(el); });
+  el.querySelectorAll('[data-dn]').forEach(b => b.onclick = () => { sync(); const i = +b.dataset.dn; [E.stops[i + 1], E.stops[i]] = [E.stops[i], E.stops[i + 1]]; busEditor(el); });
+  el.querySelectorAll('[data-del]').forEach(b => b.onclick = () => { sync(); if (E.stops.length <= 2) return toast('정류장은 최소 2개(출발·도착)예요'); E.stops.splice(+b.dataset.del, 1); BUS.placing = -1; busEditor(el); });
+  el.querySelectorAll('[data-kids]').forEach(b => b.onclick = () => { sync(); const [i, k] = b.dataset.kids.split('|'); busKidPicker(E.stops[+i], k, () => busEditor(el)); });
+  $('#beAdd').onclick = () => { sync(); E.stops.splice(E.stops.length - 1, 0, { id: busId(), name: '', time: '', lat: null, lng: null, on: [], off: [] }); BUS.placing = E.stops.length - 2; busEditor(el); };
+  $('#beHome').onclick = () => { sync(); const h = busHome(); E.stops.push({ id: busId(), name: '도장', time: '', lat: h.lat, lng: h.lng, on: [], off: [] }); busEditor(el); };
+  $('#beSave').onclick = async () => { sync(); if (!E.name.trim()) return toast('노선 이름을 넣어 주세요');
+    const used = new Set(E.stops.flatMap(s => [...(s.on || []), ...(s.off || [])])), kidDays = {}; Object.entries(E.kidDays || {}).forEach(([k, v]) => { if (used.has(k) && v && v.length) kidDays[k] = v; });
+    const data = { name: E.name.trim(), type: E.type, dir: E.dir, car: E.car.trim(), days: E.days || [], radius: E.radius ? +E.radius : null, kidDays, stops: E.stops.map(s => ({ id: s.id, name: (s.name || '').trim(), time: s.time || '', times: s.times || {}, lat: s.lat ?? null, lng: s.lng ?? null, on: s.on || [], off: s.off || [] })), updatedAt: Date.now() };
+    data.pubKey = E.pubKey || pubNewKey();
+    if (E.id) await setDoc(doc(db, 'routes', E.id), data); else { const d = await addDoc(collection(db, 'routes'), data); E.id = d.id; }
+    pubSend(data.pubKey, 'route', pubRoute(data));
+    toast('노선을 저장했어요'); BUS.sel = E.id; BUS.edit = null; BUS.map = null; render(); };
+  if ($('#beDel')) $('#beDel').onclick = async () => { if (!confirm(`「${E.name}」 노선을 지울까요?`)) return; await deleteDoc(doc(db, 'routes', E.id)); BUS.edit = null; BUS.map = null; render(); };
+  if ($('#beRev')) $('#beRev').onclick = () => { sync(); BUS.edit = { ...JSON.parse(JSON.stringify(E)), id: '', pubKey: '', name: E.name.replace('등원', '하원') + (E.name.includes('등원') ? '' : ' (거꾸로)'), dir: E.dir === 'in' ? 'out' : 'in',
+    stops: E.stops.slice().reverse().map(s => ({ ...JSON.parse(JSON.stringify(s)), id: busId(), time: '', on: s.off || [], off: s.on || [] })) }; BUS.map = null; busEditor(el); toast('거꾸로 복사했어요 — 시간을 넣고 저장하세요'); };
+  $('#beFind').onclick = async () => { const q = $('#beQ').value.trim(); if (!q) return; $('#beFound').textContent = '찾는 중…';
+    try { const h = busHome(); const res = await (await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=6&accept-language=ko&countrycodes=kr&viewbox=${h.lng - .2},${h.lat + .2},${h.lng + .2},${h.lat - .2}&q=${encodeURIComponent(q)}`)).json();
+      $('#beFound').innerHTML = res.length ? res.map((x, k) => `<button class="btn small ghost" data-f="${k}" style="margin:4px 4px 0 0">${esc(x.display_name.split(',').slice(0, 3).join(','))}</button>`).join('') : '못 찾았어요. 지도를 직접 눌러 주세요.';
+      $('#beFound').querySelectorAll('[data-f]').forEach(b => b.onclick = () => { const x = res[+b.dataset.f]; if (BUS.map) BUS.map.fit([{ lat: +x.lat, lng: +x.lon }]); if (BUS.placing >= 0){ sync(); E.stops[BUS.placing].lat = +x.lat; E.stops[BUS.placing].lng = +x.lon; if (!E.stops[BUS.placing].name) E.stops[BUS.placing].name = x.display_name.split(',')[0]; BUS.placing = -1; busEditor(el); } });
+    } catch(e){ $('#beFound').textContent = '찾기를 못 했어요. 지도를 직접 눌러 주세요.'; } };
+  (async () => { const mapEl = $('#bMap'); const keep = BUS.map && BUS.map.host === 'edit' ? BUS.map.view : null;
+    const M = await mapMake(mapEl); if (!M) return; BUS.map = M; M.el = mapEl; M.host = 'edit';
+    M.setStops(E.stops.map((s, i) => ({ ...s, color: i === BUS.placing ? '#f59e0b' : '#1e3a8a' })), (i, lat, lng) => { sync(); E.stops[i].lat = lat; E.stops[i].lng = lng; });
+    M.onClick((lat, lng) => { if (BUS.placing < 0) return toast('먼저 정류장의 📍 버튼을 누르세요'); sync(); E.stops[BUS.placing].lat = lat; E.stops[BUS.placing].lng = lng; BUS.placing = -1; busEditor(el); });
+    M.fit(E.stops.length ? E.stops : [busHome()]); })();
+}
+function edKidChip(E, id){
+  const s = S.students.find(x => x.id === id), kd = E.kidDays && E.kidDays[id];
+  const st = !s ? '<i class="kb">지운 원생</i>' : s.status === 'LEAVE' ? '<i class="kw">휴원 중</i>' : s.status !== 'ACTIVE' ? '<i class="kb">퇴관</i>' : '';
+  return `<button class="bkid" data-kd="${id}" title="누르면 이 아이가 타는 요일을 정해요">${esc(s ? s.name : '(지운 원생)')}${st}${kd && kd.length ? `<small>${kd.map(d => DAYS_KO[d]).join('')}만</small>` : ''}</button>`;
+}
+function busKidDays(E, id, done){
+  const cur = new Set((E.kidDays && E.kidDays[id]) || []), days = E.days && E.days.length ? E.days : [1, 2, 3, 4, 5];
+  const r = modal(`<h2>${esc(kidName(id))} — 타는 요일</h2><p class="muted" style="margin-top:0">아무것도 안 고르면 이 노선 운행 요일 전부 타요.</p>
+    <div class="row">${days.map(d => `<button class="pill ${cur.has(d) ? 'on' : ''}" data-d="${d}">${DAYS_KO[d]}</button>`).join('')}</div>
+    <div class="row" style="margin-top:14px"><button class="btn red small" id="kdDel">이 노선에서 빼기</button><div class="grow"></div><button class="btn ghost" id="kdC">취소</button><button class="btn" id="kdO">확인</button></div>`);
+  r.querySelectorAll('[data-d]').forEach(b => b.onclick = () => { const d = +b.dataset.d; cur.has(d) ? cur.delete(d) : cur.add(d); b.classList.toggle('on', cur.has(d)); });
+  r.querySelector('#kdC').onclick = closeModal;
+  r.querySelector('#kdDel').onclick = () => { E.stops.forEach(s => { s.on = (s.on || []).filter(x => x !== id); s.off = (s.off || []).filter(x => x !== id); }); if (E.kidDays) delete E.kidDays[id]; closeModal(); done(); };
+  r.querySelector('#kdO').onclick = () => { E.kidDays = E.kidDays || {}; E.kidDays[id] = [...cur].sort(); closeModal(); done(); };
+}
+function busKidPicker(stop, k, done){
+  const picked = new Set(stop[k] || []);
+  const r = modal(`<h2>${esc(stop.name || '정류장')} — ${k === 'on' ? '타는 아이' : '내리는 아이'}</h2>
+    <input type="text" id="bkq" placeholder="이름·초성으로 찾기" style="width:100%;margin-bottom:8px"><div class="kids" id="bkk" style="max-height:50vh"></div>
+    <div class="row" style="margin-top:12px"><span class="muted" id="bkn"></span><div class="grow"></div><button class="btn ghost" id="bkc">취소</button><button class="btn" id="bko">확인</button></div>`);
+  const draw = () => { const q = r.querySelector('#bkq').value.trim(); const l = active().filter(s => picked.has(s.id) || !q || nameMatch(s.name, q)).sort(byName);
+    r.querySelector('#bkk').innerHTML = l.map(s => `<button class="kid ${picked.has(s.id) ? 'on' : ''}" data-k="${s.id}">${esc(s.name)} <span class="muted">${esc(gradeOf(s))}</span></button>`).join('');
+    r.querySelector('#bkn').textContent = `${picked.size}명 골랐어요`; };
+  draw(); const qi = r.querySelector('#bkq'); qi.addEventListener('input', e => { if (!e.isComposing) draw(); }); qi.addEventListener('compositionend', draw);
+  r.querySelector('#bkk').onclick = e => { const b = e.target.closest('[data-k]'); if (!b) return; picked.has(b.dataset.k) ? picked.delete(b.dataset.k) : picked.add(b.dataset.k); draw(); };
+  r.querySelector('#bkc').onclick = closeModal;
+  r.querySelector('#bko').onclick = () => { stop[k] = [...picked]; closeModal(); done(); };
+}
+function busCfgModal(){
+  const c = BUS.cfg, h = busHome();
+  const r = modal(`<h2>⚙️ 차량 · 도보 설정</h2>
+    <div class="card" style="margin-bottom:10px"><b>도장 위치</b> <span class="muted">(새 노선의 도착지 기본값)</span>
+      <div class="row" style="margin-top:6px"><input type="number" id="bcLat" value="${h.lat}" step="0.00001" style="width:140px"><input type="number" id="bcLng" value="${h.lng}" step="0.00001" style="width:140px"><button class="btn small ghost" id="bcHere">🎯 지금 내 위치 (도장에서 누르세요)</button></div></div>
+    <div class="card" style="margin-bottom:10px"><b>도착 인정 거리</b><div class="row" style="margin-top:6px"><input type="number" id="bcRad" value="${c.radius || 80}" style="width:100px"> m 안에 들어오면 도착으로 찍어요 <span class="muted">(보통 50~100m)</span></div></div>
+    <div class="card" style="margin-bottom:10px"><b>네이버 지도 키 (Client ID)</b>
+      <div class="row" style="margin-top:6px"><input type="text" id="bcNav" value="${esc(c.naverId || '')}" placeholder="비워 두면 임시 지도(오픈스트리트맵)" class="grow"></div>
+      <p class="muted" style="margin:6px 0 0">네이버 클라우드 플랫폼 → Maps → Application 등록(Dynamic Map 체크) → 웹 서비스 URL에 <b>https://yujongho0714.github.io</b> 넣기 → 나온 Client ID를 여기에 붙여 넣으세요.</p></div>
+    <div class="row"><div class="grow"></div><button class="btn ghost" id="bcC">취소</button><button class="btn" id="bcS">저장</button></div>`);
+  r.querySelector('#bcHere').onclick = () => navigator.geolocation && navigator.geolocation.getCurrentPosition(p => { r.querySelector('#bcLat').value = p.coords.latitude.toFixed(6); r.querySelector('#bcLng').value = p.coords.longitude.toFixed(6); }, e => toast('위치를 못 찾았어요'), { enableHighAccuracy: true, timeout: 15000 });
+  r.querySelector('#bcC').onclick = closeModal;
+  r.querySelector('#bcS').onclick = async () => { await setDoc(doc(db, 'config', 'bus'), { home: { lat: +r.querySelector('#bcLat').value, lng: +r.querySelector('#bcLng').value }, radius: +r.querySelector('#bcRad').value || 80, naverId: r.querySelector('#bcNav').value.trim() }, { merge: true });
+    window.__naverFail = false; BUS.map = null; closeModal(); toast('저장했어요'); render(); };
+}
+function busSms(r){
+  const ids = [...new Set((r.stops || []).flatMap(s => [...busKids(r, s.on), ...busKids(r, s.off)]))], kids = ids.map(id => S.students.find(s => s.id === id)).filter(Boolean);
+  if (!kids.length) return toast('이 노선에 아이가 없어요');
+  const stopOf = id => { const s = (r.stops || []).find(x => (x.on || []).includes(id) || (x.off || []).includes(id)); return s ? `${s.name} ${stTime(s)}` : ''; };
+  const stopIdx = id => (r.stops || []).findIndex(x => (x.on || []).includes(id) || (x.off || []).includes(id));
+  const tpl0 = `[${DOJANG_SHORT}] 안녕하세요 {호칭}, ${r.name} 안내드려요.\n{이름} 정류장: {정류장}\n차량 위치·도착 시간은 여기서 볼 수 있어요 👉 {링크}\n`;
+  const r2 = modal(`<h2>✉️ ${esc(r.name)} 부모님께 문자 (${kids.length}명)</h2><p class="muted" style="margin-top:0">{호칭} {이름} {정류장}(이름·시간) {링크}(아이 정류장이 들어간 차량 위치 링크)를 넣을 수 있어요. 문자 폰으로 보내져요.</p>
+    <textarea id="bsT" style="min-height:140px">${esc(tpl0)}</textarea><div class="row" style="margin-top:10px"><div class="grow"></div><button class="btn ghost" id="bsC">취소</button><button class="btn" id="bsG">보내기</button></div>`);
+  r2.querySelector('#bsC').onclick = closeModal;
+  r2.querySelector('#bsG').onclick = async () => { const t = r2.querySelector('#bsT').value; const items = []; await pubEnsure(r);
+    kids.forEach(s => { const p = s.phones.map(normPhone).find(n => n.length >= 9); if (!p) return; const ex = items.find(x => x.p === p);
+      const line = t.split('{정류장}').join(stopOf(s.id)).split('{링크}').join(pubLink(r, stopIdx(s.id))); if (ex){ ex.n += ', ' + s.name; return; } items.push({ n: s.name, p, t: buildReply(line, [s.name], s.phoneLabels[0] || '보호자') }); });
+    if (!items.length) return toast('보낼 번호가 없어요'); if (!confirm(`${items.length}통을 보낼까요?`)) return;
+    const now = Date.now(); await addDoc(collection(db, 'bulk'), { title: `🚐 ${r.name} 안내 ${items.length}통`, createdMs: now, lastMs: now, status: 'PENDING', items, results: {} });
+    closeModal(); toast(`${items.length}통 보내기 시작 (문자 폰)`); };
+}
+function busExcel(rs){
+  if (!rs.length) return toast('노선이 없어요'); if (!window.XLSX) return toast('엑셀 도구를 못 불러왔어요');
+  const wb = XLSX.utils.book_new();
+  const all = [['노선', '종류', '등·하원', '요일', '차량·담당', '순서', '시간', '정류장', '타는 아이', '내리는 아이', '보호자 연락처']];
+  rs.forEach(r => (r.stops || []).forEach((s, i) => { const ph = [...(s.on || []), ...(s.off || [])].map(id => { const k = S.students.find(x => x.id === id); return k ? `${k.name} ${k.phones.map(x => prettyPhone(normPhone(x))).join('/')}` : ''; }).filter(Boolean).join(' · ');
+    const tt = (s.time || '') + Object.entries(s.times || {}).map(([d, t]) => ` (${DAYS_KO[d]} ${t})`).join('');
+    const nm = ids => ids.map(id => kidName(id) + (r.kidDays && r.kidDays[id] && r.kidDays[id].length ? `(${r.kidDays[id].map(d => DAYS_KO[d]).join('')})` : '') + (S.students.find(x => x.id === id && x.status === 'LEAVE') ? '[휴원]' : '')).join(', ');
+    all.push([r.name, busKind(r)[0].slice(2).trim(), busDir(r), (r.days && r.days.length ? r.days : [1, 2, 3, 4, 5]).map(d => DAYS_KO[d]).join(''), r.car || '', i + 1, tt, s.name || '', nm(s.on || []), nm(s.off || []), ph]); }));
+  const ws = XLSX.utils.aoa_to_sheet(all); ws['!cols'] = [18, 6, 6, 8, 14, 5, 7, 18, 30, 30, 50].map(w => ({ wch: w })); XLSX.utils.book_append_sheet(wb, ws, '노선표');
+  const log = [['노선', '정류장', '예정', '도착', '출발']]; rs.forEach(r => { const run = BUS.runs[r.id]; if (!run) return; (r.stops || []).forEach(s => log.push([r.name, s.name, s.time, run.arrivals && run.arrivals[s.id] ? hmOf(run.arrivals[s.id]) : '', run.departs && run.departs[s.id] ? hmOf(run.departs[s.id]) : ''])); });
+  if (log.length > 1) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(log), `오늘 운행기록`);
+  XLSX.writeFile(wb, rs.length === 1 ? `route_${today().replace(/-/g, '')}.xlsx` : `routes_all_${today().replace(/-/g, '')}.xlsx`);
+}
+
+/* ── 📱 운행 화면 (기사님·선생님 폰): GPS 보내기 + 정류장 도착 자동 기록 ── */
+function driveOpen(routeId){
+  busStart();
+  BUS.drive = { routeId: routeId || '', watch: null, last: null, sentAt: 0, sentPos: null, lock: null, acc: null, err: '' };
+  let o = $('#driveOv'); if (!o){ o = document.createElement('div'); o.id = 'driveOv'; document.body.appendChild(o); }
+  driveDraw();
+}
+function driveClose(){ const D = BUS.drive; if (D && D.watch != null) navigator.geolocation.clearWatch(D.watch); if (D && D.lock) D.lock.release().catch(() => {}); BUS.drive = null; const o = $('#driveOv'); if (o) o.remove(); }
+function driveDraw(){
+  const D = BUS.drive, o = $('#driveOv'); if (!D || !o) return;
+  const keepTop = o.scrollTop;
+  const rs = busToday(), r = BUS.routes.find(x => x.id === D.routeId), run = r && BUS.runs[r.id], live = run && run.status === 'live';
+  const mine = live && D.watch != null;
+  o.innerHTML = `<div class="dvh"><b>${r ? esc(r.name) : '운행할 노선 고르기'}</b><div class="grow"></div><button class="dvx" id="dvX">✕</button></div>
+    <div class="dvb">${!r ? `${isOff(today()) ? '<div class="dvstat" style="background:#fef3c7">오늘은 도장 쉬는 날이에요 (주말·공휴일·휴원일)</div>' : ''}<p class="muted">오늘(${DAYS_KO[new Date().getDay()]}요일) 노선이에요</p>${rs.map(x => { const ru = BUS.runs[x.id]; return `<button class="dvr" data-r="${x.id}"><b>${esc(busStart0(x) || '--:--')}</b> ${esc(x.name)}<span class="muted"> ${busKind(x)[0]} · ${busDir(x)}${ru ? ru.status === 'live' ? ' · 운행 중' : ' · 운행 끝' : ''}</span></button>`; }).join('') || '<p>오늘 노선이 없어요</p>'}`
+    : `<div class="dvstat">${mine ? `<span class="dvdot"></span> GPS 보내는 중 · 정확도 ${D.acc ? Math.round(D.acc) + 'm' : '-'}${D.err ? ` · <span style="color:#dc2626">${esc(D.err)}</span>` : ''}` : live ? '다른 폰에서 운행 중이에요' : run ? `운행 끝 (${run.endedAt ? hmOf(run.endedAt) : ''})` : '아직 출발 전이에요'}</div>
+      ${!mine ? `<button class="dvgo" id="dvStart">${live ? '▶ 이 폰으로 이어서 운행' : '▶ 운행 시작'}</button>` : ''}
+      <p class="muted" style="margin:8px 0">운행 중에는 이 화면을 켜 두세요. 화면이 꺼지면 위치가 멈출 수 있어요.</p>
+      ${busTimelineHtml(r, run, true)}
+      ${mine ? '<button class="dvend" id="dvEnd">■ 운행 끝</button>' : ''}
+      <button class="btn ghost" id="dvBack" style="margin-top:10px;width:100%">다른 노선 고르기</button>`}</div>`;
+  o.scrollTop = keepTop;
+  o.querySelector('#dvX').onclick = () => { if (D.watch != null && !confirm('운행을 멈추지 않고 닫으면 위치가 더 안 가요. 닫을까요?')) return;
+    if (S.driverOnly){ if (confirm('로그아웃할까요?')){ driveClose(); signOut(auth); } return; } driveClose(); };
+  o.querySelectorAll('[data-r]').forEach(b => b.onclick = () => { D.routeId = b.dataset.r; driveDraw(); });
+  if (o.querySelector('#dvBack')) o.querySelector('#dvBack').onclick = () => { if (D.watch != null && !confirm('운행을 멈출까요?')) return; driveStop(false); D.routeId = ''; driveDraw(); };
+  if (o.querySelector('#dvStart')) o.querySelector('#dvStart').onclick = () => driveStart(r);
+  if (o.querySelector('#dvEnd')) o.querySelector('#dvEnd').onclick = () => { if (confirm('운행을 끝낼까요?')) driveStop(true); };
+  o.querySelectorAll('[data-arrive]').forEach(b => b.onclick = () => driveArrive(r, b.dataset.arrive, true));
+}
+const runRef = r => doc(db, 'runs', `${today()}_${r.id}`);
+async function driveStart(r){
+  const D = BUS.drive; if (!navigator.geolocation) return toast('이 기기는 위치를 못 써요');
+  const run = BUS.runs[r.id];
+  await setDoc(runRef(r), { day: today(), routeId: r.id, name: r.name, status: 'live', ...(run && run.startedAt ? {} : { startedAt: Date.now() }), endedAt: deleteField() }, { merge: true });
+  try { const k = await pubEnsure(r); const arr = {}; (r.stops || []).forEach((s, i) => { if (run && run.arrivals && run.arrivals[s.id]) arr[i] = run.arrivals[s.id]; });
+    await pubSend(k, 'route', pubRoute(r)); await pubSend(k, 'run', { day: today(), status: 'live', startedAt: (run && run.startedAt) || Date.now(), arrivals: arr }); } catch(e){}
+  try { if (navigator.wakeLock) D.lock = await navigator.wakeLock.request('screen'); } catch(e){}
+  D.watch = navigator.geolocation.watchPosition(p => drivePos(r, p), e => { D.err = e.code === 1 ? '위치 권한을 허용해 주세요' : '위치 신호 약함'; driveDraw(); }, { enableHighAccuracy: true, maximumAge: 3000, timeout: 20000 });
+  driveDraw(); toast('운행 시작! 화면을 켜 두세요');
+}
+async function driveStop(end){
+  const D = BUS.drive; if (!D) return; const r = BUS.routes.find(x => x.id === D.routeId);
+  if (D.watch != null) navigator.geolocation.clearWatch(D.watch); D.watch = null; if (D.lock){ D.lock.release().catch(() => {}); D.lock = null; }
+  if (end && r){ await setDoc(runRef(r), { status: 'done', endedAt: Date.now() }, { merge: true }); pubSend(r.pubKey, 'run', { status: 'done', endedAt: Date.now() }, 'PATCH'); toast('운행 끝! 수고하셨어요'); }
+  driveDraw();
+}
+async function driveArrive(r, stopId, manual){
+  const run = BUS.runs[r.id] || {}; if (run.arrivals && run.arrivals[stopId]) return;
+  const now = Date.now(); await setDoc(runRef(r), { arrivals: { [stopId]: now } }, { merge: true });
+  const idx = (r.stops || []).findIndex(x => x.id === stopId); if (idx >= 0) pubSend(r.pubKey, 'run/arrivals', { [idx]: now }, 'PATCH');
+  const s = (r.stops || []).find(x => x.id === stopId); if (manual || BUS.drive) toast(`${s ? s.name : '정류장'} 도착 ✓`);
+}
+function drivePos(r, p){
+  const D = BUS.drive; if (!D) return;
+  const pos = { lat: p.coords.latitude, lng: p.coords.longitude }, now = Date.now(); D.acc = p.coords.accuracy; D.err = ''; D.last = pos;
+  const run = BUS.runs[r.id] || {}, arr = run.arrivals || {}, dep = run.departs || {}, st = r.stops || [], rad = busRadius(r);
+  // 도착: 아직 안 찍힌 정류장 중 (마지막 도착 다음 2곳까지) 반경 안에 들어오면 시간 찍기
+  let lastI = -1; st.forEach((s, i) => { if (arr[s.id]) lastI = i; });
+  for (let i = lastI + 1; i < Math.min(st.length, lastI + 3); i++){ const s = st[i]; if (s.lat != null && !arr[s.id] && geoDist(pos, s) <= rad + Math.min(60, D.acc || 0) / 2){ driveArrive(r, s.id, false); break; } }
+  // 출발: 마지막으로 도착한 정류장에서 반경 밖으로 나가면 출발 시간
+  if (lastI >= 0){ const s = st[lastI]; if (!dep[s.id] && geoDist(pos, s) > rad * 1.5) setDoc(runRef(r), { departs: { [s.id]: now } }, { merge: true }); }
+  // 위치 보내기: 10초마다(멈춰 있으면 30초마다)
+  const moved = D.sentPos ? geoDist(D.sentPos, pos) : Infinity;
+  if (now - D.sentAt >= 10000 && (moved >= 15 || now - D.sentAt >= 30000)){
+    D.sentAt = now; D.sentPos = pos;
+    setDoc(runRef(r), { live: { ...pos, acc: Math.round(D.acc || 0), at: now }, track: arrayUnion({ t: now, lat: +pos.lat.toFixed(6), lng: +pos.lng.toFixed(6) }) }, { merge: true }).catch(e => { D.err = '전송 실패'; });
+    pubSend(r.pubKey, 'run/live', { lat: +pos.lat.toFixed(5), lng: +pos.lng.toFixed(5), at: now });
+  }
+  driveDraw();
+}
+// 주소 끝 #drive 로 열면 바로 운행 화면
+addEventListener('hashchange', () => { if (location.hash === '#drive' && db) driveOpen(''); });
 
 function exportXlsx(rows, file, sheet){
   if (!window.XLSX){ toast('엑셀 도구를 못 불러왔어요'); return; }

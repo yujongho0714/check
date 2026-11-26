@@ -1,11 +1,24 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // 도장 계정(아래 이메일)으로 로그인한 기기만 읽기/쓰기 가능
+    // 도장 계정(아래 이메일)으로 로그인한 기기만 모든 자료 읽기/쓰기 가능
     // ★ 아래 이메일은 이 앱의 도장 계정이에요 (Firebase Authentication 에 만든 계정과 같아야 해요)
-    match /{document=**} {
-      allow read, write: if request.auth != null
-                         && request.auth.token.email == "schp2118@gmail.com";
+    function isOwner() {
+      return request.auth != null && request.auth.token.email == "schp2118@gmail.com";
     }
+    // 기사님·차량 선생님 전용 계정: 이메일이 @jungdo.driver 로 끝나는 계정 (예: car1@jungdo.driver)
+    // 노선·원생 이름·오늘 결석/등원만 읽고, 운행 기록(runs)만 쓸 수 있어요
+    function isDriver() {
+      return request.auth != null && request.auth.token.email.matches('.*@jungdo[.]driver$');
+    }
+    match /{document=**} {
+      allow read, write: if isOwner();
+    }
+    match /routes/{id}    { allow read: if isDriver(); }
+    match /runs/{id}      { allow read, write: if isDriver(); }
+    match /students/{id}  { allow read: if isDriver(); }
+    match /absences/{id}  { allow read: if isDriver(); }
+    match /events/{id}    { allow read: if isDriver(); }
+    match /config/{id}    { allow read: if isDriver() && (id == 'bus' || id == 'holidays'); }
   }
 }
