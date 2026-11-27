@@ -1001,6 +1001,7 @@ function editStudent(s){
   r.querySelector('#fBelt').oninput = () => { r.querySelector('#fLock').checked = true; };
   r.querySelector('#fAddPhone').onclick = () => r.querySelector('#fPhones').insertAdjacentHTML('beforeend', phoneRow('보호자', ''));
   r.querySelector('#fPhones').onclick = e => { const b = e.target.closest('[data-delp]'); if (b) b.parentElement.remove(); };
+  { const st = r.querySelector('#fStatus'), rs = r.querySelector('#fReason'); const upd = () => { const L = st.value === 'LEFT'; rs.placeholder = L ? '퇴관 사유 (꼭 적어 주세요)' : '사유 (휴관·퇴관일 때)'; rs.style.outline = L && !rs.value.trim() ? '2px solid var(--bad)' : ''; }; st.onchange = upd; rs.oninput = upd; upd(); }
   r.querySelector('#fCancel').onclick = closeModal;
   if (!isNew) r.querySelector('#fSms').onclick = () => openChatWith(s);
   if (!isNew) r.querySelector('#fGold').onclick = () => sendGold([s]);
@@ -1017,6 +1018,7 @@ function editStudent(s){
     const clash = no && active().find(x => x.attendNo === no && x.id !== s.id);
     if (clash && !confirm(`출결번호 ${no}는 ${clash.name}도 쓰고 있어요. 그래도 저장할까요?`)) return;
     const status = r.querySelector('#fStatus').value;
+    if (status === 'LEFT' && !r.querySelector('#fReason').value.trim()){ toast('퇴관 사유를 적어 주세요 (수련생 현황에 남아요)'); r.querySelector('#fReason').focus(); r.querySelector('#fReason').style.outline = '2px solid var(--bad)'; return; }
     const data = { name, grade, age: ageV, ageYear: ageYearV, phones, phoneLabels: labels, memo: r.querySelector('#fMemo').value, siblingKey: s.siblingKey || '', demo: r.querySelector('#fDemo').checked,
       status, statusReason: status === 'ACTIVE' ? '' : r.querySelector('#fReason').value.trim(),
       joinedMonth: s.joinedMonth || thisMonth(), leftMonth: status === 'LEFT' ? (s.status === 'LEFT' && s.leftMonth ? s.leftMonth : thisMonth()) : '',
@@ -1559,7 +1561,7 @@ function tuShown(s, m){
   const D = TU.docs[m]; if (D && D.listed) return !!(D.rows && D.rows[s.id]);   // 엑셀에서 가져온 달은 그 달 명단에 있던 원생만
   if (s.joinedMonth && m < s.joinedMonth) return false;
   if (s.status === 'ACTIVE' || s.status === 'LEAVE') return true;
-  return !!(s.leftMonth && m < s.leftMonth);
+  return !!(s.leftMonth && m <= s.leftMonth);   // 퇴관한 달까지는 명단에 있음 (미납 · 띠 확인), 다음 달부터 빠짐
 }
 // 학생×달 계산 (이월 차감을 이어서 계산)
 function tuCalc(){
@@ -2086,7 +2088,8 @@ function rStats(p){
   const grades = [...byG.keys()].sort((a, b) => gradeRank(a) - gradeRank(b));
   const max = Math.max(1, ...grades.map(g => byG.get(g).length));
   const q = SV.q.trim(), match = s => !q || nameMatch(s.name, q) || s.phones.some(x => normPhone(x).includes(q.replace(/\D/g, '') || '@@'));
-  const V = [['grade', '학년별'], ['family', `형제 ${fams.length}가정`], ['phone', '보호자 연락처']];
+  const gone = S.students.filter(s => s.status === 'LEFT').sort((a, b) => (b.leftMonth || '').localeCompare(a.leftMonth || '') || a.name.localeCompare(b.name, 'ko'));
+  const V = [['grade', '학년별'], ['family', `형제 ${fams.length}가정`], ['phone', '보호자 연락처'], ['left', `퇴관 기록 ${gone.length}명`]];
   let body = '';
   if (SV.view === 'grade'){
     const gs = SV.g ? [SV.g] : grades;
@@ -2098,6 +2101,11 @@ function rStats(p){
       return `<div class="card stfam"><div class="row" style="gap:6px">${g.map(s => `<span class="stkid inline" data-id="${s.id}"><b>${esc(s.name)}</b> <span class="muted">${esc(gradeOf(s))}</span></span>`).join('')}<div class="grow"></div><span class="tag t-in">${g.length}남매</span></div>
         <div class="muted" style="margin-top:6px">${ph.map(([n, l]) => `${esc(l)} <a href="tel:${n}" style="color:inherit"><b>${prettyPhone(n)}</b></a>`).join(' · ') || '번호 없음'}</div></div>`; }).join('') || '<p class="muted">형제 원생이 없어요</p>'}</div>
       <p class="muted">같은 보호자 번호를 쓰거나 원생 명단에서 형제로 묶은 아이들을 한 가족으로 보여줘요. 휴관·퇴관 원생은 빠져요.</p>`;
+  } else if (SV.view === 'left'){
+    const l = gone.filter(match), mk = thisMonth();
+    body = l.length ? `<div class="scroll"><table><tr><th>이름</th><th>학년</th><th>퇴관한 달</th><th>사유</th><th>띠</th><th>보호자 연락처</th></tr>
+      ${l.map(s => `<tr class="click" data-id="${s.id}"><td><b>${esc(s.name)}</b>${s.leftMonth === mk ? ' <span class="tag t-wait">이번 달까지 명단에 있음</span>' : ''}</td><td>${esc(gradeOf(s))}</td><td>${esc((s.leftMonth || '').replace('-', '년 ') + (s.leftMonth ? '월' : '기록 없음'))}</td><td>${s.statusReason ? esc(s.statusReason) : '<span style="color:var(--bad)">사유 없음 · 눌러서 적기</span>'}</td><td class="muted">${esc(normBelt(s.belt))}</td><td>${phonesHtml(s)}</td></tr>`).join('')}</table></div>
+      <p class="muted">퇴관한 달까지는 수련비 · 미납 · 띠 명단에 남고, 다음 달부터 모든 앱 명단에서 빠져요. 사유를 고치려면 이름을 눌러요.</p>` : '<p class="muted">퇴관 기록이 없어요</p>';
   } else {
     const l = act.filter(match).sort(byName);
     body = `<div class="scroll"><table><tr><th>이름</th><th>학년</th><th>나이</th><th>보호자 연락처</th><th>형제</th><th>메모</th></tr>
@@ -2108,7 +2116,7 @@ function rStats(p){
     <div class="stcards">
       <div class="card"><div class="muted">재원생</div><div class="stat">${act.length}<small>명</small></div></div>
       <div class="card"><div class="muted">휴관</div><div class="stat" style="color:var(--warn)">${leave.length}<small>명</small></div></div>
-      <div class="card"><div class="muted">${yr}년 새로 온 원생 · 그만둔 원생</div><div class="stat"><span style="color:var(--ok)">+${joinedThisYear}</span> <span style="color:var(--bad);font-size:22px">-${leftThisYear}</span></div></div>
+      <div class="card click" id="stLeft" title="퇴관 기록 보기"><div class="muted">${yr}년 새로 온 원생 · 그만둔 원생</div><div class="stat"><span style="color:var(--ok)">+${joinedThisYear}</span> <span style="color:var(--bad);font-size:22px">-${leftThisYear}</span></div></div>
       <div class="card"><div class="muted">형제 가정</div><div class="stat" style="color:var(--blue)">${fams.length}<small>가정 · ${fams.reduce((a, g) => a + g.length, 0)}명</small></div></div>
     </div>
     <div class="card" style="margin:12px 0"><div class="row" style="margin-bottom:8px"><b>학년별 인원</b><span class="muted">막대를 누르면 그 학년만 보여요</span>${SV.g ? `<button class="btn small ghost" id="stg0">전체 학년 보기</button>` : ''}</div>
@@ -2119,6 +2127,7 @@ function rStats(p){
   p.querySelectorAll('[data-v]').forEach(b => b.onclick = () => { SV.view = b.dataset.v; render(); });
   p.querySelectorAll('[data-g]').forEach(b => b.onclick = () => { SV.g = SV.g === b.dataset.g ? '' : b.dataset.g; SV.view = 'grade'; render(); });
   if ($('#stg0')) $('#stg0').onclick = () => { SV.g = ''; render(); };
+  if ($('#stLeft')) $('#stLeft').onclick = () => { SV.view = 'left'; render(); };
   p.querySelectorAll('[data-id]').forEach(el => el.onclick = e => { if (e.target.closest('a')) return; editStudent(S.students.find(s => s.id === el.dataset.id)); });
   const qi = $('#stq'); const qf = () => { SV.q = qi.value; render(); setTimeout(() => { const n = $('#stq'); if (n){ n.focus(); n.setSelectionRange(n.value.length, n.value.length); } }); };
   qi.addEventListener('input', e => { if (!e.isComposing) qf(); }); qi.addEventListener('compositionend', qf);
@@ -2130,6 +2139,7 @@ function rStats(p){
     add('학년별 명단', [['학년', '이름', '나이', '띠', '보호자 연락처'], ...grades.flatMap(g => byG.get(g).sort(byName).map(s => [g, s.name, ageKey(s) || '', normBelt(s.belt), ph(s)]))], [10, 9, 6, 10, 40]);
     add('형제', [['가정', '이름', '학년', '보호자 연락처'], ...fams.flatMap((g, i) => g.map(s => [i + 1, s.name, gradeOf(s), ph(s)]))], [6, 9, 10, 40]);
     add('연락처', [['이름', '학년', '나이', '보호자 연락처', '메모'], ...act.slice().sort(byName).map(s => [s.name, gradeOf(s), ageKey(s) || '', ph(s), s.memo])], [9, 10, 6, 40, 24]);
+    add('퇴관 기록', [['이름', '학년', '퇴관한 달', '사유', '띠', '보호자 연락처'], ...gone.map(s => [s.name, gradeOf(s), s.leftMonth || '', s.statusReason || '', normBelt(s.belt), ph(s)])], [9, 10, 10, 30, 10, 40]);
     XLSX.writeFile(wb, `students_status_${today().replace(/-/g, '')}.xlsx`);
   };
 }
