@@ -113,6 +113,7 @@ object Repo {
             belt = d.getString("belt") ?: "",
             jumpGrade = d.getString("jumpGrade") ?: "",
             beltManual = d.getBoolean("beltManual") ?: false,
+            staff = d.getBoolean("staff") ?: false,
             beltAt = d.getLong("beltAt") ?: 0L,
             pokeBag = strList(d.get("pokeBag")),
             pokeFree = d.getString("pokeFree") ?: "",

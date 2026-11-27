@@ -193,7 +193,7 @@ fun RosterTab(students: List<Student>) {
                     Text("  Lv.${s.level}", color = InBlue, fontSize = 13.sp)
                     if (s.isActive && GradeCalc.needsAge(s)) Text(" 나이?", color = BadRed, fontSize = 12.sp)
                     if (s.demo) Text("  ★시범단", color = InBlue, fontSize = 13.sp)
-                    if (!s.isActive) Text("  ${StudentStatus.label(s.status)}${if (s.statusReason.isNotBlank()) "(${s.statusReason})" else ""}", color = BadRed, fontSize = 13.sp)
+                    if (s.isStaff) Text("  ${s.grade.ifBlank { "관장" }}", color = Muted, fontSize = 13.sp) else if (!s.isActive) Text("  ${StudentStatus.label(s.status)}${if (s.statusReason.isNotBlank()) "(${s.statusReason})" else ""}", color = BadRed, fontSize = 13.sp)
                     Spacer(Modifier.weight(1f))
                     if (s.attendNo.isNotBlank()) Text("#${s.attendNo}  ", color = Muted, fontSize = 13.sp)
                     Text(if (s.phones.isEmpty()) "번호 없음" else "📞 ${s.phones.size}", color = if (s.phones.isEmpty()) BadRed else Muted, fontSize = 13.sp)

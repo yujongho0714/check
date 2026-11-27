@@ -44,13 +44,16 @@ data class Student(
     val belt: String = "",                      // 띠 (예: 노랑띠, 1품 5급) — 통합관리에서 자동으로 맞춰짐
     val jumpGrade: String = "",                 // 줄넘기 급 (9급 … 1급)
     val beltManual: Boolean = false,
+    val staff: Boolean = false,                 // 관장 · 사범 (수련생으로 안 셈)
     val beltAt: Long = 0L,
     val pokeBag: List<String> = emptyList(),   // 포켓몬 어드벤처 뽑기 가방 (PokeGift.Item 글자)
     val pokeFree: String = "",                 // 무료 뽑기를 쓴 종류 ("P" 포켓몬, "M" 기술)                      // 띠가 바뀐 때 (어디서 고쳤든 나중 것이 이김)            // true 면 관장님이 직접 고친 띠 → 통합관리 연동이 덮어쓰지 않음      // 관장님이 보낸 선물 중 아직 안 받은 것 (Gifts 글자 형식). 다음에 출결번호를 누를 때 한 번 받고 사라짐
 ) {
     /** 계급 레벨 (1 ~ 866) */
     val level: Int get() = Rank.levelOf(exp)
-    val isActive get() = status == StudentStatus.ACTIVE
+    /** 관장 · 사범 · 코치 (학년 칸에 그렇게 적힌 사람) — 수련생으로 안 셈 */
+    val isStaff: Boolean get() = staff || name.trim() == "유종호" || grade.trim() in setOf("관장", "부관장", "사범", "코치")
+    val isActive get() = status == StudentStatus.ACTIVE && !isStaff
     /** 올해 나이 (해가 바뀔 때마다 1살씩 올라감). 나이를 모르면 0 */
     val curAge: Int get() = if (age > 0 && ageYear > 0) age + (GradeCalc.thisYear() - ageYear) else 0
     /** 나이를 정해서 학년까지 같이 바꾼 원생 (올해 기준) */

@@ -269,7 +269,7 @@ const lsSet = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.re
 
 /* ═════════════ 학년 (앱과 같은 계산) ═════════════ */
 const thisYear = () => parseInt(today().slice(0, 4), 10);
-const PICK = ['유치부','1학년','2학년','3학년','4학년','5학년','6학년','중1','중2','중3','고1','고2','고3','성인'];
+const PICK = ['유치부','1학년','2학년','3학년','4학년','5학년','6학년','중1','중2','중3','고1','고2','고3','성인','관장','사범','코치'];
 const GRADE_ORDER = ['유치부','6~7세','1학년','2학년','3학년','4학년','5학년','6학년','4/5/6/중고등','중학생','중1','중2','중3','중고등','고등학생','고1','고2','고3','성인'];
 function labelOf(age){ if (age <= 0) return ''; if (age <= 7) return '유치부'; if (age < 14) return `${age-7}학년`; if (age < 17) return `중${age-13}`; if (age < 20) return `고${age-16}`; return '성인'; }
 function ageOf(t){ t = String(t||'').trim(); let m;
@@ -360,7 +360,7 @@ function onAuth(user){
     unsubs.push(onSnapshot(query(collection(db, 'events'), where('day', '==', today())), snap => { S.todayEv = snap.docs.map(d => ({ id: d.id, ...d.data() })); if (BUS.drive) driveDraw(); }, () => {}));
     driveOpen(''); return;
   }
-  unsubs.push(onSnapshot(collection(db, 'students'), snap => { S.students = snap.docs.map(toStudent); rerender(['today','roster','bulk','month','absent','fee','unpaid','stats','life']); }, err));
+  unsubs.push(onSnapshot(collection(db, 'students'), snap => { S.students = snap.docs.map(toStudent); staffFix(); rerender(['today','roster','bulk','month','absent','fee','unpaid','stats','life']); }, err));
   unsubs.push(onSnapshot(query(collection(db, 'events'), where('day', '==', today())), snap => { S.todayEv = snap.docs.map(d => ({ id: d.id, ...d.data() })); rerender(['today']); }, err));
   unsubs.push(onSnapshot(collection(db, 'groups'), snap => { S.groups = snap.docs.map(d => ({ id: d.id, name: d.get('name') || '', ids: d.get('studentIds') || [] })); rerender(['bulk']); }, err));
   unsubs.push(onSnapshot(query(collection(db, 'bulk'), orderBy('createdMs', 'desc'), limit(300)), snap => { S.bulkAll = snap.docs.map(d => ({ id: d.id, ...d.data() })); S.bulk = S.bulkAll.slice(0, 15); rerender(['bulk', 'chat']); }, err));
@@ -377,9 +377,14 @@ function toStudent(d){
     phones: x.phones || [], phoneLabels: x.phoneLabels || [], memo: x.memo || '', siblingKey: x.siblingKey || '', demo: !!x.demo,
     status: x.status || 'ACTIVE', statusReason: x.statusReason || '', joinedMonth: x.joinedMonth || '', leftMonth: x.leftMonth || '',
     order: x.order || 0, attendNo: x.attendNo || '', school: x.school || '', fee: x.fee || 0, belt: x.belt || '', beltManual: !!x.beltManual,
-    beltAt: x.beltAt || 0, jumpGrade: x.jumpGrade || '', inDay: x.inDay || '', outDay: x.outDay || '' };
+    beltAt: x.beltAt || 0, jumpGrade: x.jumpGrade || '', staff: x.staff === true, inDay: x.inDay || '', outDay: x.outDay || '' };
 }
-const active = () => S.students.filter(s => s.status === 'ACTIVE');
+// 관장 · 사범 · 코치는 학년 칸에 그렇게 적으면 수련생으로 안 세요 (명단 · 수련비 · 현황 · 다른 앱 모두)
+const isStaff = s => !!s && (s.staff === true || /^(관장|부관장|사범|코치)$/.test(String(s.grade || '').trim()));
+// 유종호 관장님은 수련생이 아니라 관장으로 (한 번만 바꿔 둠)
+let staffFixed = false;
+function staffFix(){ if (staffFixed) return; S.students.filter(s => String(s.name || '').trim() === '유종호' && !isStaff(s)).forEach(s => { staffFixed = true; updateDoc(doc(db, 'students', s.id), { grade: '관장', staff: true }).catch(() => { staffFixed = false; }); }); }
+const active = () => S.students.filter(s => s.status === 'ACTIVE' && !isStaff(s));
 const byName = (a, b) => gradeRank(gradeOf(a)) - gradeRank(gradeOf(b)) || a.name.localeCompare(b.name, 'ko');
 function renderDev(){
   const now = Date.now();
@@ -732,10 +737,10 @@ function bindFilterBar(root, F, redraw){
 /* ─── 원생 명단 ─── */
 const RS = { status: 'ACTIVE', F: newF() };
 function rRoster(p){
-  const base = S.students.filter(s => RS.status === 'ALL' || s.status === RS.status);
+  const base = S.students.filter(s => RS.status === 'ALL' || (RS.status === 'STAFF' ? isStaff(s) : s.status === RS.status && !(RS.status === 'ACTIVE' && isStaff(s))));
   p.innerHTML = `
     <div class="row"><div id="rbar" class="grow"></div>
-      <div class="row" style="align-self:flex-start">${[['ACTIVE','재원'],['LEAVE','휴관'],['LEFT','퇴관'],['ALL','전체']].map(([k, l]) => `<button class="pill ${RS.status === k ? 'on' : ''}" data-st="${k}">${l}</button>`).join('')}</div></div>
+      <div class="row" style="align-self:flex-start">${[['ACTIVE','재원'],['LEAVE','휴관'],['LEFT','퇴관'],['STAFF','관장 · 사범'],['ALL','전체']].map(([k, l]) => `<button class="pill ${RS.status === k ? 'on' : ''}" data-st="${k}">${l}</button>`).join('')}</div></div>
     <div class="row" style="margin-top:10px"><span class="muted grow" id="rcount"></span>
       <button class="btn ghost" id="rsync">🥋 통합관리 띠와 비교·맞추기</button><button class="btn ghost" id="rx">엑셀로 받기</button><button class="btn" id="radd">+ 원생 추가</button></div>
     <div class="scroll" style="margin-top:8px"><table>
@@ -744,7 +749,7 @@ function rRoster(p){
   $('#rbar').innerHTML = filterBarHtml(RS.F, base);
   let list = [];
   const draw = () => {
-    list = sortF(applyF(S.students.filter(s => RS.status === 'ALL' || s.status === RS.status), RS.F), RS.F.sort);
+    list = sortF(applyF(S.students.filter(s => RS.status === 'ALL' || (RS.status === 'STAFF' ? isStaff(s) : s.status === RS.status && !(RS.status === 'ACTIVE' && isStaff(s)))), RS.F), RS.F.sort);
     const dupNo = {}; active().forEach(s => { if (s.attendNo) dupNo[s.attendNo] = (dupNo[s.attendNo] || 0) + 1; });
     $('#rcount').textContent = `${list.length}명 · 줄을 누르면 고칠 수 있어요. 고친 내용은 문자 폰·키오스크에 바로 반영돼요.`;
     $('#rbody').innerHTML = list.map(s => `<tr class="click" data-id="${s.id}"><td><b>${esc(s.name)}</b>${s.demo ? ' <span class="tag t-in">시범단</span>' : ''}</td>
@@ -753,7 +758,7 @@ function rRoster(p){
       <td data-nobubble><select data-belt-of="${s.id}" style="padding:4px 6px;font-size:13px"><option value="">-</option>${beltOptions(s.belt)}</select>${s.beltManual ? ' <span title="직접 고정한 띠 (통합관리 연동이 안 바꿈)">📌</span>' : ''}</td>
       <td>${esc(s.jumpGrade)}</td>
       <td>${s.phones.map((x, i) => `${esc(s.phoneLabels[i] || '보호자')} ${esc(prettyPhone(normPhone(x)))}`).join('<br>')}</td>
-      <td>${s.status === 'ACTIVE' ? '재원' : s.status === 'LEAVE' ? '<span class="tag t-wait">휴관</span>' : '<span class="tag t-gray">퇴관</span>'}</td>
+      <td>${isStaff(s) ? '<span class="tag t-wait">' + esc(String(s.grade || '관장').trim()) + '</span>' : s.status === 'ACTIVE' ? '재원' : s.status === 'LEAVE' ? '<span class="tag t-wait">휴관</span>' : '<span class="tag t-gray">퇴관</span>'}</td>
       <td class="muted">${esc(s.memo)}</td></tr>`).join('');
     $('#rbody').querySelectorAll('tr[data-id]').forEach(tr => tr.onclick = e => { if (e.target.closest('[data-nobubble]')) return; editStudent(S.students.find(s => s.id === tr.dataset.id)); });
     $('#rbody').querySelectorAll('[data-belt-of]').forEach(sel => sel.onchange = async () => {
@@ -858,7 +863,7 @@ function beltSyncModal(){
       const m = matchBelts(list);
       const kids = S.students.filter(s => s.status !== 'LEFT');
       const diffs = kids.filter(s => m[s.id] && m[s.id].belt !== normBelt(s.belt)).sort(byName);
-      const missing = kids.filter(s => !m[s.id] && s.status === 'ACTIVE');
+      const missing = kids.filter(s => !m[s.id] && s.status === 'ACTIVE' && !isStaff(s));
       const names = new Set(kids.map(s => s.name.trim())); const extra = [...new Set(list.map(e => e.n))].filter(n => !names.has(n));
       box.innerHTML = `<p class="muted">통합관리 보낸 때: ${t ? new Date(t).toLocaleString('ko-KR') : '?'} · 통합관리 ${list.length}명</p>
         <h3>다른 아이 ${diffs.length}명</h3>
@@ -1575,6 +1580,7 @@ function tuShown(s, m){
   if (r.paid) return true;
   const D = TU.docs[m]; if (D && D.listed) return !!(D.rows && D.rows[s.id]);   // 엑셀에서 가져온 달은 그 달 명단에 있던 원생만
   if (s.joinedMonth && m < s.joinedMonth) return false;
+  if (isStaff(s)) return false;   // 관장 · 사범은 수련비 명단에 없음
   if (s.status === 'ACTIVE' || s.status === 'LEAVE') return true;
   return !!(s.leftMonth && m <= s.leftMonth);   // 퇴관한 달까지는 명단에 있음 (미납 · 띠 확인), 다음 달부터 빠짐
 }
