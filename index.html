@@ -994,7 +994,8 @@ function editStudent(s){
       <label>시범단</label><label style="color:var(--ink);font-weight:500"><input type="checkbox" id="fDemo" ${s.demo ? 'checked' : ''}> 시범단</label>
       <label>메모</label><input type="text" id="fMemo" value="${esc(s.memo)}">
     </div>
-    <div class="row" style="margin-top:16px">${isNew ? '' : '<button class="btn ghost" id="fSms">✉️ 이 아이 보호자께 문자</button><button class="btn ghost" id="fGold">💰 골드 보내기</button>'}<div class="grow"></div><button class="btn ghost" id="fCancel">닫기</button><button class="btn" id="fSave">저장</button></div>`);
+    <div class="row" style="margin-top:16px">${isNew ? '' : '<button class="btn ghost" id="fSms">✉️ 이 아이 보호자께 문자</button><button class="btn ghost" id="fGold">💰 골드 보내기</button>'}<div class="grow"></div><button class="btn ghost" id="fCancel">닫기</button><button class="btn" id="fSave">저장</button></div>
+    ${isNew ? '' : `<div class="row" style="margin-top:10px;gap:8px">${s.status === 'ACTIVE' || !s.status ? '' : '<button class="btn ghost" id="fQAct">재원으로</button>'}${s.status === 'LEAVE' ? '' : '<button class="btn ghost" id="fQLeave">휴원</button>'}${s.status === 'LEFT' ? '' : '<button class="btn ghost" id="fQLeft" style="color:var(--bad)">퇴관</button>'}<div class="grow"></div><button class="btn ghost" id="fQDel" style="color:var(--bad)">삭제</button></div>`}`);
   const ageIn = r.querySelector('#fAge');
   ageIn.oninput = () => { const a = +ageIn.value || 0; r.querySelector('#fAgeL').textContent = a ? '→ ' + labelOf(a) + ' (해마다 저절로 올라가요)' : '나이를 넣으면 학년이 해마다 저절로 바뀌어요'; };
   r.querySelectorAll('[data-belt]').forEach(b => b.onclick = () => { r.querySelector('#fBelt').value = b.dataset.belt; r.querySelector('#fLock').checked = true; r.querySelectorAll('[data-belt]').forEach(x => x.classList.toggle('on', x === b)); });
@@ -1005,6 +1006,20 @@ function editStudent(s){
   r.querySelector('#fCancel').onclick = closeModal;
   if (!isNew) r.querySelector('#fSms').onclick = () => openChatWith(s);
   if (!isNew) r.querySelector('#fGold').onclick = () => sendGold([s]);
+  // 바로 휴원 · 퇴관 · 재원 · 삭제 (사유를 물어보고 저장까지 한 번에)
+  if (!isNew){
+    const quick = (st, ask, need) => { const v = ask ? prompt(ask, r.querySelector('#fReason').value || '') : ''; if (v === null) return; if (need && !String(v).trim()){ toast('사유를 적어 주세요'); return; }
+      r.querySelector('#fStatus').value = st; r.querySelector('#fReason').value = String(v || '').trim(); r.querySelector('#fSave').click(); };
+    const q = id => r.querySelector(id);
+    if (q('#fQAct')) q('#fQAct').onclick = () => quick('ACTIVE', '', false);
+    if (q('#fQLeave')) q('#fQLeave').onclick = () => quick('LEAVE', `${s.name} 휴원 사유 (비워도 돼요)`, false);
+    if (q('#fQLeft')) q('#fQLeft').onclick = () => quick('LEFT', `${s.name} 퇴관 사유를 적어 주세요\n(이번 달까지는 수련비 · 미납 · 띠 명단에 남고, 다음 달부터 빠져요)`, true);
+    q('#fQDel').onclick = async () => {
+      if (!confirm(`${s.name} 원생을 완전히 지울까요?\n\n잘못 넣었거나 시험으로 넣은 원생일 때만 지워 주세요.\n그만둔 원생은 「퇴관」을 눌러야 기록(사유)이 남아요.`)) return;
+      if (!confirm('정말 지울까요? 되돌릴 수 없어요.')) return;
+      try { await deleteDoc(doc(db, 'students', s.id)); toast(`${s.name} 지웠어요`); closeModal(); } catch (e){ toast('지우기 실패: ' + (e.code || e.message)); }
+    };
+  }
   r.querySelector('#fSave').onclick = async () => {
     const name = r.querySelector('#fName').value.trim(); if (!name){ toast('이름을 넣어 주세요'); return; }
     const a = +ageIn.value || 0; const gSel = r.querySelector('#fGrade').value;
