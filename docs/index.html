@@ -995,7 +995,7 @@ function editStudent(s){
       <label>메모</label><input type="text" id="fMemo" value="${esc(s.memo)}">
     </div>
     <div class="row" style="margin-top:16px">${isNew ? '' : '<button class="btn ghost" id="fSms">✉️ 이 아이 보호자께 문자</button><button class="btn ghost" id="fGold">💰 골드 보내기</button>'}<div class="grow"></div><button class="btn ghost" id="fCancel">닫기</button><button class="btn" id="fSave">저장</button></div>
-    ${isNew ? '' : `<div class="row" style="margin-top:10px;gap:8px">${s.status === 'ACTIVE' || !s.status ? '' : '<button class="btn ghost" id="fQAct">재원으로</button>'}${s.status === 'LEAVE' ? '' : '<button class="btn ghost" id="fQLeave">휴원</button>'}${s.status === 'LEFT' ? '' : '<button class="btn ghost" id="fQLeft" style="color:var(--bad)">퇴관</button>'}<div class="grow"></div><button class="btn ghost" id="fQDel" style="color:var(--bad)">삭제</button></div>`}`);
+    ${isNew ? '' : `<div class="row" style="margin-top:10px;gap:8px">${[['fQAct','재원','ACTIVE',''],['fQLeave','휴원','LEAVE',''],['fQLeft','퇴관','LEFT','color:var(--bad)']].map(([id, l, st, c]) => `<button class="btn ${(s.status || 'ACTIVE') === st ? '' : 'ghost'}" id="${id}" style="flex:1;${(s.status || 'ACTIVE') === st ? '' : c}">${l}${(s.status || 'ACTIVE') === st ? ' (지금)' : ''}</button>`).join('')}<button class="btn ghost" id="fQDel" style="flex:1;color:var(--bad)">삭제</button></div>`}`);
   const ageIn = r.querySelector('#fAge');
   ageIn.oninput = () => { const a = +ageIn.value || 0; r.querySelector('#fAgeL').textContent = a ? '→ ' + labelOf(a) + ' (해마다 저절로 올라가요)' : '나이를 넣으면 학년이 해마다 저절로 바뀌어요'; };
   r.querySelectorAll('[data-belt]').forEach(b => b.onclick = () => { r.querySelector('#fBelt').value = b.dataset.belt; r.querySelector('#fLock').checked = true; r.querySelectorAll('[data-belt]').forEach(x => x.classList.toggle('on', x === b)); });
@@ -1011,9 +1011,9 @@ function editStudent(s){
     const quick = (st, ask, need) => { const v = ask ? prompt(ask, r.querySelector('#fReason').value || '') : ''; if (v === null) return; if (need && !String(v).trim()){ toast('사유를 적어 주세요'); return; }
       r.querySelector('#fStatus').value = st; r.querySelector('#fReason').value = String(v || '').trim(); r.querySelector('#fSave').click(); };
     const q = id => r.querySelector(id);
-    if (q('#fQAct')) q('#fQAct').onclick = () => quick('ACTIVE', '', false);
-    if (q('#fQLeave')) q('#fQLeave').onclick = () => quick('LEAVE', `${s.name} 휴원 사유 (비워도 돼요)`, false);
-    if (q('#fQLeft')) q('#fQLeft').onclick = () => quick('LEFT', `${s.name} 퇴관 사유를 적어 주세요\n(이번 달까지는 수련비 · 미납 · 띠 명단에 남고, 다음 달부터 빠져요)`, true);
+    q('#fQAct').onclick = () => { if ((s.status || 'ACTIVE') === 'ACTIVE') return; quick('ACTIVE', '', false); };
+    q('#fQLeave').onclick = () => (s.status === 'LEAVE' ? toast('이미 휴원이에요') : quick('LEAVE', `${s.name} 휴원 사유 (비워도 돼요)`, false));
+    q('#fQLeft').onclick = () => (s.status === 'LEFT' ? toast('이미 퇴관이에요 · 사유는 위 칸에서 고쳐요') : quick('LEFT', `${s.name} 퇴관 사유를 적어 주세요\n(이번 달까지는 수련비 · 미납 · 띠 명단에 남고, 다음 달부터 빠져요)`, true));
     q('#fQDel').onclick = async () => {
       if (!confirm(`${s.name} 원생을 완전히 지울까요?\n\n잘못 넣었거나 시험으로 넣은 원생일 때만 지워 주세요.\n그만둔 원생은 「퇴관」을 눌러야 기록(사유)이 남아요.`)) return;
       if (!confirm('정말 지울까요? 되돌릴 수 없어요.')) return;
