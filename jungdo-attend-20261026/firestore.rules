@@ -20,5 +20,9 @@ service cloud.firestore {
     match /absences/{id}  { allow read: if isDriver(); }
     match /events/{id}    { allow read: if isDriver(); }
     match /config/{id}    { allow read: if isDriver() && (id == 'bus' || id == 'holidays'); }
+    // 포켓몬 어드벤처 게임 (로그인 없이 쓰는 랭킹·월드보스·채팅) — 이 세 곳은 꼭 열어 둬야 게임 랭킹이 돼요
+    match /pokeBoss/{doc=**} { allow read, write: if true; }
+    match /pokeRank/{doc=**} { allow read, write: if true; }
+    match /pokeChat/{doc=**} { allow read, write: if true; }
   }
 }
